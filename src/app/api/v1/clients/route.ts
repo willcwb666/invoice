@@ -4,18 +4,13 @@ import { createClientSchema } from "@/lib/validations/client";
 import { ClientService } from "@/services/client-service";
 import { prisma } from "@/lib/prisma";
 
-// Obtem ou cria o usuario padrao para o ambiente pessoal / dev
-async function getOrCreateDefaultUser() {
-  let user = await prisma.user.findFirst();
-  if (!user) {
-    user = await prisma.user.create({
-      data: {
-        email: "admin@invoice.local",
-        name: "Administrador",
-      },
-    });
-  }
-  return user;
+async function getDefaultCompanyId() {
+  const company = await prisma.companyProfile.findFirst();
+  if (company) return company.id;
+  const created = await prisma.companyProfile.create({
+    data: { name: "Renata Matos de Oliveira" },
+  });
+  return created.id;
 }
 
 export async function GET(req: NextRequest) {
@@ -30,8 +25,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const user = await getOrCreateDefaultUser();
-    const clients = await ClientService.listClients(user.id);
+    const companyId = await getDefaultCompanyId();
+    const clients = await ClientService.listClients(companyId);
 
     return NextResponse.json(
       { data: clients },
@@ -74,8 +69,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user = await getOrCreateDefaultUser();
-    const client = await ClientService.createClient(user.id, parsed.data);
+    const companyId = await getDefaultCompanyId();
+    const client = await ClientService.createClient(companyId, parsed.data);
 
     return NextResponse.json({ data: client }, { status: 201 });
   } catch (error: any) {

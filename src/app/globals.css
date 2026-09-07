@@ -1,8 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #090d16;
+  --foreground: #f8fafc;
+  --main-color: #4f46e5;
+  --main-color-hover: #4338ca;
+  --second-color: #10b981;
+  --second-color-hover: #059669;
+  --accent-color: #f59e0b;
+  --danger-color: #ef4444;
+  --card-bg: rgba(15, 23, 42, 0.7);
+  --border-color: rgba(51, 65, 85, 0.6);
 }
 
 @theme inline {

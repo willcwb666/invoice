@@ -6,6 +6,45 @@ datasource db {
   provider = "postgresql"
 }
 
+enum Role {
+  ADMIN
+  OPERATOR
+  FINANCIAL
+  VIEWER
+}
+
+enum UserStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  SUSPENDED
+}
+
+enum BillingType {
+  CONSOLIDATED_MONTHLY
+  PER_JOB
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AppointmentOrigin {
+  INTERNAL
+  ICLOUD_SYNC
+  PUBLIC_BOOKING
+}
+
+enum EstimateStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  CONVERTED
+}
+
 enum InvoiceStatus {
   DRAFT
   PENDING
@@ -14,71 +53,287 @@ enum InvoiceStatus {
   CANCELLED
 }
 
+enum ExpenseCategory {
+  FUEL
+  CLEANING_SUPPLIES
+  VEHICLE_MAINTENANCE
+  EQUIPMENT
+  MEALS
+  OTHER
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  LOGIN
+  CONVERT
+}
+
+model CompanyProfile {
+  id                 String           @id @default(uuid())
+  name               String           @default("Renata Matos de Oliveira")
+  tradeName          String?
+  email              String           @default("renatamatoz@gmail.com")
+  phone              String           @default("9704129406")
+  monthlyRevenueGoal Decimal          @default(6000.00) @db.Decimal(10, 2)
+  paymentMethods     String           @default("Zelle: 9704129406\nVenmo: @RenataMatoz\nCheck payable to: Renata Matos de Oliveira")
+  terms              String           @default("Payment is due within 7 days of invoice date. Late payments are subject to a 1.5% monthly finance charge.")
+  signatureUrl       String?
+  logoUrl            String?
+  bookingSlug        String?          @unique
+  icloudCalendarUrl  String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  addresses          CompanyAddress[]
+  users              User[]
+  clients            Client[]
+  services           Service[]
+  appointments       Appointment[]
+  invoices           Invoice[]
+  estimates          Estimate[]
+  expenses           Expense[]
+
+  @@map("company_profiles")
+}
+
+model CompanyAddress {
+  id        String         @id @default(uuid())
+  companyId String
+  company   CompanyProfile @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  label     String         // Ex: "Evans (Atual)" ou "Greeley (Anterior)"
+  street    String         // "4172 MeadowView" ou "1705 30th St., #104"
+  city      String         // "Evans" ou "Greeley"
+  state     String         @default("CO")
+  zipCode   String         // "80620" ou "80631"
+  isDefault Boolean        @default(false)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([companyId])
+  @@map("company_addresses")
+}
+
 model User {
-  id        String    @id @default(uuid())
-  email     String    @unique
-  name      String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id                  String         @id @default(uuid())
+  email               String         @unique
+  name                String?
+  phone               String?
+  role                Role           @default(OPERATOR)
+  status              UserStatus     @default(PENDING_APPROVAL)
+  emailVerified       DateTime?
+  verificationToken   String?
+  verificationExpires DateTime?
+  companyId           String?
+  company             CompanyProfile? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 
-  clients   Client[]
-  invoices  Invoice[]
+  auditLogs           AuditLog[]
 
+  @@index([companyId])
+  @@index([status])
   @@map("users")
 }
 
 model Client {
-  id        String    @id @default(uuid())
-  userId    String
-  name      String
-  email     String?
-  phone     String?
-  document  String?   // CPF or CNPJ
-  address   String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id          String         @id @default(uuid())
+  companyId   String
+  company     CompanyProfile @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  email       String?
+  phone       String?
+  address     String         // Endereço completo para rota no Maps
+  city        String?
+  state       String?        @default("CO")
+  zipCode     String?
+  billingType BillingType    @default(PER_JOB)
+  notes       String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  invoices  Invoice[]
+  appointments Appointment[]
+  invoices     Invoice[]
+  estimates    Estimate[]
 
-  @@index([userId])
+  @@index([companyId])
   @@map("clients")
 }
 
-model Invoice {
-  id            String        @id @default(uuid())
-  userId        String
-  clientId      String
-  invoiceNumber String        @unique
-  status        InvoiceStatus @default(PENDING)
-  issueDate     DateTime      @default(now())
-  dueDate       DateTime
-  totalAmount   Decimal       @db.Decimal(10, 2)
-  notes         String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+model Service {
+  id                     String         @id @default(uuid())
+  companyId              String
+  company                CompanyProfile @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                   String         // "Office - Standard cleaning", etc.
+  description            String?
+  basePrice              Decimal        @db.Decimal(10, 2)
+  defaultDurationMinutes Int            @default(120)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
 
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  client        Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  items         InvoiceItem[]
+  appointments           Appointment[]
+  estimateItems          EstimateItem[]
 
-  @@index([userId])
-  @@index([clientId])
-  @@index([status])
-  @@map("invoices")
+  @@index([companyId])
+  @@map("services")
 }
 
-model InvoiceItem {
+model Appointment {
+  id              String            @id @default(uuid())
+  companyId       String
+  company         CompanyProfile    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clientId        String
+  client          Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  serviceId       String?
+  service         Service?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  title           String
+  date            DateTime          // Data do atendimento
+  startTime       DateTime
+  endTime         DateTime
+  location        String?           // Endereço do trabalho
+  price           Decimal           @db.Decimal(10, 2)
+  status          AppointmentStatus @default(SCHEDULED)
+  origin          AppointmentOrigin @default(INTERNAL)
+  externalEventId String?           // ID do evento no iCloud Calendar
+  invoiced        Boolean           @default(false)
+  invoiceId       String?
+  invoice         Invoice?          @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([companyId])
+  @@index([clientId])
+  @@index([date])
+  @@index([status])
+  @@map("appointments")
+}
+
+model Estimate {
+  id                 String         @id @default(uuid())
+  companyId          String
+  company            CompanyProfile @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clientId           String
+  client             Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  estimateNumber     String         @unique // Ex: "EST-01-2026"
+  status             EstimateStatus @default(DRAFT)
+  issueDate          DateTime       @default(now())
+  validUntil         DateTime
+  providerAddress    String         // Snapshot do endereço
+  subtotal           Decimal        @db.Decimal(10, 2)
+  discount           Decimal        @default(0) @db.Decimal(10, 2)
+  tax                Decimal        @default(0) @db.Decimal(10, 2)
+  totalAmount        Decimal        @db.Decimal(10, 2)
+  notes              String?
+  convertedInvoiceId String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  items              EstimateItem[]
+
+  @@index([companyId])
+  @@index([clientId])
+  @@index([status])
+  @@map("estimates")
+}
+
+model EstimateItem {
   id          String   @id @default(uuid())
-  invoiceId   String
+  estimateId  String
+  estimate    Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  serviceId   String?
+  service     Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   description String
   quantity    Int      @default(1)
   unitPrice   Decimal  @db.Decimal(10, 2)
   total       Decimal  @db.Decimal(10, 2)
   createdAt   DateTime @default(now())
 
-  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  @@index([estimateId])
+  @@map("estimate_items")
+}
+
+model Invoice {
+  id              String        @id @default(uuid())
+  companyId       String
+  company         CompanyProfile @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clientId        String
+  client          Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  invoiceNumber   String        @unique // Ex: "08 - 2026"
+  status          InvoiceStatus @default(PENDING)
+  issueDate       DateTime      @default(now())
+  dueDate         DateTime
+  providerAddress String        // Snapshot do endereço (Greeley ou Evans)
+  subtotal        Decimal       @db.Decimal(10, 2)
+  discount        Decimal       @default(0) @db.Decimal(10, 2)
+  tax             Decimal       @default(0) @db.Decimal(10, 2)
+  totalAmount     Decimal       @db.Decimal(10, 2)
+  paidAmount      Decimal       @default(0) @db.Decimal(10, 2)
+  paidAt          DateTime?
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  items           InvoiceItem[]
+  appointments    Appointment[]
+
+  @@index([companyId])
+  @@index([clientId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String    @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  serviceDate DateTime? // Ex: 07/04/2026
+  description String
+  quantity    Int       @default(1)
+  unitPrice   Decimal   @db.Decimal(10, 2)
+  total       Decimal   @db.Decimal(10, 2)
+  createdAt   DateTime  @default(now())
 
   @@index([invoiceId])
   @@map("invoice_items")
+}
+
+model Expense {
+  id          String          @id @default(uuid())
+  companyId   String
+  company     CompanyProfile  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  category    ExpenseCategory
+  description String
+  amount      Decimal         @db.Decimal(10, 2)
+  date        DateTime        @default(now())
+  receiptUrl  String?
+  notes       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([companyId])
+  @@index([category])
+  @@index([date])
+  @@map("expenses")
+}
+
+model AuditLog {
+  id        String      @id @default(uuid())
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    AuditAction
+  entity    String      // "Invoice", "Client", "Appointment", "Expense", "User"
+  entityId  String?
+  details   String?     // Detalhes em JSON da alteração
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime    @default(now())
+
+  @@index([userId])
+  @@index([entity])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

@@ -1,21 +1,22 @@
 import { prisma } from "@/lib/prisma";
 import { CreateInvoiceInput } from "@/lib/validations/invoice";
+import { CompanyService } from "@/services/company-service";
 import { Prisma } from "@prisma/client";
 
 export class InvoiceService {
   /**
-   * Lista faturas do usuário com paginação e filtro por status
+   * Lista faturas da empresa com ordenação e filtros
    */
-  static async listInvoices(userId: string, status?: string) {
+  static async listInvoices(companyId: string, status?: string) {
     return prisma.invoice.findMany({
       where: {
-        userId,
+        companyId,
         ...(status ? { status: status as any } : {}),
       },
       orderBy: { createdAt: "desc" },
       include: {
         client: {
-          select: { id: true, name: true, email: true },
+          select: { id: true, name: true, email: true, phone: true },
         },
         items: true,
       },
@@ -23,23 +24,27 @@ export class InvoiceService {
   }
 
   /**
-   * Busca fatura detalhada garantindo isolamento por usuário
+   * Busca fatura detalhada com itens
    */
-  static async getInvoiceById(id: string, userId: string) {
+  static async getInvoiceById(id: string, companyId: string) {
     return prisma.invoice.findFirst({
-      where: { id, userId },
+      where: { id, companyId },
       include: {
         client: true,
         items: true,
+        company: {
+          include: {
+            addresses: true,
+          },
+        },
       },
     });
   }
 
   /**
-   * Cria fatura com cálculo atômico no backend (prevenindo adulteração de valores pelo client)
+   * Cria fatura com cálculo atômico e snapshot do endereço vigente da empresa
    */
-  static async createInvoice(userId: string, data: CreateInvoiceInput) {
-    // Validação de totalização no servidor: nunca confiar no total vindo do cliente
+  static async createInvoice(companyId: string, data: CreateInvoiceInput) {
     const totalAmount = data.items.reduce((acc, item) => {
       const itemTotal = new Prisma.Decimal(item.quantity).mul(
         new Prisma.Decimal(item.unitPrice)
@@ -47,23 +52,26 @@ export class InvoiceService {
       return acc.add(itemTotal);
     }, new Prisma.Decimal(0));
 
+    const providerAddress = await CompanyService.getDefaultAddress(companyId);
+
     return prisma.$transaction(async (tx) => {
-      // Confirma que o cliente pertence a este usuário
       const client = await tx.client.findFirst({
-        where: { id: data.clientId, userId },
+        where: { id: data.clientId, companyId },
       });
 
       if (!client) {
-        throw new Error("Cliente não encontrado ou não autorizado.");
+        throw new Error("Cliente não encontrado.");
       }
 
       return tx.invoice.create({
         data: {
-          userId,
+          companyId,
           clientId: data.clientId,
           invoiceNumber: data.invoiceNumber,
           status: data.status,
           dueDate: new Date(data.dueDate),
+          providerAddress,
+          subtotal: totalAmount,
           totalAmount,
           notes: data.notes || null,
           items: {
@@ -86,15 +94,19 @@ export class InvoiceService {
   }
 
   /**
-   * Métricas do Dashboard (total faturado, pendente, clientes ativos)
+   * Métricas do Dashboard para a empresa
    */
-  static async getDashboardMetrics(userId: string) {
-    const [invoices, clientCount] = await Promise.all([
+  static async getDashboardMetrics(companyId: string) {
+    const [invoices, clientCount, expenseSum] = await Promise.all([
       prisma.invoice.findMany({
-        where: { userId },
-        select: { status: true, totalAmount: true },
+        where: { companyId },
+        select: { status: true, totalAmount: true, paidAmount: true },
       }),
-      prisma.client.count({ where: { userId } }),
+      prisma.client.count({ where: { companyId } }),
+      prisma.expense.aggregate({
+        where: { companyId },
+        _sum: { amount: true },
+      }),
     ]);
 
     let totalPaid = 0;
@@ -108,12 +120,17 @@ export class InvoiceService {
       else if (inv.status === "OVERDUE") totalOverdue += val;
     }
 
+    const totalExpenses = Number(expenseSum._sum.amount || 0);
+    const netProfit = totalPaid - totalExpenses;
+
     return {
       totalPaid,
       totalPending,
       totalOverdue,
       totalInvoices: invoices.length,
       clientCount,
+      totalExpenses,
+      netProfit,
     };
   }
 }

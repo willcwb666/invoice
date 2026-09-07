@@ -3,63 +3,64 @@ import { CreateClientInput } from "@/lib/validations/client";
 
 export class ClientService {
   /**
-   * Busca clientes de um usuário específico de forma segura (Prevenção de vazamento entre usuários)
+   * Busca clientes de uma empresa específica com proteção de isolamento
    */
-  static async listClients(userId: string) {
+  static async listClients(companyId: string) {
     return prisma.client.findMany({
-      where: { userId },
+      where: { companyId },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
         name: true,
         email: true,
         phone: true,
-        document: true,
         address: true,
+        city: true,
+        state: true,
+        zipCode: true,
+        billingType: true,
         createdAt: true,
         _count: {
-          select: { invoices: true },
+          select: { invoices: true, appointments: true },
         },
       },
     });
   }
 
   /**
-   * Busca um cliente por ID garantindo que pertence ao usuário autenticado
+   * Busca um cliente por ID
    */
-  static async getClientById(id: string, userId: string) {
+  static async getClientById(id: string, companyId: string) {
     return prisma.client.findFirst({
-      where: { id, userId },
+      where: { id, companyId },
       include: {
-        invoices: {
-          orderBy: { createdAt: "desc" },
-        },
+        invoices: { orderBy: { createdAt: "desc" } },
+        appointments: { orderBy: { date: "desc" } },
       },
     });
   }
 
   /**
-   * Cria um cliente com validação estrita
+   * Cria um cliente com endereço para rota Maps
    */
-  static async createClient(userId: string, data: CreateClientInput) {
+  static async createClient(companyId: string, data: CreateClientInput) {
     return prisma.client.create({
       data: {
-        userId,
+        companyId,
         name: data.name,
         email: data.email || null,
         phone: data.phone || null,
-        document: data.document || null,
-        address: data.address || null,
+        address: data.address || "Greeley, CO",
       },
     });
   }
 
   /**
-   * Remove um cliente apenas se pertencer ao usuário
+   * Remove um cliente apenas se pertencer à empresa
    */
-  static async deleteClient(id: string, userId: string) {
+  static async deleteClient(id: string, companyId: string) {
     return prisma.client.deleteMany({
-      where: { id, userId },
+      where: { id, companyId },
     });
   }
 }

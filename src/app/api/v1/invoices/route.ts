@@ -4,17 +4,13 @@ import { createInvoiceSchema } from "@/lib/validations/invoice";
 import { InvoiceService } from "@/services/invoice-service";
 import { prisma } from "@/lib/prisma";
 
-async function getOrCreateDefaultUser() {
-  let user = await prisma.user.findFirst();
-  if (!user) {
-    user = await prisma.user.create({
-      data: {
-        email: "admin@invoice.local",
-        name: "Administrador",
-      },
-    });
-  }
-  return user;
+async function getDefaultCompanyId() {
+  const company = await prisma.companyProfile.findFirst();
+  if (company) return company.id;
+  const created = await prisma.companyProfile.create({
+    data: { name: "Renata Matos de Oliveira" },
+  });
+  return created.id;
 }
 
 export async function GET(req: NextRequest) {
@@ -29,9 +25,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const user = await getOrCreateDefaultUser();
+    const companyId = await getDefaultCompanyId();
     const statusParam = req.nextUrl.searchParams.get("status") || undefined;
-    const invoices = await InvoiceService.listInvoices(user.id, statusParam);
+    const invoices = await InvoiceService.listInvoices(companyId, statusParam);
 
     return NextResponse.json(
       { data: invoices },
@@ -74,8 +70,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user = await getOrCreateDefaultUser();
-    const invoice = await InvoiceService.createInvoice(user.id, parsed.data);
+    const companyId = await getDefaultCompanyId();
+    const invoice = await InvoiceService.createInvoice(companyId, parsed.data);
 
     return NextResponse.json({ data: invoice }, { status: 201 });
   } catch (error: any) {

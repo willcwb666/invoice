@@ -37,6 +37,21 @@ export default function AgendaPage() {
     fetchAppointments();
   }, []);
 
+  const handleCompleteAppointment = async (id: string) => {
+    try {
+      const res = await fetch(`/api/v1/appointments/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "COMPLETED" }),
+      });
+      if (res.ok) {
+        fetchAppointments();
+      }
+    } catch (e) {
+      console.error("Erro ao concluir agendamento:", e);
+    }
+  };
+
   return (
     <div>
       <Header
@@ -92,13 +107,23 @@ export default function AgendaPage() {
                       </span>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex flex-col items-end">
                     <span className="text-lg font-black text-emerald-400 block">
                       ${Number(appt.price).toFixed(2)}
                     </span>
                     <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
                       {appt.status}
                     </span>
+                    {appt.status !== "COMPLETED" && (
+                      <button
+                        onClick={() => handleCompleteAppointment(appt.id)}
+                        className="mt-2 px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-[10px] font-bold inline-flex items-center gap-1 transition-colors border border-emerald-500/20"
+                        title="Marcar como concluído"
+                      >
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Concluir</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 

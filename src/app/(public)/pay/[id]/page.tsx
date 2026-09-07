@@ -11,12 +11,16 @@ export default function PublicInvoicePayPage({ params }: { params: Promise<{ id:
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/v1/invoices")
-      .then((r) => r.json())
-      .then((json) => {
-        const found = json.data?.find((inv: any) => inv.id === invoiceId);
-        setInvoice(found);
+    if (!invoiceId) return;
+    fetch(`/api/v1/public/invoices/${invoiceId}`)
+      .then((r) => {
+        if (!r.ok) return null;
+        return r.json();
       })
+      .then((json) => {
+        setInvoice(json?.data || null);
+      })
+      .catch(() => setInvoice(null))
       .finally(() => setLoading(false));
   }, [invoiceId]);
 

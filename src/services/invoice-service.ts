@@ -16,7 +16,16 @@ export class InvoiceService {
       orderBy: { createdAt: "desc" },
       include: {
         client: {
-          select: { id: true, name: true, email: true, phone: true },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            address: true,
+            city: true,
+            state: true,
+            zipCode: true,
+          },
         },
         items: true,
       },
@@ -26,9 +35,12 @@ export class InvoiceService {
   /**
    * Busca fatura detalhada com itens
    */
-  static async getInvoiceById(id: string, companyId: string) {
+  static async getInvoiceById(id: string, companyId?: string) {
     return prisma.invoice.findFirst({
-      where: { id, companyId },
+      where: {
+        id,
+        ...(companyId ? { companyId } : {}),
+      },
       include: {
         client: true,
         items: true,
@@ -37,6 +49,61 @@ export class InvoiceService {
             addresses: true,
           },
         },
+      },
+    });
+  }
+
+  /**
+   * Busca fatura pública com cliente e itens (segura para acesso externo)
+   */
+  static async getPublicInvoiceById(id: string) {
+    return prisma.invoice.findUnique({
+      where: { id },
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            address: true,
+            city: true,
+            state: true,
+            zipCode: true,
+          },
+        },
+        items: true,
+      },
+    });
+  }
+
+  /**
+   * Atualiza status da fatura (ex: PAID, CANCELLED)
+   */
+  static async updateInvoiceStatus(
+    id: string,
+    companyId: string,
+    status: "DRAFT" | "PENDING" | "PAID" | "OVERDUE" | "CANCELLED"
+  ) {
+    const invoice = await prisma.invoice.findFirst({
+      where: { id, companyId },
+    });
+
+    if (!invoice) {
+      throw new Error("Fatura não encontrada.");
+    }
+
+    const isPaid = status === "PAID";
+    return prisma.invoice.update({
+      where: { id },
+      data: {
+        status,
+        paidAt: isPaid ? (invoice.paidAt || new Date()) : null,
+        paidAmount: isPaid ? invoice.totalAmount : new Prisma.Decimal(0),
+      },
+      include: {
+        client: true,
+        items: true,
       },
     });
   }

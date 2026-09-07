@@ -18,7 +18,7 @@ export const invoiceItemSchema = z.object({
 });
 
 export const createInvoiceSchema = z.object({
-  clientId: z.string().uuid("ID do cliente inválido"),
+  clientId: z.string().min(1, "ID do cliente obrigatório"),
   invoiceNumber: z
     .string()
     .trim()
@@ -42,7 +42,7 @@ export const createInvoiceSchema = z.object({
 });
 
 export const updateInvoiceStatusSchema = z.object({
-  id: z.string().uuid("ID da fatura inválido"),
+  id: z.string().min(1, "ID da fatura obrigatório"),
   status: z.enum(["DRAFT", "PENDING", "PAID", "OVERDUE", "CANCELLED"]),
 });
 

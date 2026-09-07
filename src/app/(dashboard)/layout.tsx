@@ -1,5 +1,6 @@
 import React from "react";
 import { Sidebar } from "@/components/dashboard/sidebar";
+import { MobileNav } from "@/components/dashboard/mobile-nav";
 
 export default function DashboardLayout({
   children,
@@ -15,13 +16,16 @@ export default function DashboardLayout({
         <div className="absolute bottom-10 left-10 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl" />
       </div>
 
-      {/* Sidebar Fixa à Esquerda */}
+      {/* Sidebar Fixa à Esquerda (oculta no mobile) */}
       <Sidebar />
 
       {/* Área Principal de Conteúdo */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden pb-20 md:pb-0">
         {children}
       </div>
+
+      {/* Navegação Móvel Fixa no Rodapé (visível apenas no mobile) */}
+      <MobileNav />
     </div>
   );
 }

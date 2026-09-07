@@ -22,7 +22,7 @@ export class AppointmentService {
       orderBy: { startTime: "asc" },
       include: {
         client: {
-          select: { id: true, name: true, phone: true, address: true, city: true },
+          select: { id: true, name: true, phone: true, address: true, city: true, state: true, zipCode: true },
         },
         service: {
           select: { id: true, name: true },
@@ -67,12 +67,30 @@ export class AppointmentService {
   }
 
   /**
-   * Marca agendamento como concluído
+   * Marca agendamento como concluído ou atualiza status
    */
-  static async completeAppointment(id: string, companyId: string) {
+  static async completeAppointment(
+    id: string,
+    companyId?: string,
+    status: "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" = "COMPLETED"
+  ) {
+    if (companyId) {
+      const appt = await prisma.appointment.findFirst({
+        where: { id, companyId },
+      });
+
+      if (!appt) {
+        throw new Error("Agendamento não encontrado.");
+      }
+    }
+
     return prisma.appointment.update({
-      where: { id, companyId },
-      data: { status: "COMPLETED" },
+      where: { id },
+      data: { status },
+      include: {
+        client: true,
+        service: true,
+      },
     });
   }
 

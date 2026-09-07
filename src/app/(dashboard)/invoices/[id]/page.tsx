@@ -22,16 +22,23 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   const [invoice, setInvoice] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch("/api/v1/invoices");
+        const res = await fetch(`/api/v1/invoices/${invoiceId}`);
         if (res.ok) {
           const json = await res.json();
-          const found = json.data?.find((inv: any) => inv.id === invoiceId);
-          setInvoice(found);
+          setInvoice(json.data);
+        } else {
+          const listRes = await fetch("/api/v1/invoices");
+          if (listRes.ok) {
+            const json = await listRes.json();
+            const found = json.data?.find((inv: any) => inv.id === invoiceId);
+            setInvoice(found);
+          }
         }
       } catch (e) {
         console.error(e);
@@ -41,6 +48,25 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
     load();
   }, [invoiceId]);
+
+  const handleMarkAsPaid = async () => {
+    setUpdatingStatus(true);
+    try {
+      const res = await fetch(`/api/v1/invoices/${invoiceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "PAID" }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setInvoice(json.data);
+      }
+    } catch (e) {
+      console.error("Erro ao marcar fatura como paga:", e);
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -99,6 +125,22 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </Link>
 
           <div className="flex flex-wrap items-center gap-2">
+            {invoice.status === "PAID" ? (
+              <span className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Paga (PAID)</span>
+              </span>
+            ) : (
+              <button
+                onClick={handleMarkAsPaid}
+                disabled={updatingStatus}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-colors disabled:opacity-50"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{updatingStatus ? "Atualizando..." : "Marcar como Paga (PAID)"}</span>
+              </button>
+            )}
+
             <button
               onClick={copyPaymentLink}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold border border-slate-700 transition-colors"
@@ -131,7 +173,18 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         <div className="p-8 sm:p-12 rounded-2xl bg-white text-slate-900 shadow-2xl space-y-8 font-sans border border-slate-200">
           {/* Header Title */}
           <div>
-            <h1 className="text-3xl font-normal text-slate-900 tracking-tight mb-4">Invoice</h1>
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-3xl font-normal text-slate-900 tracking-tight">Invoice</h1>
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                  invoice.status === "PAID"
+                    ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                    : "bg-amber-100 text-amber-800 border border-amber-300"
+                }`}
+              >
+                {invoice.status}
+              </span>
+            </div>
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 text-xs text-slate-700 border-b border-slate-300 pb-4">
               <div>
                 <p className="font-semibold text-slate-900 text-sm">Renata Matos de Oliveira</p>

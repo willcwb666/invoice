@@ -36,7 +36,7 @@ export const createClientSchema = z.object({
 });
 
 export const updateClientSchema = createClientSchema.partial().extend({
-  id: z.string().uuid("ID de cliente inválido"),
+  id: z.string().min(1, "ID de cliente obrigatório"),
 });
 
 export type CreateClientInput = z.infer<typeof createClientSchema>;

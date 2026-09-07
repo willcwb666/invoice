@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export const createAppointmentSchema = z.object({
-  clientId: z.string().uuid("ID do cliente inválido"),
-  serviceId: z.string().uuid("ID do serviço inválido").optional().nullable(),
+  clientId: z.string().min(1, "ID do cliente obrigatório"),
+  serviceId: z.string().min(1, "ID do serviço inválido").optional().nullable(),
   title: z
     .string()
     .trim()
@@ -23,7 +23,7 @@ export const createAppointmentSchema = z.object({
 });
 
 export const updateAppointmentStatusSchema = z.object({
-  id: z.string().uuid("ID do agendamento inválido"),
+  id: z.string().min(1, "ID do agendamento obrigatório"),
   status: z.enum(["SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]),
 });
 

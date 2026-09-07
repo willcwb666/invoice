@@ -52,14 +52,14 @@ export default function ClientsListPage() {
               placeholder="Buscar por nome do cliente ou endereço..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              className="w-full pl-9 pr-4 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 shadow-2xs"
             />
           </div>
         </div>
 
-        <div className="rounded-2xl bg-slate-900/40 border border-slate-800/80 overflow-hidden shadow-2xl">
+        <div className="rounded-2xl bg-white border border-slate-200 overflow-hidden shadow-xs">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-900/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
+            <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
               <tr>
                 <th className="px-6 py-4">Cliente</th>
                 <th className="px-6 py-4">Contato</th>
@@ -69,31 +69,31 @@ export default function ClientsListPage() {
                 <th className="px-6 py-4 text-right">Ação</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-slate-100">
               {filtered.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-800/30 transition-colors">
-                  <td className="px-6 py-4 font-bold text-white">
-                    <Link href={`/clients/${c.id}`} className="hover:text-indigo-400">
+                <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="px-6 py-4 font-bold text-slate-900">
+                    <Link href={`/clients/${c.id}`} className="hover:text-indigo-600 transition-colors">
                       {c.name}
                     </Link>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-slate-200">{c.phone || "-"}</div>
-                    <div className="text-slate-400 text-[11px]">{c.email || "-"}</div>
+                    <div className="text-slate-800 font-medium">{c.phone || "-"}</div>
+                    <div className="text-slate-500 text-[11px]">{c.email || "-"}</div>
                   </td>
-                  <td className="px-6 py-4 font-mono text-slate-300">{c.address}</td>
+                  <td className="px-6 py-4 font-mono text-slate-600">{c.address}</td>
                   <td className="px-6 py-4">
-                    <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px] font-semibold">
+                    <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-semibold border border-slate-200">
                       {c.billingType}
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="font-bold text-white">{c._count?.invoices || 0}</span>
+                    <span className="font-bold text-slate-900">{c._count?.invoices || 0}</span>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <Link
                       href={`/clients/${c.id}`}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold inline-flex items-center gap-1"
+                      className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold inline-flex items-center gap-1 transition-colors"
                     >
                       <span>Ver Ficha</span>
                       <ArrowUpRight className="w-3 h-3" />

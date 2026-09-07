@@ -110,7 +110,7 @@ export default function EstimateDetailPage({ params }: { params: Promise<{ id: s
         <div className="flex items-center justify-between">
           <Link
             href="/estimates"
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white font-semibold transition-colors"
+            className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 font-semibold transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Voltar para Lista de Orçamentos</span>

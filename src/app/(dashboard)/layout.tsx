@@ -8,12 +8,11 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen bg-[#090D16] text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
-      {/* Background glow effects */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
-        <div className="absolute -top-40 left-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl" />
-        <div className="absolute top-1/3 -right-20 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-10 left-10 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl" />
+    <div className="flex min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-indigo-500 selection:text-white">
+      {/* Background subtle light effects */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10 bg-[#f8fafc]">
+        <div className="absolute -top-40 left-1/4 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />
+        <div className="absolute top-1/3 -right-20 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl" />
       </div>
 
       {/* Sidebar Fixa à Esquerda (oculta no mobile) */}

@@ -118,7 +118,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 print:hidden">
           <Link
             href="/invoices"
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white font-semibold transition-colors"
+            className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 font-semibold transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Voltar para Lista de Faturas</span>
@@ -126,7 +126,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
           <div className="flex flex-wrap items-center gap-2">
             {invoice.status === "PAID" ? (
-              <span className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+              <span className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Paga (PAID)</span>
               </span>
@@ -134,7 +134,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               <button
                 onClick={handleMarkAsPaid}
                 disabled={updatingStatus}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-xs transition-colors disabled:opacity-50"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>{updatingStatus ? "Atualizando..." : "Marcar como Paga (PAID)"}</span>
@@ -143,7 +143,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
             <button
               onClick={copyPaymentLink}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold border border-slate-700 transition-colors"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-200 shadow-2xs transition-colors"
             >
               <Copy className="w-3.5 h-3.5" />
               <span>{copied ? "Link Copiado!" : "Copiar Link de Pagamento"}</span>
@@ -153,7 +153,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               href={`https://wa.me/?text=${whatsappMessage}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-colors"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-xs transition-colors"
             >
               <MessageCircle className="w-3.5 h-3.5" />
               <span>Enviar WhatsApp / SMS</span>

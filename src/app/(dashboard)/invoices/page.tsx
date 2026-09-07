@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Header } from "@/components/dashboard/header";
-import { FileText, Plus, Search, Filter, ArrowUpRight, CheckCircle2, Clock } from "lucide-react";
+import { FileText, Plus, Search, ArrowUpRight, CheckCircle2, Clock } from "lucide-react";
 
 export default function InvoicesListPage() {
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -58,14 +58,14 @@ export default function InvoicesListPage() {
                 placeholder="Buscar por número ou cliente..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                className="w-full pl-9 pr-4 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 shadow-2xs"
               />
             </div>
 
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 focus:outline-none"
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-700 focus:outline-none shadow-2xs"
             >
               <option value="ALL">Todos os status</option>
               <option value="PAID">Pagas</option>
@@ -77,7 +77,7 @@ export default function InvoicesListPage() {
           <div className="flex items-center gap-2">
             <Link
               href="/invoices/new"
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 transition-all"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all"
             >
               <Plus className="w-4 h-4" />
               <span>Nova Fatura</span>
@@ -85,73 +85,77 @@ export default function InvoicesListPage() {
           </div>
         </div>
 
-        {/* Invoices Table */}
-        <div className="rounded-2xl bg-slate-900/40 border border-slate-800/80 overflow-hidden shadow-2xl">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-900/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
-              <tr>
-                <th className="px-6 py-4">Fatura</th>
-                <th className="px-6 py-4">Cliente</th>
-                <th className="px-6 py-4">Endereço de Emissão</th>
-                <th className="px-6 py-4">Vencimento</th>
-                <th className="px-6 py-4">Valor Total</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Ação</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60">
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-10 text-slate-400">
-                    Nenhuma fatura encontrada.
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="px-6 py-4 font-mono font-bold text-indigo-400">
-                      <Link href={`/invoices/${inv.id}`} className="hover:underline">
-                        {inv.invoiceNumber}
-                      </Link>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-white">{inv.client?.name}</div>
-                      <div className="text-[11px] text-slate-400">{inv.client?.phone || inv.client?.email}</div>
-                    </td>
-                    <td className="px-6 py-4 text-[11px] font-mono text-slate-400">
-                      {inv.providerAddress || "Evans, CO"}
-                    </td>
-                    <td className="px-6 py-4 text-slate-300">
-                      {new Date(inv.dueDate).toLocaleDateString("pt-BR")}
-                    </td>
-                    <td className="px-6 py-4 font-bold text-white">
-                      ${Number(inv.totalAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-6 py-4">
+        {/* Invoices List */}
+        <div className="rounded-2xl bg-white border border-slate-200 overflow-hidden shadow-xs">
+          {filtered.length === 0 ? (
+            <div className="p-12 text-center text-xs text-slate-400">
+              Nenhuma fatura encontrada.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {filtered.map((inv) => (
+                <Link
+                  key={inv.id}
+                  href={`/invoices/${inv.id}`}
+                  className="p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition-colors"
+                >
+                  <div className="flex items-start sm:items-center gap-3.5">
+                    <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 shrink-0">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-indigo-600">
+                          {inv.invoiceNumber}
+                        </span>
+                        <span className="font-bold text-slate-900 text-sm">
+                          {inv.client?.name}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 mt-1 font-medium">
+                        <span>
+                          Emitida: {new Date(inv.issueDate).toLocaleDateString("pt-BR")}
+                        </span>
+                        <span>•</span>
+                        <span>
+                          Vencimento: {new Date(inv.dueDate).toLocaleDateString("pt-BR")}
+                        </span>
+                        {inv.client?.address && (
+                          <>
+                            <span>•</span>
+                            <span className="truncate max-w-[200px] text-slate-600">
+                              {inv.client.address}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-4">
+                    <div className="text-right">
+                      <span className="font-black text-slate-900 text-base block">
+                        ${Number(inv.totalAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      </span>
                       <span
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
                           inv.status === "PAID"
-                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                            : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : inv.status === "OVERDUE"
+                            ? "bg-rose-50 text-rose-700 border-rose-200"
+                            : "bg-amber-50 text-amber-700 border-amber-200"
                         }`}
                       >
                         {inv.status}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <Link
-                        href={`/invoices/${inv.id}`}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold inline-flex items-center gap-1"
-                      >
-                        <span>Abrir</span>
-                        <ArrowUpRight className="w-3 h-3" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                    </div>
+
+                    <ArrowUpRight className="w-4 h-4 text-slate-400" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

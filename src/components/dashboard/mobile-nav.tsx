@@ -48,22 +48,20 @@ export function MobileNav() {
       {/* Drawer Móvel Expandido */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs md:hidden"
           onClick={() => setIsOpen(false)}
         >
           <div
-            className="absolute bottom-16 left-0 right-0 bg-slate-900 border-t border-slate-800 rounded-t-3xl p-6 shadow-2xl space-y-4"
+            className="absolute bottom-16 left-0 right-0 bg-white border-t border-slate-200 rounded-t-2xl p-5 space-y-4 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Mais Ferramentas
-              </span>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <span className="font-bold text-slate-900 text-sm">Mais Funcionalidades</span>
               <button
                 onClick={() => setIsOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -71,17 +69,22 @@ export function MobileNav() {
               {secondaryNavItems.map((item) => {
                 const isActive = pathname.startsWith(item.href);
                 const Icon = item.icon;
+
                 return (
                   <Link
                     key={item.name}
                     href={item.href}
-                    className={`flex items-center gap-2.5 p-3 rounded-xl text-xs font-semibold transition-all ${
+                    className={`flex items-center gap-3 p-3 rounded-xl text-xs font-semibold border transition-all ${
                       isActive
-                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                        : "bg-slate-800/70 text-slate-300 hover:bg-slate-800 hover:text-white"
+                        ? "bg-indigo-50 border-indigo-200 text-indigo-700 shadow-xs"
+                        : "bg-slate-50 border-slate-200/80 text-slate-700 hover:bg-slate-100"
                     }`}
                   >
-                    <Icon className="w-4 h-4 shrink-0" />
+                    <Icon
+                      className={`w-4 h-4 ${
+                        isActive ? "text-indigo-600" : "text-slate-500"
+                      }`}
+                    />
                     <span className="truncate">{item.name}</span>
                   </Link>
                 );
@@ -92,7 +95,7 @@ export function MobileNav() {
       )}
 
       {/* Barra Inferior Fixa */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 border-t border-slate-800/90 backdrop-blur-xl md:hidden print:hidden px-3 py-2">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 border-t border-slate-200 backdrop-blur-xl md:hidden print:hidden px-3 py-2 shadow-lg">
         <div className="flex items-center justify-around">
           {primaryNavItems.map((item) => {
             const isActive =
@@ -105,11 +108,11 @@ export function MobileNav() {
                 href={item.href}
                 className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
                   isActive
-                    ? "text-indigo-400 font-bold"
-                    : "text-slate-400 hover:text-slate-200"
+                    ? "text-indigo-600 font-bold"
+                    : "text-slate-500 hover:text-slate-900"
                 }`}
               >
-                <Icon className={`w-5 h-5 ${isActive ? "text-indigo-400" : "text-slate-400"}`} />
+                <Icon className={`w-5 h-5 ${isActive ? "text-indigo-600" : "text-slate-400"}`} />
                 <span className="text-[10px] mt-1">{item.name}</span>
               </Link>
             );
@@ -120,8 +123,8 @@ export function MobileNav() {
             onClick={() => setIsOpen(!isOpen)}
             className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
               isOpen || isMoreActive
-                ? "text-indigo-400 font-bold"
-                : "text-slate-400 hover:text-slate-200"
+                ? "text-indigo-600 font-bold"
+                : "text-slate-500 hover:text-slate-900"
             }`}
           >
             <Menu className="w-5 h-5" />

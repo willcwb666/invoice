@@ -4,8 +4,10 @@ import { CompanyService } from "@/services/company-service";
 import { InvoiceService } from "@/services/invoice-service";
 import { ExpenseService } from "@/services/expense-service";
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/lib/security/permissions";
 
-async function getDefaultCompanyId() {
+async function getTargetCompanyId(preferredCompanyId?: string) {
+  if (preferredCompanyId) return preferredCompanyId;
   const company = await prisma.companyProfile.findFirst();
   return company?.id || "";
 }
@@ -18,8 +20,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Limite atingido." }, { status: 429 });
   }
 
+  const check = await requirePermission(req, "dashboard", "read");
+  if (check.response) return check.response;
+  const { session } = check;
+
   try {
-    const companyId = await getDefaultCompanyId();
+    const companyId = await getTargetCompanyId(session.companyId);
 
     const [goalProgress, invoiceMetrics, financialSummary] = await Promise.all([
       CompanyService.getMonthlyGoalProgress(companyId),
@@ -34,7 +40,7 @@ export async function GET(req: NextRequest) {
         financial: financialSummary,
       },
     });
-  } catch (error: any) {
+  } catch {
     return NextResponse.json({ error: "Erro ao carregar métricas." }, { status: 500 });
   }
 }

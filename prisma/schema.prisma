@@ -84,6 +84,11 @@ model CompanyProfile {
   logoUrl            String?
   bookingSlug        String?          @unique
   icloudCalendarUrl  String?
+  // Admin-editable override of DEFAULT_ROLE_PERMISSIONS (see lib/security/rbac.ts).
+  // Null means "use the defaults". Stored here (a singleton row) rather than
+  // in an in-memory variable, which does not survive a server restart/redeploy
+  // and is not shared across serverless instances.
+  rolePermissions    Json?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 

@@ -3,8 +3,10 @@ import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { createClientSchema } from "@/lib/validations/client";
 import { ClientService } from "@/services/client-service";
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/lib/security/permissions";
 
-async function getDefaultCompanyId() {
+async function getTargetCompanyId(preferredCompanyId?: string) {
+  if (preferredCompanyId) return preferredCompanyId;
   const company = await prisma.companyProfile.findFirst();
   if (company) return company.id;
   const created = await prisma.companyProfile.create({
@@ -24,8 +26,12 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const check = await requirePermission(req, "clients", "read");
+  if (check.response) return check.response;
+  const { session } = check;
+
   try {
-    const companyId = await getDefaultCompanyId();
+    const companyId = await getTargetCompanyId(session.companyId);
     const clients = await ClientService.listClients(companyId);
 
     return NextResponse.json(
@@ -36,7 +42,7 @@ export async function GET(req: NextRequest) {
         },
       }
     );
-  } catch (error: any) {
+  } catch {
     return NextResponse.json(
       { error: "Erro interno ao processar clientes." },
       { status: 500 }
@@ -55,6 +61,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const check = await requirePermission(req, "clients", "create");
+  if (check.response) return check.response;
+  const { session } = check;
+
   try {
     const body = await req.json();
     const parsed = createClientSchema.safeParse(body);
@@ -69,11 +79,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const companyId = await getDefaultCompanyId();
+    const companyId = await getTargetCompanyId(session.companyId);
     const client = await ClientService.createClient(companyId, parsed.data);
 
     return NextResponse.json({ data: client }, { status: 201 });
-  } catch (error: any) {
+  } catch {
     return NextResponse.json(
       { error: "Erro ao cadastrar cliente." },
       { status: 500 }

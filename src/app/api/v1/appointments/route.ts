@@ -3,8 +3,11 @@ import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { createAppointmentSchema } from "@/lib/validations/appointment";
 import { AppointmentService } from "@/services/appointment-service";
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/lib/security/permissions";
+import { ensureExampleInvoicesSeeded } from "@/lib/seed-data";
 
-async function getDefaultCompanyId() {
+async function getTargetCompanyId(preferredCompanyId?: string) {
+  if (preferredCompanyId) return preferredCompanyId;
   const company = await prisma.companyProfile.findFirst();
   return company?.id || "";
 }
@@ -20,12 +23,17 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const check = await requirePermission(req, "appointments", "read");
+  if (check.response) return check.response;
+  const { session } = check;
+
   try {
-    const companyId = await getDefaultCompanyId();
+    await ensureExampleInvoicesSeeded();
+    const companyId = await getTargetCompanyId(session.companyId);
     const appts = await AppointmentService.listAppointments(companyId);
 
     return NextResponse.json({ data: appts });
-  } catch (error: any) {
+  } catch {
     return NextResponse.json(
       { error: "Erro ao buscar agendamentos." },
       { status: 500 }
@@ -44,6 +52,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const check = await requirePermission(req, "appointments", "create");
+  if (check.response) return check.response;
+  const { session } = check;
+
   try {
     const body = await req.json();
     const parsed = createAppointmentSchema.safeParse(body);
@@ -55,13 +67,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const companyId = await getDefaultCompanyId();
+    const companyId = await getTargetCompanyId(session.companyId);
     const appointment = await AppointmentService.createAppointment(companyId, parsed.data);
 
     return NextResponse.json({ data: appointment }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message || "Erro ao agendar compromisso." },
+      { error: (error instanceof Error ? error.message : undefined) || "Erro ao agendar compromisso." },
       { status: 400 }
     );
   }

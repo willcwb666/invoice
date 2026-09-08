@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
-import { getSessionUser } from "@/lib/security/auth";
+import { requirePermission } from "@/lib/security/permissions";
 import { prisma } from "@/lib/prisma";
 import {
   syncICloudCalendarForCompany,
@@ -14,10 +14,8 @@ export const maxDuration = 60;
 
 
 export async function GET(req: NextRequest) {
-  const session = await getSessionUser(req);
-  if (!session) {
-    return NextResponse.json({ error: "Acesso não autorizado." }, { status: 401 });
-  }
+  const check = await requirePermission(req, "agenda", "read");
+  if (check.response) return check.response;
 
   try {
     await ensureExampleInvoicesSeeded();
@@ -80,10 +78,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const session = await getSessionUser(req);
-  if (!session) {
-    return NextResponse.json({ error: "Acesso não autorizado." }, { status: 401 });
-  }
+  const check = await requirePermission(req, "agenda", "update");
+  if (check.response) return check.response;
 
   try {
     let body: { icloudUrl?: string; calendarUrl?: string } = {};

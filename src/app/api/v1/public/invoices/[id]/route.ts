@@ -43,7 +43,7 @@ export async function GET(
         },
       }
     );
-  } catch (error: any) {
+  } catch {
     return NextResponse.json(
       { error: "Erro interno ao buscar fatura pública." },
       { status: 500 }

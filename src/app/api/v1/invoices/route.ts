@@ -3,8 +3,10 @@ import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { createInvoiceSchema } from "@/lib/validations/invoice";
 import { InvoiceService } from "@/services/invoice-service";
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/lib/security/permissions";
 
-async function getDefaultCompanyId() {
+async function getTargetCompanyId(preferredCompanyId?: string) {
+  if (preferredCompanyId) return preferredCompanyId;
   const company = await prisma.companyProfile.findFirst();
   if (company) return company.id;
   const created = await prisma.companyProfile.create({
@@ -24,10 +26,20 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const check = await requirePermission(req, "invoices", "read");
+  if (check.response) return check.response;
+  const { session } = check;
+
   try {
-    const companyId = await getDefaultCompanyId();
+    const companyId = await getTargetCompanyId(session.companyId);
     const statusParam = req.nextUrl.searchParams.get("status") || undefined;
-    const invoices = await InvoiceService.listInvoices(companyId, statusParam);
+    const allowedOrderBy = ["invoiceNumber", "issueDate", "dueDate", "totalAmount", "createdAt"] as const;
+    const orderByParam = req.nextUrl.searchParams.get("orderBy");
+    const orderBy = (allowedOrderBy as readonly string[]).includes(orderByParam || "")
+      ? (orderByParam as (typeof allowedOrderBy)[number])
+      : "invoiceNumber";
+    const orderDir = req.nextUrl.searchParams.get("orderDir") === "asc" ? "asc" : "desc";
+    const invoices = await InvoiceService.listInvoices(companyId, statusParam, orderBy, orderDir);
 
     return NextResponse.json(
       { data: invoices },
@@ -37,7 +49,7 @@ export async function GET(req: NextRequest) {
         },
       }
     );
-  } catch (error: any) {
+  } catch {
     return NextResponse.json(
       { error: "Erro interno ao buscar faturas." },
       { status: 500 }
@@ -56,6 +68,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const check = await requirePermission(req, "invoices", "create");
+  if (check.response) return check.response;
+  const { session } = check;
+
   try {
     const body = await req.json();
     const parsed = createInvoiceSchema.safeParse(body);
@@ -70,13 +86,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const companyId = await getDefaultCompanyId();
+    const companyId = await getTargetCompanyId(session.companyId);
     const invoice = await InvoiceService.createInvoice(companyId, parsed.data);
 
     return NextResponse.json({ data: invoice }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message || "Erro ao criar fatura." },
+      { error: (error instanceof Error ? error.message : undefined) || "Erro ao criar fatura." },
       { status: 400 }
     );
   }

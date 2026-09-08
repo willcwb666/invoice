@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { AppointmentService } from "@/services/appointment-service";
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/lib/security/permissions";
 import { z } from "zod";
 
-async function getDefaultCompanyId() {
+async function getTargetCompanyId(preferredCompanyId?: string) {
+  if (preferredCompanyId) return preferredCompanyId;
   const company = await prisma.companyProfile.findFirst();
   return company?.id || "";
 }
@@ -29,6 +31,10 @@ export async function PATCH(
     );
   }
 
+  const check = await requirePermission(req, "appointments", "update");
+  if (check.response) return check.response;
+  const { session } = check;
+
   try {
     const { id } = await params;
     let body = {};
@@ -49,7 +55,7 @@ export async function PATCH(
       );
     }
 
-    const companyId = await getDefaultCompanyId();
+    const companyId = await getTargetCompanyId(session.companyId);
     const updated = await AppointmentService.completeAppointment(
       id,
       companyId,
@@ -57,9 +63,9 @@ export async function PATCH(
     );
 
     return NextResponse.json({ data: updated });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message || "Erro ao atualizar agendamento." },
+      { error: (error instanceof Error ? error.message : undefined) || "Erro ao atualizar agendamento." },
       { status: 400 }
     );
   }

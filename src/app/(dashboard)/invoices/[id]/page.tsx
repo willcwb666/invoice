@@ -385,6 +385,7 @@ export default function InvoiceDetailPage({
         isOpen={isPaymentModalOpen}
         onClose={() => setIsPaymentModalOpen(false)}
         invoice={invoice}
+        company={invoice?.company}
       />
 
       {/* Send Modal (WhatsApp / SMS / Email) */}

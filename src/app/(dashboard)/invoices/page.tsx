@@ -302,6 +302,7 @@ export default function InvoicesListPage() {
           isOpen={!!selectedInvoiceForPayment}
           onClose={() => setSelectedInvoiceForPayment(null)}
           invoice={selectedInvoiceForPayment}
+          company={selectedInvoiceForPayment.company}
         />
       )}
 

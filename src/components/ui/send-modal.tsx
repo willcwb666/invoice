@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, CheckCircle2, MessageCircle, Phone, Mail, Loader2 } from "lucide-react";
+import { X, Send, CheckCircle2, AlertCircle, MessageCircle, Phone, Mail, Loader2 } from "lucide-react";
 
 interface SendModalProps {
   isOpen: boolean;
@@ -25,6 +25,7 @@ export function SendModal({ isOpen, onClose, invoice }: SendModalProps) {
   const [sendEmail, setSendEmail] = useState(true);
   const [sending, setSending] = useState(false);
   const [sentSuccess, setSentSuccess] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const clientName = invoice.client?.name || "Cliente";
   const clientPhone = invoice.client?.phone || "";
@@ -36,6 +37,7 @@ export function SendModal({ isOpen, onClose, invoice }: SendModalProps) {
 
   const handleSend = async () => {
     setSending(true);
+    setSendError(null);
 
     try {
       // 1. If WhatsApp is selected
@@ -54,13 +56,21 @@ export function SendModal({ isOpen, onClose, invoice }: SendModalProps) {
         window.location.href = smsUrl;
       }
 
-      // 3. If Email is selected
+      // 3. If Email is selected — the only channel that actually goes
+      // through our own backend and can genuinely fail (Resend not
+      // configured, invalid address, etc.), so it's the only one whose
+      // result we check before claiming success. WhatsApp/SMS just hand off
+      // to the OS, which has no failure signal to check from here.
       if (sendEmail && clientEmail) {
-        await fetch(`/api/v1/invoices/${invoice.id}/send`, {
+        const res = await fetch(`/api/v1/invoices/${invoice.id}/send`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: clientEmail }),
-        }).catch(() => null);
+        });
+        const json = await res.json().catch(() => ({}) as { error?: string });
+        if (!res.ok) {
+          throw new Error(json.error || "Falha ao enviar o e-mail.");
+        }
       }
 
       setSentSuccess(true);
@@ -70,6 +80,7 @@ export function SendModal({ isOpen, onClose, invoice }: SendModalProps) {
       }, 1500);
     } catch (err) {
       console.error("Erro ao enviar fatura:", err);
+      setSendError(err instanceof Error ? err.message : "Ocorreu um erro ao enviar a fatura.");
     } finally {
       setSending(false);
     }
@@ -172,6 +183,13 @@ export function SendModal({ isOpen, onClose, invoice }: SendModalProps) {
                 />
               </label>
             </div>
+
+            {sendError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center gap-2 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{sendError}</span>
+              </div>
+            )}
 
             {/* Message Preview */}
             <div className="space-y-1.5">

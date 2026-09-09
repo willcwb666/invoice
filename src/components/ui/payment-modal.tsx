@@ -14,19 +14,49 @@ interface PaymentModalProps {
     totalAmount: number | string;
     client?: { name: string };
   };
+  /** Company profile as returned alongside the invoice (includes paymentMethods free text) — preferred over the props below. */
+  company?: { name?: string | null; tradeName?: string | null; paymentMethods?: string | null };
+  /** Explicit overrides. Only needed where `company` isn't available; otherwise derived from `company.paymentMethods`. */
   zellePhone?: string;
   venmoHandle?: string;
   recipientName?: string;
+}
+
+const FALLBACK_ZELLE_PHONE = "9704129406";
+const FALLBACK_VENMO_HANDLE = "@RenataMatoz";
+const FALLBACK_RECIPIENT_NAME = "Renata Matos de Oliveira";
+
+/**
+ * `paymentMethods` is free text edited on the Settings page (e.g.
+ * "Zelle: 9704129406\nVenmo: @RenataMatoz\nCheck payable to: ..."), not a
+ * structured field — this pulls out the two lines this modal needs. Falls
+ * back to the hardcoded defaults only when nothing can be parsed, so a
+ * differently-worded paymentMethods text degrades instead of going blank.
+ */
+function parsePaymentMethods(text?: string | null): { zelle?: string; venmo?: string } {
+  if (!text) return {};
+  const zelleMatch = text.match(/zelle[:\s]+([^\n]+)/i);
+  const venmoMatch = text.match(/venmo[:\s]+([^\n]+)/i);
+  return {
+    zelle: zelleMatch?.[1]?.trim(),
+    venmo: venmoMatch?.[1]?.trim(),
+  };
 }
 
 export function PaymentModal({
   isOpen,
   onClose,
   invoice,
-  zellePhone = "9704129406",
-  venmoHandle = "@RenataMatoz",
-  recipientName = "Renata Matos de Oliveira",
+  company,
+  zellePhone: zellePhoneProp,
+  venmoHandle: venmoHandleProp,
+  recipientName: recipientNameProp,
 }: PaymentModalProps) {
+  const parsed = parsePaymentMethods(company?.paymentMethods);
+  const zellePhone = zellePhoneProp || parsed.zelle || FALLBACK_ZELLE_PHONE;
+  const venmoHandle = venmoHandleProp || parsed.venmo || FALLBACK_VENMO_HANDLE;
+  const recipientName =
+    recipientNameProp || company?.tradeName || company?.name || FALLBACK_RECIPIENT_NAME;
   const [method, setMethod] = useState<"zelle" | "venmo">("zelle");
   const [copied, setCopied] = useState(false);
 

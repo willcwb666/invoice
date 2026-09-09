@@ -22,6 +22,19 @@ export class EstimateService {
   }
 
   /**
+   * Busca um orçamento específico por ID com dados do cliente e itens
+   */
+  static async getEstimateById(id: string, companyId: string) {
+    return prisma.estimate.findFirst({
+      where: { id, companyId },
+      include: {
+        client: true,
+        items: true,
+      },
+    });
+  }
+
+  /**
    * Cria um novo orçamento
    */
   static async createEstimate(companyId: string, data: CreateEstimateInput) {
@@ -32,13 +45,25 @@ export class EstimateService {
       return acc.add(line);
     }, new Prisma.Decimal(0));
 
+    const estimateNumber =
+      data.estimateNumber?.trim() || `EST-${Date.now().toString().slice(-4)}`;
+
+    let validUntilDate = data.validUntil.includes("T")
+      ? new Date(data.validUntil)
+      : new Date(`${data.validUntil}T23:59:59Z`);
+
+    if (isNaN(validUntilDate.getTime())) {
+      validUntilDate = new Date();
+      validUntilDate.setDate(validUntilDate.getDate() + 15);
+    }
+
     return prisma.estimate.create({
       data: {
         companyId,
         clientId: data.clientId,
-        estimateNumber: data.estimateNumber,
+        estimateNumber,
         status: "DRAFT",
-        validUntil: new Date(data.validUntil),
+        validUntil: validUntilDate,
         providerAddress,
         subtotal,
         totalAmount: subtotal,
@@ -61,6 +86,35 @@ export class EstimateService {
   }
 
   /**
+   * Atualiza status de um orçamento (DRAFT, SENT, ACCEPTED, REJECTED)
+   */
+  static async updateEstimateStatus(id: string, companyId: string, status: any) {
+    const estimate = await prisma.estimate.findFirst({
+      where: { id, companyId },
+    });
+    if (!estimate) {
+      throw new Error("Orçamento não encontrado.");
+    }
+    return prisma.estimate.update({
+      where: { id },
+      data: { status },
+      include: {
+        client: true,
+        items: true,
+      },
+    });
+  }
+
+  /**
+   * Remove um orçamento
+   */
+  static async deleteEstimate(id: string, companyId: string) {
+    return prisma.estimate.deleteMany({
+      where: { id, companyId },
+    });
+  }
+
+  /**
    * Converte um orçamento aceito em fatura (Invoice) em 1 clique
    */
   static async convertToInvoice(estimateId: string, companyId: string) {
@@ -74,7 +128,27 @@ export class EstimateService {
         throw new Error("Orçamento não encontrado.");
       }
 
-      const invoiceNumber = `INV-${estimate.estimateNumber.replace("EST-", "")}`;
+      if (estimate.status === "CONVERTED") {
+        if (estimate.convertedInvoiceId) {
+          const existing = await tx.invoice.findUnique({
+            where: { id: estimate.convertedInvoiceId },
+            include: { items: true, client: true },
+          });
+          if (existing) return existing;
+        }
+        throw new Error("Este orçamento já foi convertido em fatura.");
+      }
+
+      const baseSuffix = estimate.estimateNumber.replace("EST-", "");
+      let invoiceNumber = `INV-${baseSuffix}`;
+
+      const existingInv = await tx.invoice.findUnique({
+        where: { invoiceNumber },
+      });
+      if (existingInv) {
+        invoiceNumber = `INV-${baseSuffix}-${Date.now().toString().slice(-4)}`;
+      }
+
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + 7); // 7 dias de prazo conforme termos
 
@@ -97,6 +171,7 @@ export class EstimateService {
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               total: item.total,
+              serviceDate: new Date(),
             })),
           },
         },

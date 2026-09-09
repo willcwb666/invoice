@@ -9,8 +9,8 @@ export const estimateItemSchema = z.object({
 
 export const createEstimateSchema = z.object({
   clientId: z.string().min(1, "ID do cliente obrigatório"),
-  estimateNumber: z.string().trim().min(1, "Número do orçamento obrigatório"),
-  validUntil: z.string().datetime("Data de validade inválida"),
+  estimateNumber: z.string().trim().min(1).optional(),
+  validUntil: z.string().min(1, "Data de validade obrigatória"),
   notes: z.string().trim().max(1000).optional().nullable(),
   items: z.array(estimateItemSchema).min(1, "Orçamento precisa de ao menos 1 item"),
 });

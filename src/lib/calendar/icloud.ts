@@ -279,6 +279,84 @@ function extractPriceFromText(text: string): number | null {
   return null;
 }
 
+interface SyncableService {
+  id: string;
+  name: string;
+  type: string;
+  basePrice: Prisma.Decimal;
+}
+
+function tokenizeForServiceMatch(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+// Words that describe WHERE/WHAT-KIND rather than the core job itself.
+// A bare mention of "standard cleaning" (no qualifier) should default to the
+// House variant rather than tie with Office, per how this business names
+// its catalog.
+const SERVICE_QUALIFIER_WORDS = ["house", "office", "residential", "commercial"];
+
+/**
+ * Detecta qual serviço cadastrado (Standard/Extra) o título/descrição de um
+ * evento do iPhone está descrevendo — ex: "Cliente 1 $100 Moving Out" casa
+ * com um serviço chamado "Moving Out/In". Cai para um serviço STANDARD
+ * genérico (preferindo um que já contenha a palavra "standard") se nada
+ * bater, já que praticamente todo atendimento é algum tipo de limpeza.
+ *
+ * A correspondência é por sobreposição de palavras exatas (sem stemming),
+ * então o nome do serviço no catálogo deve usar palavras parecidas com o que
+ * é digitado no Calendário do iPhone para o match funcionar bem.
+ */
+function detectServicesFromText(text: string, services: SyncableService[]): SyncableService[] {
+  const textTokens = new Set(tokenizeForServiceMatch(text));
+  if (textTokens.size === 0 || services.length === 0) return [];
+
+  const scored = services
+    .map((s) => ({ service: s, nameTokens: tokenizeForServiceMatch(s.name) }))
+    .map(({ service, nameTokens }) => ({
+      service,
+      nameTokens,
+      score: nameTokens.filter((t) => textTokens.has(t)).length,
+    }))
+    .filter((s) => s.score > 0);
+
+  if (scored.length > 0) {
+    const maxScore = Math.max(...scored.map((s) => s.score));
+    let top = scored.filter((s) => s.score === maxScore);
+
+    // Tie-break 1: if the text doesn't call out a qualifier (e.g. "office"),
+    // prefer candidates that don't require one either.
+    if (top.length > 1 && !SERVICE_QUALIFIER_WORDS.some((q) => textTokens.has(q))) {
+      const withoutQualifier = top.filter(
+        (s) => !s.nameTokens.some((t) => SERVICE_QUALIFIER_WORDS.includes(t))
+      );
+      if (withoutQualifier.length > 0) top = withoutQualifier;
+    }
+
+    // Tie-break 2: prefer the more concise/generic name (fewest extra words
+    // not mentioned in the text).
+    top.sort((a, b) => a.nameTokens.length - b.nameTokens.length);
+
+    return [top[0].service];
+  }
+
+  // Nothing matched at all — default to a generic Standard service.
+  const standardServices = services.filter((s) => s.type === "STANDARD");
+  const genericStandard =
+    standardServices.find(
+      (s) =>
+        tokenizeForServiceMatch(s.name).includes("standard") &&
+        !s.name.toLowerCase().includes("office") &&
+        !s.name.toLowerCase().includes("half")
+    ) || standardServices.find((s) => tokenizeForServiceMatch(s.name).includes("standard")) ||
+    standardServices[0];
+
+  return genericStandard ? [genericStandard] : [];
+}
+
 /**
  * Faz o parsing de um arquivo de texto iCalendar (.ics) e retorna os eventos estruturados.
  */
@@ -425,7 +503,7 @@ export async function syncICloudCalendarForCompany(
   const urlToSave = rawUrl.trim();
 
   // 1. Save URL in company profile (preserving webcal:// scheme)
-  await prisma.companyProfile.update({
+  const company = await prisma.companyProfile.update({
     where: { id: companyId },
     data: { icloudCalendarUrl: urlToSave },
   });
@@ -447,13 +525,16 @@ export async function syncICloudCalendarForCompany(
     };
   }
 
-  // 4. Filter to a practical window: last 2 years up to 2 years ahead
-  //    This prevents processing 1000+ old historical events on every sync.
+  // 4. Filter to a forward-looking window only: the agenda is never edited
+  //    for days already past, so there is no need to re-process history —
+  //    only from today through `icloudSyncWindowDays` days ahead (configurable
+  //    in Settings, default 60 / ~2 months). This keeps every sync fast
+  //    regardless of how many past events pile up in the feed over time.
   const now = new Date();
   const windowStart = new Date(now);
-  windowStart.setFullYear(windowStart.getFullYear() - 2);
-  const windowEnd = new Date(now);
-  windowEnd.setFullYear(windowEnd.getFullYear() + 2);
+  windowStart.setHours(0, 0, 0, 0);
+  const windowEnd = new Date(windowStart);
+  windowEnd.setDate(windowEnd.getDate() + (company.icloudSyncWindowDays || 60));
 
   const events = allEvents.filter(
     (e) => e.startDate >= windowStart && e.startDate <= windowEnd
@@ -464,17 +545,32 @@ export async function syncICloudCalendarForCompany(
     where: { companyId },
   });
 
+  // Catalog of registered services (Standard/Extra), used to detect which
+  // service(s) a calendar event's title/description refers to.
+  const services: SyncableService[] = await prisma.service.findMany({
+    where: { companyId },
+    select: { id: true, name: true, type: true, basePrice: true },
+  });
+
   // 6. Load existing ICLOUD_SYNC appointments in ONE query (for deduplication)
+  //    Also scoped to the same forward-looking window — past appointments are
+  //    frozen and never revisited.
   const existingAppts = await prisma.appointment.findMany({
-    where: { companyId, origin: "ICLOUD_SYNC" },
+    where: { companyId, origin: "ICLOUD_SYNC", date: { gte: windowStart } },
     select: {
       id: true,
       externalEventId: true,
       title: true,
+      date: true,
       startTime: true,
+      endTime: true,
+      location: true,
+      notes: true,
       status: true,
       price: true,
       clientId: true,
+      manuallyEdited: true,
+      services: { select: { serviceId: true } },
     },
   });
 
@@ -574,12 +670,16 @@ export async function syncICloudCalendarForCompany(
       clientId = autoClient.id;
     }
 
-    // --- Price ---
-    let defaultPrice = 150.0;
-    if (/half|meio/i.test(summaryLower)) defaultPrice = 50.0;
-    else if (/office/i.test(summaryLower)) defaultPrice = 130.0;
-    else if (/house|casa/i.test(summaryLower)) defaultPrice = 180.0;
-    else if (/move-out|move out|deep/i.test(summaryLower)) defaultPrice = 400.0;
+    // --- Service detection from the event's text (title + description) ---
+    // The iPhone Calendar has no price/service fields, so both are written
+    // as free text (e.g. "Cliente 1 $100 Moving Out") — detect which
+    // registered service(s) apply, falling back to a STANDARD service when
+    // nothing specific is mentioned.
+    const matchedServices = detectServicesFromText(
+      `${event.summary} ${event.description || ""}`,
+      services
+    );
+    const matchedServicesSum = matchedServices.reduce((acc, s) => acc + Number(s.basePrice), 0);
 
     // --- Status ---
     let apptStatus: "SCHEDULED" | "COMPLETED" | "CANCELLED" = "SCHEDULED";
@@ -600,16 +700,59 @@ export async function syncICloudCalendarForCompany(
       ? new Prisma.Decimal(event.price)
       : existing
       ? existing.price
-      : new Prisma.Decimal(defaultPrice);
+      : new Prisma.Decimal(matchedServicesSum > 0 ? matchedServicesSum : 150.0);
+
+    // Snapshot price per matched service: if there's exactly one match and we
+    // parsed a real $ amount from the text, that's the negotiated price for
+    // that service; otherwise each service keeps its own catalog basePrice.
+    const appointmentServicesData = matchedServices.map((s) => ({
+      serviceId: s.id,
+      price:
+        matchedServices.length === 1 && event.price !== undefined
+          ? new Prisma.Decimal(event.price)
+          : s.basePrice,
+    }));
+    const matchedServiceIds = matchedServices.map((s) => s.id).sort();
 
     if (existing) {
-      // Only update if status is not manually-overridden COMPLETED
-      if (existing.status !== "COMPLETED" || apptStatus !== "SCHEDULED") {
+      // Manually-completed appointments are never reverted back to SCHEDULED
+      // by a stale calendar entry.
+      const isProtectedCompletion =
+        existing.status === "COMPLETED" && apptStatus === "SCHEDULED";
+
+      // Once a user edits this appointment by hand in the app (services,
+      // price, time, etc.), the iPhone calendar is no longer the source of
+      // truth for it — never let a later sync silently revert that edit.
+      if (existing.manuallyEdited) {
+        continue;
+      }
+
+      const resolvedClientId = clientId || existing.clientId;
+      const resolvedLocation = event.location || null;
+      const resolvedNotes = event.description || null;
+      const existingServiceIds = existing.services.map((s) => s.serviceId).sort();
+      const sameServices =
+        existingServiceIds.length === matchedServiceIds.length &&
+        existingServiceIds.every((id, i) => id === matchedServiceIds[i]);
+
+      const unchanged =
+        existing.title === event.summary &&
+        existing.clientId === resolvedClientId &&
+        existing.date.getTime() === event.startDate.getTime() &&
+        existing.startTime.getTime() === event.startDate.getTime() &&
+        existing.endTime.getTime() === event.endDate.getTime() &&
+        (existing.location || null) === resolvedLocation &&
+        (existing.notes || null) === resolvedNotes &&
+        existing.price.equals(calculatedPrice) &&
+        existing.status === apptStatus &&
+        sameServices;
+
+      if (!isProtectedCompletion && !unchanged) {
         await prisma.appointment.update({
           where: { id: existing.id },
           data: {
             title: event.summary,
-            clientId: clientId || existing.clientId,
+            clientId: resolvedClientId,
             date: event.startDate,
             startTime: event.startDate,
             endTime: event.endDate,
@@ -619,6 +762,10 @@ export async function syncICloudCalendarForCompany(
             status: apptStatus,
             origin: "ICLOUD_SYNC",
             externalEventId: event.uid,
+            services: {
+              deleteMany: {},
+              ...(appointmentServicesData.length ? { create: appointmentServicesData } : {}),
+            },
           },
         });
         updatedCount++;
@@ -638,6 +785,9 @@ export async function syncICloudCalendarForCompany(
           origin: "ICLOUD_SYNC",
           externalEventId: event.uid,
           notes: event.description || null,
+          ...(appointmentServicesData.length
+            ? { services: { create: appointmentServicesData } }
+            : {}),
         },
       });
       createdCount++;
@@ -646,7 +796,7 @@ export async function syncICloudCalendarForCompany(
 
   const message =
     createdCount > 0 || updatedCount > 0
-      ? `${createdCount} novos atendimentos importados e ${updatedCount} atualizados do iPhone da esposa. (${allEvents.length} eventos totais no feed, mostrando últimos 4 anos)`
+      ? `${createdCount} novos atendimentos importados e ${updatedCount} atualizados do iPhone da esposa. (${events.length} de ${allEvents.length} eventos no feed, janela de ${company.icloudSyncWindowDays || 60} dias a partir de hoje)`
       : `${events.length} atendimentos sincronizados do iPhone (já atualizados).`;
 
   try {
@@ -790,13 +940,4 @@ export async function ensureICloudCalendarSynced(
   })();
 
   return activeSyncPromise;
-}
-
-// Auto-executa a sincronização do calendário no startup do servidor Node.js
-if (typeof window === "undefined") {
-  setTimeout(() => {
-    ensureICloudCalendarSynced(true).catch((err) => {
-      console.error("[iCloud Auto-Sync] Erro no bootstrap:", err);
-    });
-  }, 1000);
 }

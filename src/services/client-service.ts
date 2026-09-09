@@ -19,6 +19,7 @@ export class ClientService {
         state: true,
         zipCode: true,
         billingType: true,
+        notes: true,
         createdAt: true,
         _count: {
           select: { invoices: true, appointments: true },
@@ -28,7 +29,7 @@ export class ClientService {
   }
 
   /**
-   * Busca um cliente por ID
+   * Busca um cliente por ID com faturas, agendamentos e orçamentos
    */
   static async getClientById(id: string, companyId: string) {
     return prisma.client.findFirst({
@@ -36,6 +37,7 @@ export class ClientService {
       include: {
         invoices: { orderBy: { createdAt: "desc" } },
         appointments: { orderBy: { date: "desc" } },
+        estimates: { orderBy: { createdAt: "desc" } },
       },
     });
   }
@@ -51,6 +53,31 @@ export class ClientService {
         email: data.email || null,
         phone: data.phone || null,
         address: data.address || "Greeley, CO",
+        city: data.city || null,
+        state: data.state || "CO",
+        zipCode: data.zipCode || null,
+        billingType: (data.billingType as any) || "PER_JOB",
+        notes: data.notes || null,
+      },
+    });
+  }
+
+  /**
+   * Atualiza os dados de um cliente
+   */
+  static async updateClient(id: string, companyId: string, data: Partial<CreateClientInput>) {
+    return prisma.client.updateMany({
+      where: { id, companyId },
+      data: {
+        ...(data.name ? { name: data.name } : {}),
+        ...(data.email !== undefined ? { email: data.email || null } : {}),
+        ...(data.phone !== undefined ? { phone: data.phone || null } : {}),
+        ...(data.address ? { address: data.address } : {}),
+        ...(data.city !== undefined ? { city: data.city || null } : {}),
+        ...(data.state !== undefined ? { state: data.state || "CO" } : {}),
+        ...(data.zipCode !== undefined ? { zipCode: data.zipCode || null } : {}),
+        ...(data.billingType ? { billingType: data.billingType as any } : {}),
+        ...(data.notes !== undefined ? { notes: data.notes || null } : {}),
       },
     });
   }

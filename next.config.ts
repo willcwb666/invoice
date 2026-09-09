@@ -28,6 +28,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Configured with iCloud calendar sync hook
   async headers() {
     return [
       {

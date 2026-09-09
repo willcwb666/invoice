@@ -3,19 +3,13 @@ import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { AppointmentService } from "@/services/appointment-service";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/security/permissions";
-import { z } from "zod";
+import { updateAppointmentSchema } from "@/lib/validations/appointment";
 
 async function getTargetCompanyId(preferredCompanyId?: string) {
   if (preferredCompanyId) return preferredCompanyId;
   const company = await prisma.companyProfile.findFirst();
   return company?.id || "";
 }
-
-const patchAppointmentSchema = z.object({
-  status: z
-    .enum(["SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED"])
-    .default("COMPLETED"),
-});
 
 export async function PATCH(
   req: NextRequest,
@@ -44,11 +38,11 @@ export async function PATCH(
       body = {};
     }
 
-    const parsed = patchAppointmentSchema.safeParse(body);
+    const parsed = updateAppointmentSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         {
-          error: "Status do agendamento inválido.",
+          error: "Dados inválidos para atualização do agendamento.",
           details: parsed.error.flatten().fieldErrors,
         },
         { status: 400 }
@@ -56,11 +50,7 @@ export async function PATCH(
     }
 
     const companyId = await getTargetCompanyId(session.companyId);
-    const updated = await AppointmentService.completeAppointment(
-      id,
-      companyId,
-      parsed.data.status
-    );
+    const updated = await AppointmentService.updateAppointment(id, companyId, parsed.data);
 
     return NextResponse.json({ data: updated });
   } catch (error: unknown) {

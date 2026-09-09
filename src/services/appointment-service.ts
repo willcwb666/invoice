@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { CreateAppointmentInput } from "@/lib/validations/appointment";
+import { CreateAppointmentInput, UpdateAppointmentInput } from "@/lib/validations/appointment";
 import { Prisma } from "@prisma/client";
 
 export class AppointmentService {
@@ -24,8 +24,8 @@ export class AppointmentService {
         client: {
           select: { id: true, name: true, phone: true, address: true, city: true, state: true, zipCode: true },
         },
-        service: {
-          select: { id: true, name: true },
+        services: {
+          include: { service: { select: { id: true, name: true, type: true } } },
         },
       },
     });
@@ -45,11 +45,16 @@ export class AppointmentService {
 
     const location = data.location || client.address;
 
+    const services = data.serviceIds.length
+      ? await prisma.service.findMany({
+          where: { id: { in: data.serviceIds }, companyId },
+        })
+      : [];
+
     return prisma.appointment.create({
       data: {
         companyId,
         clientId: data.clientId,
-        serviceId: data.serviceId || null,
         title: data.title,
         date: new Date(data.date),
         startTime: new Date(data.startTime),
@@ -58,10 +63,61 @@ export class AppointmentService {
         price: new Prisma.Decimal(data.price),
         origin: data.origin,
         notes: data.notes || null,
+        ...(services.length
+          ? { services: { create: services.map((s) => ({ serviceId: s.id, price: s.basePrice })) } }
+          : {}),
       },
       include: {
         client: true,
-        service: true,
+        services: { include: { service: true } },
+      },
+    });
+  }
+
+  /**
+   * Edita um agendamento existente (ex: um evento importado do iPhone que o
+   * usuário quer corrigir na aplicação) — todo campo é opcional, atualiza só
+   * o que veio no payload. Quando `serviceIds` é enviado, substitui todos os
+   * vínculos de serviço do agendamento pelos novos (preço de cada um é um
+   * novo snapshot do basePrice atual do serviço).
+   */
+  static async updateAppointment(id: string, companyId: string, data: UpdateAppointmentInput) {
+    const existing = await prisma.appointment.findFirst({ where: { id, companyId } });
+    if (!existing) {
+      throw new Error("Agendamento não encontrado.");
+    }
+
+    let servicesUpdate: Prisma.AppointmentUpdateInput["services"] = undefined;
+    if (data.serviceIds) {
+      const services = await prisma.service.findMany({
+        where: { id: { in: data.serviceIds }, companyId },
+      });
+      servicesUpdate = {
+        deleteMany: {},
+        ...(services.length
+          ? { create: services.map((s) => ({ serviceId: s.id, price: s.basePrice })) }
+          : {}),
+      };
+    }
+
+    return prisma.appointment.update({
+      where: { id },
+      data: {
+        ...(data.clientId !== undefined && { clientId: data.clientId }),
+        ...(data.title !== undefined && { title: data.title }),
+        ...(data.date !== undefined && { date: new Date(data.date) }),
+        ...(data.startTime !== undefined && { startTime: new Date(data.startTime) }),
+        ...(data.endTime !== undefined && { endTime: new Date(data.endTime) }),
+        ...(data.location !== undefined && { location: data.location }),
+        ...(data.price !== undefined && { price: new Prisma.Decimal(data.price) }),
+        ...(data.notes !== undefined && { notes: data.notes }),
+        ...(data.status !== undefined && { status: data.status }),
+        ...(servicesUpdate ? { services: servicesUpdate } : {}),
+        manuallyEdited: true,
+      },
+      include: {
+        client: true,
+        services: { include: { service: true } },
       },
     });
   }
@@ -89,7 +145,7 @@ export class AppointmentService {
       data: { status },
       include: {
         client: true,
-        service: true,
+        services: { include: { service: true } },
       },
     });
   }
@@ -106,7 +162,7 @@ export class AppointmentService {
         invoiced: false,
       },
       orderBy: { date: "asc" },
-      include: { service: true },
+      include: { services: { include: { service: true } } },
     });
   }
 

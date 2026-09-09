@@ -33,6 +33,14 @@ export const createClientSchema = z.object({
     .max(250, "Endereço muito longo")
     .optional()
     .or(z.literal("")),
+  city: z.string().trim().max(100).optional().or(z.literal("")),
+  state: z.string().trim().max(10).optional().or(z.literal("")),
+  zipCode: z.string().trim().max(20).optional().or(z.literal("")),
+  billingType: z
+    .enum(["CONSOLIDATED_MONTHLY", "PER_JOB"])
+    .optional()
+    .default("PER_JOB"),
+  notes: z.string().trim().max(1000).optional().or(z.literal("")),
 });
 
 export const updateClientSchema = createClientSchema.partial().extend({

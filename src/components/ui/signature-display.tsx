@@ -1,0 +1,67 @@
+"use client";
+
+import React, { useState } from "react";
+import Image from "next/image";
+
+interface SignatureDisplayProps {
+  signatureUrl?: string | null;
+  className?: string;
+}
+
+export function SignatureDisplay({
+  signatureUrl,
+  className = "h-16 max-w-[220px]",
+}: SignatureDisplayProps) {
+  const [imgError, setImgError] = useState(false);
+
+  // If a valid URL is supplied and didn't error out
+  if (signatureUrl && !imgError) {
+    return (
+      <div className={`relative ${className}`}>
+        <img
+          src={signatureUrl}
+          alt="Assinatura Renata Matos"
+          className="h-full w-auto object-contain"
+          onError={() => setImgError(true)}
+        />
+      </div>
+    );
+  }
+
+  // Built-in inline vector matching Renata Matos's signature from the example PDFs
+  return (
+    <div className={`inline-block ${className}`}>
+      <svg
+        viewBox="0 0 420 180"
+        className="h-full w-auto"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <g
+          stroke="#1d4ed8"
+          strokeWidth="3.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        >
+          {/* Initial R and loop */}
+          <path d="M 58 135 C 50 120, 42 90, 48 65 C 54 40, 72 22, 92 25 C 108 27, 114 42, 106 60 C 96 82, 70 102, 50 125 C 44 132, 40 142, 46 148 C 54 154, 76 138, 92 118 C 104 102, 115 88, 128 78" />
+          {/* Downward hook of R */}
+          <path d="M 88 52 C 100 52, 112 60, 110 75 C 108 90, 94 104, 86 118 C 80 128, 82 136, 92 136 C 102 136, 112 125, 122 110" />
+          {/* 'e', 'n', 'a', 't', 'a' cursive connection */}
+          <path d="M 124 108 C 132 98, 140 96, 144 104 C 148 112, 138 122, 146 124 C 154 126, 160 102, 168 102 C 174 102, 172 120, 180 120 C 188 120, 194 104, 202 104 C 210 104, 214 118, 222 118" />
+          {/* 't' stem and cross */}
+          <path d="M 206 82 C 206 95, 206 112, 210 122" />
+          <path d="M 196 95 C 208 94, 220 93, 228 92" />
+          {/* final 'a' and flow */}
+          <path d="M 224 108 C 220 102, 230 98, 238 104 C 244 110, 240 120, 246 122 C 252 124, 260 115, 268 106" />
+          {/* Grand underline flourish and enclosing oval */}
+          <path
+            d="M 268 106 C 290 85, 310 78, 325 88 C 338 98, 330 118, 305 132 C 265 152, 180 156, 115 152 C 60 148, 28 135, 28 116 C 28 95, 65 72, 125 58 C 185 45, 260 52, 305 70 C 330 80, 342 96, 336 112 C 328 128, 298 140, 252 146 C 200 152, 140 148, 102 140"
+            strokeWidth="2.8"
+          />
+        </g>
+      </svg>
+    </div>
+  );
+}

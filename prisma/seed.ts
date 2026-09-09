@@ -170,116 +170,229 @@ async function main() {
       notes: "Cliente residencial de serviços avulsos / Move-out.",
     },
   });
-  console.log("✓ Clientes reais cadastrados: Holland Law Office e Marie Warren!");
-
-  // 6. Fatura Histórica: Holland Law Office (08 - 2026)
-  const existingInvHolland = await prisma.invoice.findUnique({
-    where: { invoiceNumber: "08 - 2026" },
+  const prajaktaBorawake = await prisma.client.upsert({
+    where: { id: "prajakta-borawake-id" },
+    update: {},
+    create: {
+      id: "prajakta-borawake-id",
+      companyId: company.id,
+      name: "Prajakta Borawake",
+      email: "prajakta.borawake@example.com",
+      phone: "9705550188",
+      address: "1896 Los Cabos Dr",
+      city: "Windsor",
+      state: "CO",
+      zipCode: "80550",
+      billingType: BillingType.PER_JOB,
+      notes: "Move-out cleaning residencial em Windsor.",
+    },
   });
+  console.log("✓ Clientes reais cadastrados: Holland Law Office, Marie Warren e Prajakta Borawake!");
 
-  if (!existingInvHolland) {
-    await prisma.invoice.create({
-      data: {
-        companyId: company.id,
-        clientId: hollandLaw.id,
-        invoiceNumber: "08 - 2026",
-        status: InvoiceStatus.PAID,
-        issueDate: new Date("2026-08-10T10:00:00Z"),
-        dueDate: new Date("2026-08-17T10:00:00Z"),
-        providerAddress: "4172 MeadowView - Evans, CO - 80620",
-        subtotal: 720.0,
-        discount: 0.0,
-        tax: 0.0,
-        totalAmount: 720.0,
-        paidAmount: 720.0,
-        paidAt: new Date("2026-08-15T15:00:00Z"),
-        notes: "Serviços executados no mês de Julho/Agosto.",
-        items: {
-          create: [
-            {
-              serviceDate: new Date("2026-07-04T09:00:00Z"),
-              description: "Office - Half standard cleaning",
-              quantity: 1,
-              unitPrice: 50.0,
-              total: 50.0,
-            },
-            {
-              serviceDate: new Date("2026-07-09T09:00:00Z"),
-              description: "House - Standard cleaning",
-              quantity: 1,
-              unitPrice: 180.0,
-              total: 180.0,
-            },
-            {
-              serviceDate: new Date("2026-07-11T09:00:00Z"),
-              description: "Office - Standard cleaning",
-              quantity: 1,
-              unitPrice: 130.0,
-              total: 130.0,
-            },
-            {
-              serviceDate: new Date("2026-07-18T09:00:00Z"),
-              description: "Office - Half standard cleaning",
-              quantity: 1,
-              unitPrice: 50.0,
-              total: 50.0,
-            },
-            {
-              serviceDate: new Date("2026-07-23T09:00:00Z"),
-              description: "House - Standard cleaning",
-              quantity: 1,
-              unitPrice: 180.0,
-              total: 180.0,
-            },
-            {
-              serviceDate: new Date("2026-07-25T09:00:00Z"),
-              description: "Office - Standard cleaning",
-              quantity: 1,
-              unitPrice: 130.0,
-              total: 130.0,
-            },
-          ],
-        },
-      },
+  // Invoices from exemple folder
+  const exampleInvoices = [
+    {
+      invoiceNumber: "02 - 2026",
+      clientId: hollandLaw.id,
+      status: InvoiceStatus.PAID,
+      issueDate: new Date("2026-02-17T10:00:00Z"),
+      dueDate: new Date("2026-02-24T10:00:00Z"),
+      providerAddress: "1705 30th St., #104 - Greeley, CO - 80631",
+      subtotal: 770.0,
+      totalAmount: 770.0,
+      paidAmount: 770.0,
+      paidAt: new Date("2026-02-20T14:00:00Z"),
+      notes: "Serviços executados em Janeiro de 2026.",
+      items: [
+        { serviceDate: new Date("2026-01-03T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+        { serviceDate: new Date("2026-01-08T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-01-10T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-01-17T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+        { serviceDate: new Date("2026-01-22T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-01-24T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-01-31T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+      ],
+    },
+    {
+      invoiceNumber: "03 - 2026",
+      clientId: hollandLaw.id,
+      status: InvoiceStatus.PAID,
+      issueDate: new Date("2026-03-28T10:00:00Z"),
+      dueDate: new Date("2026-04-04T10:00:00Z"),
+      providerAddress: "1705 30th St., #104 - Greeley, CO - 80631",
+      subtotal: 1390.0,
+      totalAmount: 1390.0,
+      paidAmount: 1390.0,
+      paidAt: new Date("2026-04-02T16:00:00Z"),
+      notes: "Serviços executados em Fevereiro e Março de 2026.",
+      items: [
+        { serviceDate: new Date("2026-02-04T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-02-07T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-02-14T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+        { serviceDate: new Date("2026-02-19T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-02-21T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-03-06T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-03-07T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-03-14T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+        { serviceDate: new Date("2026-03-19T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-03-21T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-03-28T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+      ],
+    },
+    {
+      invoiceNumber: "04 - 2026",
+      clientId: prajaktaBorawake.id,
+      status: InvoiceStatus.PAID,
+      issueDate: new Date("2026-03-24T10:00:00Z"),
+      dueDate: new Date("2026-03-31T10:00:00Z"),
+      providerAddress: "1705 30th St., #104 - Greeley, CO - 80631",
+      subtotal: 400.0,
+      totalAmount: 400.0,
+      paidAmount: 400.0,
+      paidAt: new Date("2026-03-25T11:00:00Z"),
+      notes: "Move-out cleaning services for 1896 Los Cabos Dr - Windsor, CO",
+      items: [
+        { serviceDate: new Date("2026-03-24T08:30:00Z"), description: "Move-out cleaning services", quantity: 1, unitPrice: 400.0, total: 400.0 },
+      ],
+    },
+    {
+      invoiceNumber: "05 - 2026",
+      clientId: marieWarren.id,
+      status: InvoiceStatus.PAID,
+      issueDate: new Date("2026-05-11T10:00:00Z"),
+      dueDate: new Date("2026-05-18T10:00:00Z"),
+      providerAddress: "1705 30th St., #104 - Greeley, CO - 80631",
+      subtotal: 550.0,
+      totalAmount: 550.0,
+      paidAmount: 550.0,
+      paidAt: new Date("2026-05-15T10:00:00Z"),
+      notes: "Move-out cleaning services for 1805 Axial Dr - Loveland, CO",
+      items: [
+        { serviceDate: new Date("2026-05-09T08:00:00Z"), description: "Move-out cleaning services for 1805 Axial Dr - Loveland, CO", quantity: 1, unitPrice: 550.0, total: 550.0 },
+      ],
+    },
+    {
+      invoiceNumber: "06 - 2026",
+      clientId: hollandLaw.id,
+      status: InvoiceStatus.PAID,
+      issueDate: new Date("2026-05-11T10:00:00Z"),
+      dueDate: new Date("2026-05-18T10:00:00Z"),
+      providerAddress: "1705 30th St., #104 - Greeley, CO - 80631",
+      subtotal: 900.0,
+      totalAmount: 900.0,
+      paidAmount: 900.0,
+      paidAt: new Date("2026-05-16T15:00:00Z"),
+      notes: "Serviços executados em Abril de 2026.",
+      items: [
+        { serviceDate: new Date("2026-04-02T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-04-04T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-04-11T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+        { serviceDate: new Date("2026-04-16T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-04-18T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-04-25T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+        { serviceDate: new Date("2026-04-30T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+      ],
+    },
+    {
+      invoiceNumber: "07 - 2026",
+      clientId: hollandLaw.id,
+      status: InvoiceStatus.PAID,
+      issueDate: new Date("2026-07-16T10:00:00Z"),
+      dueDate: new Date("2026-07-23T10:00:00Z"),
+      providerAddress: "1705 30th St., #104 - Greeley, CO - 80631",
+      subtotal: 1570.0,
+      totalAmount: 1570.0,
+      paidAmount: 1570.0,
+      paidAt: new Date("2026-07-20T12:00:00Z"),
+      notes: "Serviços executados em Maio e Junho de 2026.",
+      items: [
+        { serviceDate: new Date("2026-05-02T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-05-09T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+        { serviceDate: new Date("2026-05-14T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-05-16T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-05-23T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+        { serviceDate: new Date("2026-05-28T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-05-30T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-06-06T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+        { serviceDate: new Date("2026-06-11T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-06-13T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-06-20T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+        { serviceDate: new Date("2026-06-25T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-06-27T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+      ],
+    },
+    {
+      invoiceNumber: "08 - 2026",
+      clientId: hollandLaw.id,
+      status: InvoiceStatus.PAID,
+      issueDate: new Date("2026-08-10T10:00:00Z"),
+      dueDate: new Date("2026-08-17T10:00:00Z"),
+      providerAddress: "4172 MeadowView - Evans, CO - 80620",
+      subtotal: 720.0,
+      totalAmount: 720.0,
+      paidAmount: 720.0,
+      paidAt: new Date("2026-08-15T15:00:00Z"),
+      notes: "Serviços executados no mês de Julho de 2026.",
+      items: [
+        { serviceDate: new Date("2026-07-04T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+        { serviceDate: new Date("2026-07-09T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-07-11T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-07-18T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+        { serviceDate: new Date("2026-07-23T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-07-25T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+      ],
+    },
+    {
+      invoiceNumber: "09 - 2026",
+      clientId: hollandLaw.id,
+      status: InvoiceStatus.PENDING,
+      issueDate: new Date("2026-09-01T10:00:00Z"),
+      dueDate: new Date("2026-09-08T10:00:00Z"),
+      providerAddress: "4172 MeadowView - Evans, CO - 80620",
+      subtotal: 720.0,
+      totalAmount: 720.0,
+      paidAmount: 0.0,
+      notes: "Serviços executados no mês de Agosto de 2026.",
+      items: [
+        { serviceDate: new Date("2026-08-06T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-08-08T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-08-15T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+        { serviceDate: new Date("2026-08-21T09:00:00Z"), description: "House - Standard cleaning", quantity: 1, unitPrice: 180.0, total: 180.0 },
+        { serviceDate: new Date("2026-08-22T09:00:00Z"), description: "Office - Standard cleaning", quantity: 1, unitPrice: 130.0, total: 130.0 },
+        { serviceDate: new Date("2026-08-29T09:00:00Z"), description: "Office - Half standard cleaning", quantity: 1, unitPrice: 50.0, total: 50.0 },
+      ],
+    },
+  ];
+
+  for (const inv of exampleInvoices) {
+    const existing = await prisma.invoice.findUnique({
+      where: { invoiceNumber: inv.invoiceNumber },
     });
-    console.log("✓ Fatura real 08 - 2026 criada (Holland Law - $720.00)");
-  }
 
-  // 7. Fatura Histórica: Marie Warren (05 - 2026)
-  const existingInvMarie = await prisma.invoice.findUnique({
-    where: { invoiceNumber: "05 - 2026" },
-  });
-
-  if (!existingInvMarie) {
-    await prisma.invoice.create({
-      data: {
-        companyId: company.id,
-        clientId: marieWarren.id,
-        invoiceNumber: "05 - 2026",
-        status: InvoiceStatus.PENDING,
-        issueDate: new Date("2026-05-11T10:00:00Z"),
-        dueDate: new Date("2026-05-18T10:00:00Z"),
-        providerAddress: "1705 30th St., #104 - Greeley, CO - 80631",
-        subtotal: 550.0,
-        discount: 0.0,
-        tax: 0.0,
-        totalAmount: 550.0,
-        paidAmount: 0.0,
-        notes: "Move-out cleaning services for 1805 Axial Dr - Loveland, CO",
-        items: {
-          create: [
-            {
-              serviceDate: new Date("2026-05-09T08:00:00Z"),
-              description: "Move-out cleaning services for 1805 Axial Dr - Loveland, CO",
-              quantity: 1,
-              unitPrice: 550.0,
-              total: 550.0,
-            },
-          ],
+    if (!existing) {
+      await prisma.invoice.create({
+        data: {
+          companyId: company.id,
+          clientId: inv.clientId,
+          invoiceNumber: inv.invoiceNumber,
+          status: inv.status,
+          issueDate: inv.issueDate,
+          dueDate: inv.dueDate,
+          providerAddress: inv.providerAddress,
+          subtotal: inv.subtotal,
+          discount: 0.0,
+          tax: 0.0,
+          totalAmount: inv.totalAmount,
+          paidAmount: inv.paidAmount,
+          paidAt: (inv as any).paidAt || null,
+          notes: inv.notes,
+          items: {
+            create: inv.items,
+          },
         },
-      },
-    });
-    console.log("✓ Fatura real 05 - 2026 criada (Marie Warren - $550.00)");
+      });
+      console.log(`✓ Fatura real ${inv.invoiceNumber} criada!`);
+    }
   }
 
   // 8. Despesas Iniciais para teste do fluxo financeiro

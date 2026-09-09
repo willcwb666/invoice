@@ -9,6 +9,7 @@ export type ScreenId =
   | "clients"
   | "appointments"
   | "agenda"
+  | "services"
   | "expenses"
   | "marketing"
   | "settings"
@@ -79,6 +80,13 @@ export const SYSTEM_SCREENS: ScreenDefinition[] = [
     name: "Agenda",
     route: "/agenda",
     description: "Calendário interativo integrado em tempo real com o iPhone/iCloud.",
+    category: "operations",
+  },
+  {
+    id: "services",
+    name: "Serviços",
+    route: "/services",
+    description: "Catálogo de serviços (Standard/Extra) e preços usados nos agendamentos.",
     category: "operations",
   },
   {
@@ -160,6 +168,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     clients: { read: true, create: true, update: true, delete: true, export: true },
     appointments: { read: true, create: true, update: true, delete: true, export: true },
     agenda: { read: true, create: true, update: true, delete: true, export: true },
+    services: { read: true, create: true, update: true, delete: true, export: true },
     expenses: { read: true, create: true, update: true, delete: true, export: true },
     marketing: { read: true, create: true, update: true, delete: true, export: true },
     settings: { read: true, create: true, update: true, delete: true, export: true },
@@ -172,6 +181,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     clients: { read: true, create: true, update: true, delete: false, export: true },
     appointments: { read: true, create: false, update: false, delete: false, export: true },
     agenda: { read: true, create: false, update: false, delete: false, export: false },
+    services: { read: true, create: true, update: true, delete: false, export: true },
     expenses: { read: true, create: true, update: true, delete: true, export: true },
     marketing: { read: true, create: false, update: false, delete: false, export: false },
     settings: { read: false, create: false, update: false, delete: false, export: false },
@@ -184,6 +194,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     clients: { read: true, create: true, update: true, delete: false, export: false },
     appointments: { read: true, create: true, update: true, delete: false, export: true },
     agenda: { read: true, create: true, update: true, delete: false, export: true },
+    services: { read: true, create: true, update: true, delete: false, export: false },
     expenses: { read: true, create: true, update: false, delete: false, export: false },
     marketing: { read: false, create: false, update: false, delete: false, export: false },
     settings: { read: false, create: false, update: false, delete: false, export: false },
@@ -196,6 +207,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     clients: { read: true, create: false, update: false, delete: false, export: false },
     appointments: { read: true, create: false, update: false, delete: false, export: true },
     agenda: { read: true, create: false, update: false, delete: false, export: false },
+    services: { read: true, create: false, update: false, delete: false, export: false },
     expenses: { read: true, create: false, update: false, delete: false, export: false },
     marketing: { read: true, create: false, update: false, delete: false, export: false },
     settings: { read: false, create: false, update: false, delete: false, export: false },

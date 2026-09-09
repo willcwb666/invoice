@@ -27,7 +27,7 @@ export default function MarketingPage() {
   };
 
   return (
-    <div>
+    <div className="bg-[#f8fafc] min-h-screen">
       <Header
         title="Marketing & Divulgação com IA"
         subtitle="Gerador de copy persuasivo e banners locais para Nextdoor e Facebook"

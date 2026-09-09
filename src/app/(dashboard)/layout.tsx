@@ -1,12 +1,19 @@
 import React from "react";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileNav } from "@/components/dashboard/mobile-nav";
+import { ensureExampleInvoicesSeeded } from "@/lib/seed-data";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  try {
+    await ensureExampleInvoicesSeeded();
+  } catch (err) {
+    console.error("[DashboardLayout] Seed/sync error:", err);
+  }
+
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-indigo-500 selection:text-white">
       {/* Background subtle light effects */}

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   TrendingUp,
   Calendar,
@@ -14,30 +14,53 @@ import {
   Fuel,
   Sparkles,
   Settings,
+  LogOut,
+  Loader2,
+  CalendarCheck,
+  UserCheck,
+  Wrench,
 } from "lucide-react";
 
 const primaryNavItems = [
   { name: "Início", href: "/", icon: TrendingUp },
-  { name: "Agenda", href: "/agenda", icon: Calendar },
+  { name: "Agendamentos", href: "/appointments", icon: CalendarCheck },
   { name: "Faturas", href: "/invoices", icon: FileText },
   { name: "Clientes", href: "/clients", icon: Users },
 ];
 
 const secondaryNavItems = [
+  { name: "Agenda", href: "/agenda", icon: Calendar },
+  { name: "Serviços", href: "/services", icon: Wrench },
   { name: "Orçamentos", href: "/estimates", icon: Receipt },
   { name: "Despesas", href: "/expenses", icon: Fuel },
   { name: "Marketing IA", href: "/marketing", icon: Sparkles },
+  { name: "Usuários & RBAC", href: "/users", icon: UserCheck },
   { name: "Configurações", href: "/settings", icon: Settings },
 ];
 
 export function MobileNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   // Fecha o menu móvel ao mudar de rota
   useEffect(() => {
     setIsOpen(false);
   }, [pathname]);
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await fetch("/api/v1/auth/logout", { method: "POST" });
+    } catch {
+      // Continue
+    } finally {
+      router.push("/login");
+      router.refresh();
+    }
+  };
 
   const isMoreActive = secondaryNavItems.some((item) =>
     pathname.startsWith(item.href)
@@ -56,10 +79,13 @@ export function MobileNav() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <span className="font-bold text-slate-900 text-sm">Mais Funcionalidades</span>
+              <div>
+                <span className="font-bold text-slate-900 text-sm">Mais Funcionalidades</span>
+                <p className="text-[11px] text-slate-500">Renata Matos • Admin</p>
+              </div>
               <button
                 onClick={() => setIsOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -89,6 +115,22 @@ export function MobileNav() {
                   </Link>
                 );
               })}
+            </div>
+
+            {/* Logout button in Mobile Drawer */}
+            <div className="pt-2 border-t border-slate-100">
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200/80 text-rose-700 text-xs font-bold transition-colors cursor-pointer"
+              >
+                {loggingOut ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <LogOut className="w-4 h-4" />
+                )}
+                <span>Encerrar Sessão (Logout)</span>
+              </button>
             </div>
           </div>
         </div>

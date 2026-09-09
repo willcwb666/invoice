@@ -5,34 +5,45 @@ import Link from "next/link";
 import { Header } from "@/components/dashboard/header";
 import {
   Calendar as CalendarIcon,
+  CalendarDays,
+  CalendarRange,
+  Sun,
   Clock,
   MapPin,
   Navigation,
   CheckCircle2,
-  AlertCircle,
   Plus,
   RefreshCw,
   Smartphone,
-  LayoutGrid,
-  Table as TableIcon,
   Search,
   DollarSign,
   CalendarCheck,
-  Check,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import { DataTable, ColumnDef } from "@/components/ui/data-table";
-import { Pagination } from "@/components/ui/pagination";
 import { ActionButton } from "@/components/ui/action-button";
 import { AppointmentModal } from "@/components/ui/appointment-modal";
 import { motion } from "framer-motion";
 
+type ViewMode = "month" | "week" | "today";
+
+const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+function dateKey(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
 export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const [viewMode, setViewMode] = useState<ViewMode>("today");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [originFilter, setOriginFilter] = useState("ALL");
+
+  // Navigation offsets — independentes por view, para preservar posição ao trocar de aba
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [monthOffset, setMonthOffset] = useState(0);
 
   // Sync state
   const [syncingCalendar, setSyncingCalendar] = useState(false);
@@ -51,10 +62,12 @@ export default function AppointmentsPage() {
 
   // Modal
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
+  const [editingAppointment, setEditingAppointment] = useState<any | null>(null);
 
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const openEditModal = (appt: any) => {
+    setEditingAppointment(appt);
+    setIsAppointmentModalOpen(true);
+  };
 
   const fetchSyncInfo = async () => {
     try {
@@ -132,33 +145,39 @@ export default function AppointmentsPage() {
   };
 
   const filtered = useMemo(() => {
-    return appointments
-      .filter((appt) => {
-        const q = search.toLowerCase();
-        const matchSearch =
-          appt.title?.toLowerCase().includes(q) ||
-          appt.client?.name?.toLowerCase().includes(q) ||
-          appt.location?.toLowerCase().includes(q);
+    return appointments.filter((appt) => {
+      const q = search.toLowerCase();
+      const matchSearch =
+        appt.title?.toLowerCase().includes(q) ||
+        appt.client?.name?.toLowerCase().includes(q) ||
+        appt.location?.toLowerCase().includes(q);
 
-        const matchStatus =
-          statusFilter === "ALL" || appt.status === statusFilter;
+      const matchStatus = statusFilter === "ALL" || appt.status === statusFilter;
 
-        const matchOrigin =
-          originFilter === "ALL" ||
-          (originFilter === "ICLOUD" && (appt.origin === "ICLOUD_SYNC" || appt.externalEventId)) ||
-          (originFilter === "INTERNAL" && appt.origin !== "ICLOUD_SYNC" && !appt.externalEventId);
+      const matchOrigin =
+        originFilter === "ALL" ||
+        (originFilter === "ICLOUD" && (appt.origin === "ICLOUD_SYNC" || appt.externalEventId)) ||
+        (originFilter === "INTERNAL" && appt.origin !== "ICLOUD_SYNC" && !appt.externalEventId);
 
-        return matchSearch && matchStatus && matchOrigin;
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      return matchSearch && matchStatus && matchOrigin;
+    });
   }, [appointments, search, statusFilter, originFilter]);
 
-  const paginatedAppointments = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, currentPage, pageSize]);
+  // Agendamentos filtrados, agrupados por data (yyyy-mm-dd) — usado pelas 3 views
+  const appointmentsByDate = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    for (const appt of filtered) {
+      const key = new Date(appt.date).toISOString().slice(0, 10);
+      if (!map[key]) map[key] = [];
+      map[key].push(appt);
+    }
+    for (const key of Object.keys(map)) {
+      map[key].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    }
+    return map;
+  }, [filtered]);
 
-  // Statistics
+  // Statistics (sobre todos os agendamentos, não só os filtrados na view atual)
   const stats = useMemo(() => {
     const total = appointments.length;
     const completed = appointments.filter((a) => a.status === "COMPLETED").length;
@@ -175,105 +194,105 @@ export default function AppointmentsPage() {
     return { total, completed, scheduled, revenue, pendingRevenue };
   }, [appointments]);
 
-  const columns: ColumnDef<any>[] = [
-    {
-      key: "date",
-      header: "Data & Horário",
-      sortable: true,
-      className: "w-44",
-      render: (appt) => (
-        <div className="space-y-0.5">
-          <span className="font-bold text-slate-900 text-xs block">
-            {new Date(appt.date).toLocaleDateString("pt-BR")}
-          </span>
-          <span className="text-slate-500 font-mono text-[11px] flex items-center gap-1">
-            <Clock className="w-3 h-3 text-slate-400" />
-            {new Date(appt.startTime).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </span>
-        </div>
-      ),
-      sortValue: (appt) => new Date(appt.date),
-    },
-    {
-      key: "client",
-      header: "Cliente & Serviço",
-      sortable: true,
-      render: (appt) => (
-        <div>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-bold text-slate-900 text-xs">{appt.client?.name}</span>
+  // --- Week view: domingo como primeiro dia da semana ---
+  const weekDays = useMemo(() => {
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 = Domingo
+    const sunday = new Date(today);
+    sunday.setDate(today.getDate() - dayOfWeek + weekOffset * 7);
+    sunday.setHours(0, 0, 0, 0);
+
+    const days: Date[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(sunday);
+      d.setDate(sunday.getDate() + i);
+      days.push(d);
+    }
+    return days;
+  }, [weekOffset]);
+
+  // --- Month view: grade completa domingo→sábado cobrindo o mês ---
+  const monthCursor = useMemo(() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + monthOffset);
+    return d;
+  }, [monthOffset]);
+
+  const monthDays = useMemo(() => {
+    const firstOfMonth = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
+    const lastOfMonth = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0);
+
+    const gridStart = new Date(firstOfMonth);
+    gridStart.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());
+
+    const gridEnd = new Date(lastOfMonth);
+    gridEnd.setDate(lastOfMonth.getDate() + (6 - lastOfMonth.getDay()));
+
+    const days: Date[] = [];
+    const cursor = new Date(gridStart);
+    while (cursor <= gridEnd) {
+      days.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return days;
+  }, [monthCursor]);
+
+  const todayKey = dateKey(new Date());
+  const todayAppointments = appointmentsByDate[todayKey] || [];
+
+  const formatTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const renderAppointmentCard = (appt: any) => (
+    <div
+      key={appt.id}
+      onClick={() => openEditModal(appt)}
+      className="p-4 rounded-2xl bg-white border border-slate-200/80 flex flex-col gap-3 shadow-xs hover:shadow-md transition-shadow cursor-pointer"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+            <span className="text-xs font-bold text-indigo-600 truncate">{appt.title}</span>
             {(appt.origin === "ICLOUD_SYNC" || appt.externalEventId) && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
                 <Smartphone className="w-2.5 h-2.5" />
                 <span>iPhone</span>
               </span>
             )}
           </div>
-          <span className="text-indigo-600 text-[11px] font-medium block truncate max-w-[220px]">
-            {appt.title}
-          </span>
-        </div>
-      ),
-      sortValue: (appt) => appt.client?.name || "",
-    },
-    {
-      key: "location",
-      header: "Localização (GPS)",
-      sortable: true,
-      render: (appt) =>
-        appt.location ? (
-          <div className="flex items-center gap-1 text-slate-700 font-mono text-[11px] max-w-[200px] truncate">
-            <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-            <span className="truncate">{appt.location}</span>
+          <h4 className="font-bold text-slate-900 text-sm truncate">{appt.client?.name}</h4>
+          <div className="flex items-center gap-1.5 text-slate-500 text-xs mt-1 font-medium">
+            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span>{formatTime(appt.startTime)}</span>
           </div>
-        ) : (
-          <span className="text-slate-400 text-[11px]">-</span>
-        ),
-      sortValue: (appt) => appt.location || "",
-    },
-    {
-      key: "price",
-      header: "Valor ($)",
-      sortable: true,
-      className: "text-right",
-      render: (appt) => (
-        <span className="font-mono font-bold text-emerald-600 text-xs block text-right">
-          ${Number(appt.price).toFixed(2)}
-        </span>
-      ),
-      sortValue: (appt) => Number(appt.price),
-    },
-    {
-      key: "status",
-      header: "Status",
-      sortable: true,
-      render: (appt) => {
-        const isDone = appt.status === "COMPLETED";
-        return (
+        </div>
+        <div className="text-right flex flex-col items-end shrink-0">
+          <span className="text-base font-black text-emerald-600 block font-mono">
+            ${Number(appt.price).toFixed(2)}
+          </span>
           <span
-            className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
-              isDone
+            className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border mt-1 ${
+              appt.status === "COMPLETED"
                 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                 : "bg-slate-100 text-slate-700 border-slate-200"
             }`}
           >
-            {isDone && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
-            <span>{isDone ? "Concluído" : "Agendado"}</span>
+            {appt.status === "COMPLETED" ? "Concluído" : "Agendado"}
           </span>
-        );
-      },
-      sortValue: (appt) => appt.status,
-    },
-    {
-      key: "actions",
-      header: "Rotas & Ação",
-      sortable: false,
-      className: "w-40 text-right",
-      render: (appt) => (
-        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+        {appt.location ? (
+          <div className="flex items-center gap-1.5 text-slate-600 text-xs truncate max-w-[160px]">
+            <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+            <span className="truncate font-mono">{appt.location}</span>
+          </div>
+        ) : (
+          <span />
+        )}
+        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
           {appt.location && (
             <ActionButton
               icon={<Navigation className="w-3.5 h-3.5" />}
@@ -282,7 +301,6 @@ export default function AppointmentsPage() {
               href={`https://maps.apple.com/?daddr=${encodeURIComponent(appt.location)}`}
             />
           )}
-
           {appt.location && (
             <ActionButton
               icon={<Navigation className="w-3.5 h-3.5 text-emerald-600" />}
@@ -291,7 +309,6 @@ export default function AppointmentsPage() {
               href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(appt.location)}`}
             />
           )}
-
           {appt.status !== "COMPLETED" && (
             <ActionButton
               icon={<CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
@@ -301,14 +318,14 @@ export default function AppointmentsPage() {
             />
           )}
         </div>
-      ),
-    },
-  ];
+      </div>
+    </div>
+  );
 
   return (
     <div className="bg-[#f8fafc] min-h-screen">
       <Header
-        title="Agendamentos & Atendimentos"
+        title="Agendamentos"
         subtitle="Atendimentos operacionais sincronizados com o iPhone e rotas GPS"
         onRefresh={fetchAppointments}
         loading={loading}
@@ -429,20 +446,14 @@ export default function AppointmentsPage() {
                 type="text"
                 placeholder="Buscar por cliente, serviço ou local..."
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setCurrentPage(1);
-                }}
+                onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 shadow-2xs"
               />
             </div>
 
             <select
               value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(e) => setStatusFilter(e.target.value)}
               className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-700 font-medium focus:outline-none shadow-2xs cursor-pointer"
             >
               <option value="ALL">Todos os status</option>
@@ -452,10 +463,7 @@ export default function AppointmentsPage() {
 
             <select
               value={originFilter}
-              onChange={(e) => {
-                setOriginFilter(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(e) => setOriginFilter(e.target.value)}
               className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-700 font-medium focus:outline-none shadow-2xs cursor-pointer"
             >
               <option value="ALL">Todas as origens</option>
@@ -465,35 +473,43 @@ export default function AppointmentsPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* View Toggle */}
+            {/* View Toggle: Mês / Semana / Hoje */}
             <div className="flex items-center p-1 bg-white rounded-xl border border-slate-200/80 shadow-2xs">
               <button
-                onClick={() => setViewMode("cards")}
+                onClick={() => setViewMode("month")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  viewMode === "cards"
-                    ? "bg-indigo-600 text-white shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
+                  viewMode === "month" ? "bg-indigo-600 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Cards</span>
+                <CalendarRange className="w-3.5 h-3.5" />
+                <span>Mês</span>
               </button>
               <button
-                onClick={() => setViewMode("table")}
+                onClick={() => setViewMode("week")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  viewMode === "table"
-                    ? "bg-indigo-600 text-white shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
+                  viewMode === "week" ? "bg-indigo-600 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <TableIcon className="w-3.5 h-3.5" />
-                <span>Tabela</span>
+                <CalendarDays className="w-3.5 h-3.5" />
+                <span>Semana</span>
+              </button>
+              <button
+                onClick={() => setViewMode("today")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  viewMode === "today" ? "bg-indigo-600 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Sun className="w-3.5 h-3.5" />
+                <span>Hoje</span>
               </button>
             </div>
 
             {/* Novo Agendamento Button */}
             <button
-              onClick={() => setIsAppointmentModalOpen(true)}
+              onClick={() => {
+                setEditingAppointment(null);
+                setIsAppointmentModalOpen(true);
+              }}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -503,144 +519,225 @@ export default function AppointmentsPage() {
         </div>
 
         {/* Content Views */}
-        {viewMode === "cards" ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {paginatedAppointments.length === 0 ? (
-              <div className="col-span-2 p-12 text-center text-xs text-slate-400 bg-white rounded-2xl border border-slate-200">
-                {loading
-                  ? "Carregando atendimentos..."
-                  : "Nenhum atendimento encontrado com os filtros selecionados."}
-              </div>
-            ) : (
-              paginatedAppointments.map((appt) => (
-                <div
-                  key={appt.id}
-                  className="p-5 rounded-2xl bg-white border border-slate-200/80 flex flex-col justify-between gap-4 shadow-xs hover:shadow-md transition-shadow"
+        {viewMode === "month" && (
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-base text-slate-900 capitalize">
+                {monthCursor.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setMonthOffset((p) => p - 1)}
+                  className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 transition-colors cursor-pointer"
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                        <span className="text-xs font-bold text-indigo-600 block">{appt.title}</span>
-                        {(appt.origin === "ICLOUD_SYNC" || appt.externalEventId) && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            <Smartphone className="w-2.5 h-2.5" />
-                            <span>iPhone</span>
-                          </span>
-                        )}
-                      </div>
-                      <h4 className="font-bold text-slate-900 text-base">{appt.client?.name}</h4>
-                      <div className="flex items-center gap-1.5 text-slate-500 text-xs mt-1 font-medium">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        <span>
-                          {new Date(appt.date).toLocaleDateString("pt-BR")} •{" "}
-                          {new Date(appt.startTime).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right flex flex-col items-end">
-                      <span className="text-lg font-black text-emerald-600 block font-mono">
-                        ${Number(appt.price).toFixed(2)}
-                      </span>
-                      <span
-                        className={`text-[10px] uppercase font-bold px-2.5 py-0.5 rounded-full border ${
-                          appt.status === "COMPLETED"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : "bg-slate-100 text-slate-700 border-slate-200"
-                        }`}
-                      >
-                        {appt.status === "COMPLETED" ? "Concluído" : "Agendado"}
-                      </span>
-                      {appt.status !== "COMPLETED" && (
-                        <button
-                          onClick={() => handleCompleteAppointment(appt.id)}
-                          className="mt-2 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold inline-flex items-center gap-1 transition-colors border border-emerald-200 cursor-pointer"
-                          title="Marcar como concluído"
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setMonthOffset(0)}
+                  className="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+                >
+                  Hoje
+                </button>
+                <button
+                  onClick={() => setMonthOffset((p) => p + 1)}
+                  className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 transition-colors cursor-pointer"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-7 gap-1.5">
+              {WEEKDAY_LABELS.map((label) => (
+                <div key={label} className="text-center text-[10px] font-bold uppercase text-slate-400 pb-1">
+                  {label}
+                </div>
+              ))}
+
+              {monthDays.map((day) => {
+                const key = dateKey(day);
+                const dayAppts = appointmentsByDate[key] || [];
+                const isCurrentMonth = day.getMonth() === monthCursor.getMonth();
+                const isToday = key === todayKey;
+
+                return (
+                  <div
+                    key={key}
+                    className={`min-h-[92px] rounded-xl p-1.5 border flex flex-col gap-1 ${
+                      isToday
+                        ? "bg-indigo-50/60 border-indigo-200 ring-1 ring-indigo-500/20"
+                        : isCurrentMonth
+                        ? "bg-white border-slate-200/70"
+                        : "bg-slate-50/50 border-slate-100"
+                    }`}
+                  >
+                    <span
+                      className={`text-[11px] font-bold ${
+                        isToday ? "text-indigo-600" : isCurrentMonth ? "text-slate-700" : "text-slate-300"
+                      }`}
+                    >
+                      {day.getDate()}
+                    </span>
+                    <div className="space-y-0.5 overflow-hidden">
+                      {dayAppts.slice(0, 3).map((appt) => (
+                        <div
+                          key={appt.id}
+                          onClick={() => openEditModal(appt)}
+                          title={`${formatTime(appt.startTime)} • ${appt.client?.name} • ${appt.title}`}
+                          className={`text-[9px] px-1 py-0.5 rounded truncate font-medium cursor-pointer hover:ring-1 hover:ring-indigo-400 ${
+                            appt.status === "COMPLETED"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-indigo-50 text-indigo-700"
+                          }`}
                         >
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>Concluir</span>
-                        </button>
+                          {formatTime(appt.startTime)} {appt.client?.name}
+                        </div>
+                      ))}
+                      {dayAppts.length > 3 && (
+                        <div className="text-[9px] text-slate-400 font-semibold px-1">
+                          +{dayAppts.length - 3} mais
+                        </div>
                       )}
                     </div>
                   </div>
-
-                  {/* GPS Buttons */}
-                  {appt.location && (
-                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-slate-600 text-xs truncate max-w-[200px]">
-                        <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                        <span className="truncate font-mono">{appt.location}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={`https://maps.apple.com/?daddr=${encodeURIComponent(appt.location)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs inline-flex items-center gap-1.5 border border-indigo-200 transition-colors"
-                        >
-                          <Navigation className="w-3.5 h-3.5" />
-                          <span>Apple Maps</span>
-                        </a>
-                        <a
-                          href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-                            appt.location
-                          )}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs inline-flex items-center gap-1.5 border border-slate-200 transition-colors"
-                        >
-                          <Navigation className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Google Maps</span>
-                        </a>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
+                );
+              })}
+            </div>
           </div>
-        ) : (
+        )}
+
+        {viewMode === "week" && (
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-base text-slate-900">
+                {weekDays[0].toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} —{" "}
+                {weekDays[6].toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setWeekOffset((p) => p - 1)}
+                  className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 transition-colors cursor-pointer"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setWeekOffset(0)}
+                  className="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+                >
+                  Hoje
+                </button>
+                <button
+                  onClick={() => setWeekOffset((p) => p + 1)}
+                  className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 transition-colors cursor-pointer"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+              {weekDays.map((day) => {
+                const key = dateKey(day);
+                const dayAppts = appointmentsByDate[key] || [];
+                const isToday = key === todayKey;
+
+                return (
+                  <div
+                    key={key}
+                    className={`rounded-2xl p-3 border min-h-[180px] ${
+                      isToday
+                        ? "bg-indigo-50/50 border-indigo-200 ring-1 ring-indigo-500/20"
+                        : "bg-white border-slate-200/80"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-2">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase text-slate-500 block">
+                          {WEEKDAY_LABELS[day.getDay()]}
+                        </span>
+                        <span className={`text-sm font-black ${isToday ? "text-indigo-600" : "text-slate-900"}`}>
+                          {day.getDate()}
+                        </span>
+                      </div>
+                      {isToday && (
+                        <span className="px-1.5 py-0.5 rounded-md bg-indigo-600 text-white text-[9px] font-bold">
+                          Hoje
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      {dayAppts.length === 0 ? (
+                        <div className="text-[10px] text-slate-400 italic text-center py-4">Sem atendimentos</div>
+                      ) : (
+                        dayAppts.map((appt) => (
+                          <div
+                            key={appt.id}
+                            className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+                            onClick={() => openEditModal(appt)}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-[11px] text-slate-900 truncate max-w-[90px]">
+                                {appt.client?.name}
+                              </span>
+                              <span className="font-mono text-[10px] font-bold text-emerald-600">
+                                ${Number(appt.price).toFixed(0)}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-indigo-600 font-medium truncate mt-0.5">
+                              {appt.title}
+                            </div>
+                            <div className="text-[9px] text-slate-500 font-mono mt-0.5">
+                              {formatTime(appt.startTime)}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {viewMode === "today" && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
+            className="space-y-4"
           >
-            <DataTable
-              columns={columns}
-              data={filtered}
-              currentPage={currentPage}
-              pageSize={pageSize}
-              defaultSortKey="date"
-              defaultSortDir="desc"
-              keyExtractor={(item) => item.id}
-              emptyMessage={
-                loading
-                  ? "Carregando atendimentos..."
-                  : "Nenhum atendimento encontrado com os filtros selecionados."
-              }
-            />
-          </motion.div>
-        )}
+            <h3 className="font-bold text-base text-slate-900">
+              Hoje •{" "}
+              {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}
+            </h3>
 
-        {/* Reusable Pagination */}
-        {filtered.length > 0 && (
-          <Pagination
-            totalItems={filtered.length}
-            currentPage={currentPage}
-            pageSize={pageSize}
-            onPageChange={(page) => setCurrentPage(page)}
-            onPageSizeChange={(size) => setPageSize(size)}
-            pageSizeOptions={[10, 20, 30, 50, 100]}
-          />
+            {loading ? (
+              <div className="p-12 text-center text-xs text-slate-400 bg-white rounded-2xl border border-slate-200">
+                Carregando atendimentos...
+              </div>
+            ) : todayAppointments.length === 0 ? (
+              <div className="p-12 text-center text-xs text-slate-400 bg-white rounded-2xl border border-slate-200">
+                Nenhum atendimento para hoje com os filtros selecionados.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {todayAppointments.map(renderAppointmentCard)}
+              </div>
+            )}
+          </motion.div>
         )}
       </div>
 
       {/* Appointment Modal */}
       <AppointmentModal
         isOpen={isAppointmentModalOpen}
-        onClose={() => setIsAppointmentModalOpen(false)}
+        appointment={editingAppointment}
+        onClose={() => {
+          setIsAppointmentModalOpen(false);
+          setEditingAppointment(null);
+        }}
         onSuccess={() => {
           fetchAppointments();
         }}

@@ -19,6 +19,7 @@ import {
   Clock,
   Navigation,
 } from "lucide-react";
+import { DynamicRevenueChart } from "@/components/dashboard/dynamic-revenue-chart";
 
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
@@ -57,7 +58,7 @@ export default function DashboardPage() {
   const financial = data?.metrics?.financial;
 
   return (
-    <div>
+    <div className="bg-[#f8fafc] min-h-screen">
       <Header
         title="Visão Geral & Métricas"
         subtitle="Acompanhamento diário da meta de faturamento e agenda"
@@ -178,6 +179,9 @@ export default function DashboardPage() {
             </motion.div>
           ))}
         </div>
+
+        {/* Gráfico Dinâmico Comparativo de Semanas & Meses */}
+        <DynamicRevenueChart />
 
         {/* Duas Colunas: Próximos Atendimentos & Faturas Recentes */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

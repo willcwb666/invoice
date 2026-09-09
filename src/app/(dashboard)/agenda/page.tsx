@@ -1,18 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import Link from "next/link";
 import { Header } from "@/components/dashboard/header";
 import {
   Calendar as CalendarIcon,
   Clock,
   Save,
   CheckCircle2,
-  Smartphone,
-  Copy,
   Check,
   Plus,
-  CalendarCheck,
   ChevronLeft,
   ChevronRight,
   MapPin,
@@ -128,12 +124,8 @@ export default function AgendaPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [copiedFeed, setCopiedFeed] = useState(false);
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
-  // Webcal token comes only from the authenticated /api/v1/agenda/sync
-  // response — never hardcoded, since it doubles as an unauthenticated
-  // bypass secret for the outbound calendar feed.
-  const [webcalToken, setWebcalToken] = useState<string | null>(null);
+  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
 
   // Selected week offset for the live calendar view (0 = current week)
   const [weekOffset, setWeekOffset] = useState(0);
@@ -167,10 +159,6 @@ export default function AgendaPage() {
 
   useEffect(() => {
     fetchAppointments();
-    fetch("/api/v1/agenda/sync")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => data && setWebcalToken(data.webcalToken || null))
-      .catch(() => {});
   }, []);
 
   const handleSaveSchedule = () => {
@@ -196,20 +184,18 @@ export default function AgendaPage() {
     );
   };
 
-  // Calculate current week dates
+  // Calculate current week dates (domingo é o primeiro dia da semana)
   const weekDays = useMemo(() => {
     const today = new Date();
-    // Monday of current week
-    const dayOfWeek = today.getDay(); // 0 = Sunday
-    const distanceToMonday = (dayOfWeek + 6) % 7;
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - distanceToMonday + weekOffset * 7);
-    monday.setHours(0, 0, 0, 0);
+    const dayOfWeek = today.getDay(); // 0 = Domingo
+    const sunday = new Date(today);
+    sunday.setDate(today.getDate() - dayOfWeek + weekOffset * 7);
+    sunday.setHours(0, 0, 0, 0);
 
     const days = [];
     for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
+      const d = new Date(sunday);
+      d.setDate(sunday.getDate() + i);
       days.push(d);
     }
     return days;
@@ -235,19 +221,11 @@ export default function AgendaPage() {
     return schedule.filter((d) => d.isOpen).length;
   }, [schedule]);
 
-  const copyFeedUrl = () => {
-    if (!webcalToken || typeof window === "undefined") return;
-    const webcalUrl = `${window.location.origin.replace(/^https?:/, "webcal:")}/api/v1/agenda/feed.ics?token=${webcalToken}`;
-    navigator.clipboard.writeText(webcalUrl);
-    setCopiedFeed(true);
-    setTimeout(() => setCopiedFeed(false), 3000);
-  };
-
   return (
     <div className="bg-[#f8fafc] min-h-screen">
       <Header
-        title="Agenda Semanal & Horários de Funcionamento"
-        subtitle="Configuração de dias de atendimento, horários de funcionamento e capacidade de serviços"
+        title="Agenda"
+        subtitle="Horários de funcionamento, capacidade de serviços e visão semanal dos atendimentos"
         onRefresh={fetchAppointments}
         loading={loading}
         actionSlot={
@@ -330,51 +308,6 @@ export default function AgendaPage() {
             </div>
             <p className="text-xl font-black text-slate-900 mt-2">Greeley & Evans</p>
             <p className="text-[11px] text-slate-500 mt-1">Condado de Weld, Colorado</p>
-          </div>
-        </div>
-
-        {/* iCloud iPhone Synchronization Card */}
-        <div className="p-5 rounded-2xl bg-gradient-to-r from-indigo-900 to-slate-900 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-5">
-          <div className="flex items-start gap-4">
-            <div className="p-3.5 rounded-2xl bg-white/10 text-indigo-300 backdrop-blur-sm shrink-0 border border-white/10">
-              <Smartphone className="w-6 h-6" />
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-sm text-white">Sincronização com iPhone da Renata</h3>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
-                  Ao Vivo
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-                A agenda semanal sincroniza automaticamente com o aplicativo <strong>Calendário nativo do iPhone</strong>.
-                Qualquer evento adicionado com horários de início e término aparece instantaneamente na grade operacional.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={copyFeedUrl}
-              disabled={!webcalToken}
-              className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-2 transition-all border border-white/15 cursor-pointer backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              title={webcalToken ? "Copiar URL do feed iCal" : "Configure WEBCAL_SECRET no servidor para habilitar"}
-            >
-              {copiedFeed ? (
-                <Check className="w-4 h-4 text-emerald-400" />
-              ) : (
-                <Copy className="w-4 h-4" />
-              )}
-              <span>{copiedFeed ? "Link Copiado!" : "Copiar Feed do iPhone"}</span>
-            </button>
-
-            <Link
-              href="/appointments"
-              className="px-3.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 transition-colors shadow-md shadow-indigo-600/30"
-            >
-              <CalendarCheck className="w-4 h-4" />
-              <span>Ver Atendimentos</span>
-            </Link>
           </div>
         </div>
 
@@ -509,7 +442,6 @@ export default function AgendaPage() {
             <div>
               <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
                 <CalendarIcon className="w-5 h-5 text-indigo-600" />
-                <span>Visão Semanal Integrada da Agenda</span>
               </h3>
               <p className="text-xs text-slate-500">
                 Atendimentos da semana sincronizados entre a base de clientes e o iPhone.
@@ -542,7 +474,10 @@ export default function AgendaPage() {
               </button>
 
               <button
-                onClick={() => setIsAppointmentModalOpen(true)}
+                onClick={() => {
+                  setEditingAppointment(null);
+                  setIsAppointmentModalOpen(true);
+                }}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs cursor-pointer ml-2"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -617,7 +552,11 @@ export default function AgendaPage() {
                         dayAppts.map((appt) => (
                           <div
                             key={appt.id}
-                            className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-left transition-colors"
+                            onClick={() => {
+                              setEditingAppointment(appt);
+                              setIsAppointmentModalOpen(true);
+                            }}
+                            className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-left transition-colors cursor-pointer"
                           >
                             <div className="flex items-center justify-between">
                               <span className="font-bold text-[11px] text-slate-900 truncate max-w-[90px]">
@@ -665,7 +604,11 @@ export default function AgendaPage() {
       {/* Appointment Modal */}
       <AppointmentModal
         isOpen={isAppointmentModalOpen}
-        onClose={() => setIsAppointmentModalOpen(false)}
+        appointment={editingAppointment}
+        onClose={() => {
+          setIsAppointmentModalOpen(false);
+          setEditingAppointment(null);
+        }}
         onSuccess={() => {
           fetchAppointments();
         }}

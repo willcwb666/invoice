@@ -9,12 +9,10 @@ import {
   ShieldCheck,
   Eye,
   EyeOff,
-  AlertCircle,
   Sparkles,
-  CheckCircle2,
-  Clock,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useToast } from "@/components/ui/toast";
 
 function GoogleIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
@@ -43,6 +41,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const from = searchParams.get("from") || "/";
+  const { showToast } = useToast();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -50,8 +49,6 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   // Catch errors or info forwarded via searchParams (e.g. from OAuth callback)
@@ -59,17 +56,16 @@ function LoginForm() {
     const errParam = searchParams.get("error");
     const infoParam = searchParams.get("info");
     if (errParam) {
-      setError(decodeURIComponent(errParam));
+      showToast(decodeURIComponent(errParam), "error");
     }
     if (infoParam) {
-      setInfo(decodeURIComponent(infoParam));
+      showToast(decodeURIComponent(infoParam), "info");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
-    setError(null);
-    setInfo(null);
     try {
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
@@ -84,11 +80,14 @@ function LoginForm() {
       });
 
       if (oauthError) {
-        setError(oauthError.message || "Erro ao conectar ao Google.");
+        showToast(oauthError.message || "Erro ao conectar ao Google.", "error");
         setGoogleLoading(false);
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Não foi possível iniciar autenticação com o Google.");
+      showToast(
+        err instanceof Error ? err.message : "Não foi possível iniciar autenticação com o Google.",
+        "error"
+      );
       setGoogleLoading(false);
     }
   };
@@ -96,12 +95,11 @@ function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
-      setError("Por favor, preencha seu e-mail e sua senha.");
+      showToast("Por favor, preencha seu e-mail e sua senha.", "error");
       return;
     }
 
     setLoading(true);
-    setError(null);
 
     try {
       const res = await fetch("/api/v1/auth/login", {
@@ -117,12 +115,13 @@ function LoginForm() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        setError(data.error || "Falha na autenticação. Verifique suas credenciais.");
+        showToast(data.error || "Falha na autenticação. Verifique suas credenciais.", "error");
         setLoading(false);
         return;
       }
 
       setSuccess(true);
+      showToast("Autenticado com sucesso! Redirecionando...", "success");
 
       // Brief delay for visual confirmation before redirect
       setTimeout(() => {
@@ -131,7 +130,7 @@ function LoginForm() {
         router.refresh();
       }, 500);
     } catch {
-      setError("Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.");
+      showToast("Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.", "error");
       setLoading(false);
     }
   };
@@ -150,30 +149,6 @@ function LoginForm() {
           Painel de Gestão & Faturamento • Acesso Restrito
         </p>
       </div>
-
-      {/* Error Alert */}
-      {error && (
-        <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200/80 text-rose-800 text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-          <div className="flex-1 font-medium">{error}</div>
-        </div>
-      )}
-
-      {/* Info Alert (e.g. Pending Approval) */}
-      {info && (
-        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-900 text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
-          <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div className="flex-1 font-medium">{info}</div>
-        </div>
-      )}
-
-      {/* Success Alert */}
-      {success && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-xs flex items-center gap-2.5 animate-in fade-in duration-200">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <div className="font-semibold">Autenticado com sucesso! Redirecionando...</div>
-        </div>
-      )}
 
       {/* Google OAuth Button */}
       <div className="space-y-3">

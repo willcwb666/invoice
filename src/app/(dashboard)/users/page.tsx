@@ -33,6 +33,7 @@ import {
   RolePermissionsMatrix,
 } from "@/lib/security/rbac";
 import { motion, AnimatePresence } from "framer-motion";
+import { useToast } from "@/components/ui/toast";
 
 interface UserItem {
   id: string;
@@ -49,6 +50,7 @@ interface UserItem {
 const DEFAULT_ADMIN_EMAIL = "renatamatoz@gmail.com";
 
 export default function UsersPage() {
+  const { showToast, confirmDelete } = useToast();
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"users" | "matrix">("users");
@@ -144,7 +146,7 @@ export default function UsersPage() {
         fetchUsers();
       } else {
         const data = await res.json();
-        alert(data.error || "Erro ao aprovar usuário.");
+        showToast(data.error || "Erro ao aprovar usuário.", "error");
       }
     } catch (e) {
       console.error("Erro ao aprovar:", e);
@@ -154,7 +156,7 @@ export default function UsersPage() {
   // Suspend or Reactivate Toggle
   const handleToggleStatus = async (user: UserItem) => {
     if (user.email.toLowerCase() === DEFAULT_ADMIN_EMAIL.toLowerCase()) {
-      alert("A conta administradora principal não pode ser alterada.");
+      showToast("A conta administradora principal não pode ser alterada.", "error");
       return;
     }
 
@@ -170,7 +172,7 @@ export default function UsersPage() {
         fetchUsers();
       } else {
         const data = await res.json();
-        alert(data.error || "Erro ao alterar status.");
+        showToast(data.error || "Erro ao alterar status.", "error");
       }
     } catch (e) {
       console.error("Erro:", e);
@@ -178,30 +180,30 @@ export default function UsersPage() {
   };
 
   // Delete User Handler
-  const handleDeleteUser = async (user: UserItem) => {
+  const handleDeleteUser = (user: UserItem) => {
     if (user.email.toLowerCase() === DEFAULT_ADMIN_EMAIL.toLowerCase()) {
-      alert("A administradora mestre Renata Matos não pode ser excluída.");
+      showToast("A administradora mestre Renata Matos não pode ser excluída.", "error");
       return;
     }
 
-    if (!confirm(`Deseja realmente remover o acesso de ${user.name || user.email}?`)) {
-      return;
-    }
+    confirmDelete(`Removendo acesso de ${user.name || user.email}...`, async () => {
+      try {
+        const res = await fetch(`/api/v1/users/${user.id}`, {
+          method: "DELETE",
+        });
 
-    try {
-      const res = await fetch(`/api/v1/users/${user.id}`, {
-        method: "DELETE",
-      });
-
-      if (res.ok) {
-        fetchUsers();
-      } else {
-        const data = await res.json();
-        alert(data.error || "Erro ao excluir usuário.");
+        if (res.ok) {
+          showToast("Acesso removido com sucesso.", "success");
+          fetchUsers();
+        } else {
+          const data = await res.json();
+          showToast(data.error || "Erro ao excluir usuário.", "error");
+        }
+      } catch (e) {
+        console.error("Erro ao excluir usuário:", e);
+        showToast("Erro ao excluir usuário.", "error");
       }
-    } catch (e) {
-      console.error("Erro ao excluir usuário:", e);
-    }
+    });
   };
 
   // Create User Submit
@@ -298,7 +300,7 @@ export default function UsersPage() {
         setTimeout(() => setMatrixSuccess(false), 3000);
       } else {
         const data = await res.json();
-        alert(data.error || "Erro ao atualizar permissões.");
+        showToast(data.error || "Erro ao atualizar permissões.", "error");
       }
     } catch (e) {
       console.error("Erro ao salvar matriz:", e);

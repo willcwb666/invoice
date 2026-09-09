@@ -15,23 +15,35 @@ import {
   Printer,
   Copy,
 } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
 
 export default function EstimateDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const estimateId = resolvedParams.id;
   const router = useRouter();
+  const { showToast, confirmAction } = useToast();
 
   const [estimate, setEstimate] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [converting, setConverting] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch("/api/v1/estimates");
+        const res = await fetch(`/api/v1/estimates/${estimateId}`);
         if (res.ok) {
           const json = await res.json();
+          if (json.data) {
+            setEstimate(json.data);
+            return;
+          }
+        }
+        // Fallback
+        const listRes = await fetch("/api/v1/estimates");
+        if (listRes.ok) {
+          const json = await listRes.json();
           const found = json.data?.find((est: any) => est.id === estimateId);
           setEstimate(found);
         }
@@ -44,36 +56,63 @@ export default function EstimateDetailPage({ params }: { params: Promise<{ id: s
     load();
   }, [estimateId]);
 
-  const handleConvertToInvoice = async () => {
-    if (!confirm("Deseja converter este orçamento diretamente em Fatura oficial?")) return;
-    setConverting(true);
-    try {
-      const res = await fetch("/api/v1/invoices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: estimate.clientId,
-          invoiceNumber: `INV-${Date.now().toString().slice(-4)}`,
-          dueDate: new Date(Date.now() + 7 * 86400000).toISOString(),
-          status: "PENDING",
-          notes: `Convertido do orçamento ${estimate.estimateNumber}`,
-          items: estimate.items?.map((it: any) => ({
-            description: it.description,
-            quantity: Number(it.quantity),
-            unitPrice: Number(it.unitPrice),
-          })),
-        }),
-      });
+  // Auto trigger print if ?print=true
+  useEffect(() => {
+    if (typeof window !== "undefined" && !loading && estimate) {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get("print") === "true") {
+        setTimeout(() => window.print(), 600);
+      }
+    }
+  }, [loading, estimate]);
 
-      const json = await res.json();
-      if (res.ok && json.data?.id) {
-        router.push(`/invoices/${json.data.id}`);
+  const handleStatusChange = async (newStatus: string) => {
+    setUpdatingStatus(true);
+    try {
+      const res = await fetch(`/api/v1/estimates/${estimateId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setEstimate(json.data);
       }
     } catch (e) {
       console.error(e);
     } finally {
-      setConverting(false);
+      setUpdatingStatus(false);
     }
+  };
+
+  const handleConvertToInvoice = () => {
+    confirmAction("Convertendo orçamento em Fatura oficial...", async () => {
+      setConverting(true);
+      try {
+        const res = await fetch(`/api/v1/estimates/${estimateId}/convert`, {
+          method: "POST",
+        });
+
+        const json = await res.json();
+        if (res.ok && json.data?.id) {
+          router.push(`/invoices/${json.data.id}`);
+        } else {
+          showToast(json.error || "Erro ao converter orçamento.", "error");
+        }
+      } catch (e) {
+        console.error(e);
+        showToast("Erro ao converter orçamento.", "error");
+      } finally {
+        setConverting(false);
+      }
+    });
+  };
+
+  const handleCopyLink = () => {
+    if (typeof window === "undefined") return;
+    navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (loading) {
@@ -100,7 +139,7 @@ export default function EstimateDetailPage({ params }: { params: Promise<{ id: s
   }
 
   return (
-    <div>
+    <div className="bg-[#f8fafc] min-h-screen">
       <Header
         title={`Orçamento ${estimate.estimateNumber}`}
         subtitle={`Cliente: ${estimate.client?.name}`}
@@ -116,16 +155,63 @@ export default function EstimateDetailPage({ params }: { params: Promise<{ id: s
             <span>Voltar para Lista de Orçamentos</span>
           </Link>
 
-          {/* Botão de Ação: Converter em Invoice */}
-          <div className="flex items-center gap-2">
+          {/* Botões de Ação */}
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
+            {/* Status change actions */}
+            {estimate.status !== "ACCEPTED" && estimate.status !== "CONVERTED" && (
+              <button
+                onClick={() => handleStatusChange("ACCEPTED")}
+                disabled={updatingStatus}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold border border-emerald-200 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Marcar Aceito</span>
+              </button>
+            )}
+
+            {/* Print button */}
             <button
-              onClick={handleConvertToInvoice}
-              disabled={converting}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-600/30 transition-all disabled:opacity-50"
+              onClick={() => window.print()}
+              className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition-colors cursor-pointer"
+              title="Imprimir / Salvar PDF"
             >
-              <FileText className="w-4 h-4" />
-              <span>{converting ? "Convertendo..." : "Converter em Invoice Oficial"}</span>
+              <Printer className="w-4 h-4" />
             </button>
+
+            {/* Copy Link */}
+            <button
+              onClick={handleCopyLink}
+              className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition-colors cursor-pointer"
+              title={copied ? "Link Copiado!" : "Copiar Link"}
+            >
+              {copied ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
+            </button>
+
+            {/* Botão de Ação: Converter em Invoice */}
+            {estimate.status !== "CONVERTED" && (
+              <button
+                onClick={handleConvertToInvoice}
+                disabled={converting}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                <FileText className="w-4 h-4" />
+                <span>{converting ? "Convertendo..." : "Converter em Invoice Oficial"}</span>
+              </button>
+            )}
+
+            {estimate.status === "CONVERTED" && estimate.convertedInvoiceId && (
+              <Link
+                href={`/invoices/${estimate.convertedInvoiceId}`}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold border border-purple-200 transition-colors cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Ver Fatura Gerada</span>
+              </Link>
+            )}
           </div>
         </div>
 

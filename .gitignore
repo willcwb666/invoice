@@ -39,6 +39,9 @@ exemple/
 # vercel
 .vercel
 
+# private runtime data (iCloud sync status, secrets — never public/)
+/.data/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

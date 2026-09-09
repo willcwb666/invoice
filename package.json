@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node -e \"const fs = require('fs'); if (fs.existsSync('src/middleware.ts')) fs.unlinkSync('src/middleware.ts');\" && next build",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate"

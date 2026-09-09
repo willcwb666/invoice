@@ -37,6 +37,11 @@ enum AppointmentOrigin {
   PUBLIC_BOOKING
 }
 
+enum ServiceType {
+  STANDARD
+  EXTRA
+}
+
 enum EstimateStatus {
   DRAFT
   SENT
@@ -84,6 +89,9 @@ model CompanyProfile {
   logoUrl            String?
   bookingSlug        String?          @unique
   icloudCalendarUrl  String?
+  // Quantos dias a partir de hoje o sync do iCloud deve olhar pra frente.
+  // Dias passados nunca são reprocessados (a agenda não é mexida de hoje pra trás).
+  icloudSyncWindowDays Int            @default(60)
   // Admin-editable override of DEFAULT_ROLE_PERMISSIONS (see lib/security/rbac.ts).
   // Null means "use the defaults". Stored here (a singleton row) rather than
   // in an in-memory variable, which does not survive a server restart/redeploy
@@ -168,17 +176,18 @@ model Client {
 }
 
 model Service {
-  id                     String         @id @default(uuid())
+  id                     String               @id @default(uuid())
   companyId              String
-  company                CompanyProfile @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name                   String         // "Office - Standard cleaning", etc.
+  company                CompanyProfile       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name                   String               // "Office - Standard cleaning", etc.
   description            String?
-  basePrice              Decimal        @db.Decimal(10, 2)
-  defaultDurationMinutes Int            @default(120)
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
+  type                   ServiceType          @default(STANDARD)
+  basePrice              Decimal              @db.Decimal(10, 2)
+  defaultDurationMinutes Int                  @default(120)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
 
-  appointments           Appointment[]
+  appointmentServices    AppointmentService[]
   estimateItems          EstimateItem[]
 
   @@index([companyId])
@@ -186,34 +195,57 @@ model Service {
 }
 
 model Appointment {
-  id              String            @id @default(uuid())
+  id              String               @id @default(uuid())
   companyId       String
-  company         CompanyProfile    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company         CompanyProfile       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   clientId        String
-  client          Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  serviceId       String?
-  service         Service?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  client          Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
   title           String
-  date            DateTime          // Data do atendimento
+  date            DateTime             // Data do atendimento
   startTime       DateTime
   endTime         DateTime
-  location        String?           // Endereço do trabalho
-  price           Decimal           @db.Decimal(10, 2)
-  status          AppointmentStatus @default(SCHEDULED)
-  origin          AppointmentOrigin @default(INTERNAL)
-  externalEventId String?           // ID do evento no iCloud Calendar
-  invoiced        Boolean           @default(false)
+  location        String?              // Endereço do trabalho
+  price           Decimal              @db.Decimal(10, 2)
+  status          AppointmentStatus    @default(SCHEDULED)
+  origin          AppointmentOrigin    @default(INTERNAL)
+  externalEventId String?              // ID do evento no iCloud Calendar
+  // Uma vez editado manualmente na aplicação, o próximo sync do iCloud não
+  // pode mais sobrescrever os dados (senão a edição do usuário se perderia
+  // no próximo carregamento de página, que já dispara sync automaticamente).
+  manuallyEdited  Boolean              @default(false)
+  invoiced        Boolean              @default(false)
   invoiceId       String?
-  invoice         Invoice?          @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoice         Invoice?             @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   notes           String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  services        AppointmentService[]
 
   @@index([companyId])
   @@index([clientId])
   @@index([date])
   @@index([status])
   @@map("appointments")
+}
+
+// Serviços selecionados num agendamento (many-to-many): permite somar o preço
+// de múltiplos serviços (ex: Standard Cleaning + Fridge Cleaning) num só
+// atendimento. `price` grava o basePrice do Service no momento do agendamento,
+// para não alterar retroativamente o histórico se o preço do serviço mudar depois.
+model AppointmentService {
+  id            String      @id @default(uuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  serviceId     String
+  service       Service     @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  price         Decimal     @db.Decimal(10, 2)
+  createdAt     DateTime    @default(now())
+
+  @@unique([appointmentId, serviceId])
+  @@index([appointmentId])
+  @@index([serviceId])
+  @@map("appointment_services")
 }
 
 model Estimate {

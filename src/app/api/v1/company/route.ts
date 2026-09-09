@@ -65,6 +65,9 @@ export async function PATCH(req: NextRequest) {
         ...(body.icloudCalendarUrl !== undefined && {
           icloudCalendarUrl: body.icloudCalendarUrl,
         }),
+        ...(body.icloudSyncWindowDays !== undefined && {
+          icloudSyncWindowDays: Math.max(1, Math.min(365, Number(body.icloudSyncWindowDays) || 60)),
+        }),
       },
       include: {
         addresses: {

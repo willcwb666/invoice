@@ -44,6 +44,7 @@ export default function SettingsPage() {
     signatureUrl: "/signatures/renata-signature.svg",
     logoUrl: "",
     icloudCalendarUrl: "",
+    icloudSyncWindowDays: 60,
   });
 
   const [addresses, setAddresses] = useState<any[]>([]);
@@ -122,6 +123,7 @@ export default function SettingsPage() {
             signatureUrl: comp.signatureUrl || "/signatures/renata-signature.svg",
             logoUrl: comp.logoUrl || "",
             icloudCalendarUrl: comp.icloudCalendarUrl || "",
+            icloudSyncWindowDays: Number(comp.icloudSyncWindowDays) || 60,
           };
           setFormData(loaded);
           setInitialData(loaded);
@@ -152,7 +154,8 @@ export default function SettingsPage() {
       formData.terms !== initialData.terms ||
       formData.signatureUrl !== initialData.signatureUrl ||
       formData.logoUrl !== initialData.logoUrl ||
-      formData.icloudCalendarUrl !== initialData.icloudCalendarUrl
+      formData.icloudCalendarUrl !== initialData.icloudCalendarUrl ||
+      Number(formData.icloudSyncWindowDays) !== Number(initialData.icloudSyncWindowDays)
     );
   }, [formData, initialData]);
 
@@ -819,6 +822,32 @@ export default function SettingsPage() {
                       </span>
                     )}
                   </div>
+                </div>
+
+                <div className="pt-1">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Janela de Sincronização (dias a partir de hoje)
+                  </label>
+                  <div className="flex items-center gap-2 max-w-xs">
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      step={1}
+                      value={formData.icloudSyncWindowDays}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          icloudSyncWindowDays: Number(e.target.value) || 60,
+                        })
+                      }
+                      className="w-24 px-3 py-2 rounded-xl bg-white border border-emerald-300 text-slate-900 font-mono text-xs focus:outline-none focus:border-emerald-500 shadow-2xs"
+                    />
+                    <span className="text-xs text-slate-500">dias (padrão: 60, ~2 meses)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1.5">
+                    A agenda nunca é editada em dias já passados, então o sync só olha de hoje até essa quantidade de dias à frente — deixa cada sincronização bem mais rápida.
+                  </p>
                 </div>
 
                 <div className="text-[11px] text-slate-500 bg-white/80 p-3 rounded-xl border border-emerald-100/90 space-y-1">

@@ -2,18 +2,27 @@ import { prisma } from "@/lib/prisma";
 import { CreateInvoiceInput } from "@/lib/validations/invoice";
 import { CompanyService } from "@/services/company-service";
 import { Prisma } from "@prisma/client";
+import { ensureExampleInvoicesSeeded } from "@/lib/seed-data";
 
 export class InvoiceService {
   /**
-   * Lista faturas da empresa com ordenação e filtros
+   * Lista faturas da empresa com ordenação e filtros (Padrão: ordenado pelo número da fatura)
    */
-  static async listInvoices(companyId: string, status?: string) {
+  static async listInvoices(
+    companyId: string,
+    status?: string,
+    orderBy: "invoiceNumber" | "issueDate" | "dueDate" | "totalAmount" | "createdAt" = "invoiceNumber",
+    orderDir: "asc" | "desc" = "desc"
+  ) {
+    // Sincroniza faturas de exemplo caso ainda não existam no banco
+    await ensureExampleInvoicesSeeded();
+
     return prisma.invoice.findMany({
       where: {
         companyId,
         ...(status ? { status: status as any } : {}),
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { [orderBy]: orderDir },
       include: {
         client: {
           select: {

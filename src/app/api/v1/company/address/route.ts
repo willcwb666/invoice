@@ -1,42 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/security/permissions";
+import { getTargetCompanyId } from "@/lib/company-context";
+import { createCompanyAddressSchema, updateCompanyAddressSchema } from "@/lib/validations/company";
 
 export async function POST(req: NextRequest) {
   const check = await requirePermission(req, "settings", "create");
   if (check.response) return check.response;
+  const { session } = check;
 
   try {
     const body = await req.json();
-    const company = await prisma.companyProfile.findFirst();
-
-    if (!company) {
+    const parsed = createCompanyAddressSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Perfil da empresa não encontrado." },
-        { status: 404 }
-      );
-    }
-
-    const { label, street, city, state = "CO", zipCode, isDefault = false } = body;
-
-    if (!street || !city || !zipCode) {
-      return NextResponse.json(
-        { error: "Rua, cidade e CEP são obrigatórios." },
+        { error: "Dados inválidos.", details: parsed.error.flatten().fieldErrors },
         { status: 400 }
       );
     }
+    const { label, street, city, state, zipCode, isDefault } = parsed.data;
+
+    const companyId = await getTargetCompanyId(session.companyId);
 
     // If marked as default, unset other defaults
     if (isDefault) {
       await prisma.companyAddress.updateMany({
-        where: { companyId: company.id },
+        where: { companyId },
         data: { isDefault: false },
       });
     }
 
     const newAddress = await prisma.companyAddress.create({
       data: {
-        companyId: company.id,
+        companyId,
         label: label || `${city} (Novo)`,
         street,
         city,
@@ -62,23 +58,29 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const check = await requirePermission(req, "settings", "update");
   if (check.response) return check.response;
+  const { session } = check;
 
   try {
     const body = await req.json();
-    const { addressId, isDefault } = body;
-
-    if (!addressId) {
+    const parsed = updateCompanyAddressSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "ID do endereço é obrigatório." },
+        { error: "Dados inválidos.", details: parsed.error.flatten().fieldErrors },
         { status: 400 }
       );
     }
+    const { addressId, isDefault } = parsed.data;
 
+    const companyId = await getTargetCompanyId(session.companyId);
     const target = await prisma.companyAddress.findUnique({
       where: { id: addressId },
     });
 
-    if (!target) {
+    // Checking companyId here (not just that the row exists) is what keeps
+    // this IDOR-safe: without it, any authenticated caller could pass any
+    // address id and have it resolved against whatever company that row
+    // actually belongs to, sidestepping the caller's own company scope.
+    if (!target || target.companyId !== companyId) {
       return NextResponse.json(
         { error: "Endereço não encontrado." },
         { status: 404 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ensureExampleInvoicesSeeded } from "@/lib/seed-data";
 import { requirePermission } from "@/lib/security/permissions";
+import { updateCompanySchema } from "@/lib/validations/company";
 
 export async function GET(req: NextRequest) {
   const check = await requirePermission(req, "settings", "read");
@@ -33,6 +34,15 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
+    const parsed = updateCompanySchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Dados inválidos.", details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+    const data = parsed.data;
+
     let company = await prisma.companyProfile.findFirst();
 
     if (!company) {
@@ -50,23 +60,23 @@ export async function PATCH(req: NextRequest) {
     const updated = await prisma.companyProfile.update({
       where: { id: company.id },
       data: {
-        ...(body.name !== undefined && { name: body.name }),
-        ...(body.email !== undefined && { email: body.email }),
-        ...(body.phone !== undefined && { phone: body.phone }),
-        ...(body.monthlyRevenueGoal !== undefined && {
-          monthlyRevenueGoal: Number(body.monthlyRevenueGoal),
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.email !== undefined && { email: data.email }),
+        ...(data.phone !== undefined && { phone: data.phone }),
+        ...(data.monthlyRevenueGoal !== undefined && {
+          monthlyRevenueGoal: data.monthlyRevenueGoal,
         }),
-        ...(body.paymentMethods !== undefined && {
-          paymentMethods: body.paymentMethods,
+        ...(data.paymentMethods !== undefined && {
+          paymentMethods: data.paymentMethods,
         }),
-        ...(body.terms !== undefined && { terms: body.terms }),
-        ...(body.signatureUrl !== undefined && { signatureUrl: body.signatureUrl }),
-        ...(body.logoUrl !== undefined && { logoUrl: body.logoUrl }),
-        ...(body.icloudCalendarUrl !== undefined && {
-          icloudCalendarUrl: body.icloudCalendarUrl,
+        ...(data.terms !== undefined && { terms: data.terms }),
+        ...(data.signatureUrl !== undefined && { signatureUrl: data.signatureUrl }),
+        ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
+        ...(data.icloudCalendarUrl !== undefined && {
+          icloudCalendarUrl: data.icloudCalendarUrl,
         }),
-        ...(body.icloudSyncWindowDays !== undefined && {
-          icloudSyncWindowDays: Math.max(1, Math.min(365, Number(body.icloudSyncWindowDays) || 60)),
+        ...(data.icloudSyncWindowDays !== undefined && {
+          icloudSyncWindowDays: data.icloudSyncWindowDays,
         }),
       },
       include: {

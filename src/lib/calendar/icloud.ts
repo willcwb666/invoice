@@ -7,6 +7,59 @@ import { Prisma } from "@prisma/client";
 // repo or build artifact).
 export const DEFAULT_ICLOUD_URL = process.env.ICLOUD_CALENDAR_URL || "";
 
+// O negócio opera só em Evans/Greeley, Colorado - eventos "floating" do ICS
+// (sem Z e sem TZID, o formato mais comum vindo do Calendário do iPhone) são
+// sempre a hora de parede desse fuso, nunca a hora local do processo Node
+// que roda o sync (que na Vercel é UTC, e pode ser qualquer coisa em dev).
+const BUSINESS_TIMEZONE = "America/Denver";
+
+/**
+ * Converte um horário de parede (ano/mês/dia/hora/min/seg) interpretado no
+ * fuso `timeZone` para o instante UTC correspondente - já considerando
+ * horário de verão. Mesmo truque usado por bibliotecas como date-fns-tz:
+ * assume os números como UTC, vê que hora isso aparenta no fuso alvo, e
+ * corrige pela diferença (uma passada é suficiente, exceto no exato instante
+ * de troca de DST, um caso raro e sem consequência aqui).
+ */
+function zonedTimeToUtc(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+  timeZone: string
+): Date {
+  const utcGuess = Date.UTC(year, month, day, hour, minute, second);
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(new Date(utcGuess));
+
+  const map: Record<string, string> = {};
+  for (const part of parts) {
+    if (part.type !== "literal") map[part.type] = part.value;
+  }
+
+  const asIfUtc = Date.UTC(
+    parseInt(map.year, 10),
+    parseInt(map.month, 10) - 1,
+    parseInt(map.day, 10),
+    parseInt(map.hour, 10),
+    parseInt(map.minute, 10),
+    parseInt(map.second, 10)
+  );
+
+  return new Date(utcGuess + (utcGuess - asIfUtc));
+}
+
 export interface ParsedIcsEvent {
   uid: string;
   summary: string;
@@ -218,12 +271,13 @@ function unescapeIcsText(str: string): string {
 function parseIcsDate(dateStr: string): { date: Date; allDay: boolean } {
   const clean = dateStr.trim();
 
-  // YYYYMMDD (All-Day)
+  // YYYYMMDD (All-Day) - hora 8:00 é só um marcador arbitrário pra ordenar;
+  // o que importa é o DIA cair corretamente no calendário de Evans/Greeley.
   if (/^\d{8}$/.test(clean)) {
     const y = parseInt(clean.slice(0, 4), 10);
     const m = parseInt(clean.slice(4, 6), 10) - 1;
     const d = parseInt(clean.slice(6, 8), 10);
-    return { date: new Date(y, m, d, 8, 0, 0), allDay: true };
+    return { date: zonedTimeToUtc(y, m, d, 8, 0, 0, BUSINESS_TIMEZONE), allDay: true };
   }
 
   // YYYYMMDDTHHMMSSZ (UTC)
@@ -237,7 +291,11 @@ function parseIcsDate(dateStr: string): { date: Date; allDay: boolean } {
     return { date: new Date(Date.UTC(y, m, d, h, min, s)), allDay: false };
   }
 
-  // YYYYMMDDTHHMMSS (Floating / Local)
+  // YYYYMMDDTHHMMSS (Floating - sem timezone declarado no ICS, o formato mais
+  // comum vindo do Calendário do iPhone). O relógio de parede é sempre
+  // Evans/Greeley (Colorado) - nunca a hora local do processo Node que roda
+  // o sync (Vercel = UTC, dev = qualquer coisa). Sem isso, o mesmo evento
+  // podia acabar num dia diferente dependendo de onde o sync rodasse.
   if (/^\d{8}T\d{6}$/i.test(clean)) {
     const y = parseInt(clean.slice(0, 4), 10);
     const m = parseInt(clean.slice(4, 6), 10) - 1;
@@ -245,7 +303,7 @@ function parseIcsDate(dateStr: string): { date: Date; allDay: boolean } {
     const h = parseInt(clean.slice(9, 11), 10);
     const min = parseInt(clean.slice(11, 13), 10);
     const s = parseInt(clean.slice(13, 15), 10);
-    return { date: new Date(y, m, d, h, min, s), allDay: false };
+    return { date: zonedTimeToUtc(y, m, d, h, min, s, BUSINESS_TIMEZONE), allDay: false };
   }
 
   // Fallback
@@ -257,21 +315,25 @@ function parseIcsDate(dateStr: string): { date: Date; allDay: boolean } {
   return { date: new Date(), allDay: false };
 }
 
+// UTC em todo lugar, de propósito: misturar aritmética de data em horário
+// local com valores já em UTC é o que causava agendamentos recorrentes
+// pulando de dia (e virando duplicata) dependendo do fuso horário de onde
+// o sync rodava.
 function addDays(date: Date, days: number): Date {
   const d = new Date(date);
-  d.setDate(d.getDate() + days);
+  d.setUTCDate(d.getUTCDate() + days);
   return d;
 }
 
 function addMonths(date: Date, months: number): Date {
   const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
+  d.setUTCMonth(d.getUTCMonth() + months);
   return d;
 }
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
+  d.setUTCHours(0, 0, 0, 0);
   return d;
 }
 
@@ -358,7 +420,7 @@ function expandRecurrence(
 
   if (rule.freq === "WEEKLY" && rule.byDay) {
     const sortedDays = [...rule.byDay].sort((a, b) => a - b);
-    let weekStart = addDays(originalStart, -originalStart.getDay()); // domingo daquela semana
+    let weekStart = addDays(originalStart, -originalStart.getUTCDay()); // domingo daquela semana
     let seriesIndex = 0;
     let weeksIterated = 0;
 
@@ -366,11 +428,11 @@ function expandRecurrence(
       weeksIterated++;
       for (const dayIdx of sortedDays) {
         const occ = new Date(weekStart);
-        occ.setDate(occ.getDate() + dayIdx);
-        occ.setHours(
-          originalStart.getHours(),
-          originalStart.getMinutes(),
-          originalStart.getSeconds(),
+        occ.setUTCDate(occ.getUTCDate() + dayIdx);
+        occ.setUTCHours(
+          originalStart.getUTCHours(),
+          originalStart.getUTCMinutes(),
+          originalStart.getUTCSeconds(),
           0
         );
         if (occ.getTime() < originalStart.getTime()) continue;
@@ -831,9 +893,10 @@ export async function syncICloudCalendarForCompany(
   //    regardless of how many past events pile up in the feed over time.
   const now = new Date();
   const windowStart = new Date(now);
-  windowStart.setHours(0, 0, 0, 0);
+  // UTC, não hora local do processo - ver parseIcsDate/addDays acima.
+  windowStart.setUTCHours(0, 0, 0, 0);
   const windowEnd = new Date(windowStart);
-  windowEnd.setDate(windowEnd.getDate() + (company.icloudSyncWindowDays || 60));
+  windowEnd.setUTCDate(windowEnd.getUTCDate() + (company.icloudSyncWindowDays || 60));
 
   const events = allEvents.filter(
     (e) => e.startDate >= windowStart && e.startDate <= windowEnd

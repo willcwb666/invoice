@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, Check, Copy, ExternalLink, QrCode } from "lucide-react";
+import { Check, Copy, ExternalLink, QrCode } from "lucide-react";
 import { QRCodeSVG } from "./qr-code";
+import { ModalShell } from "@/components/ui/modal-shell";
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -81,37 +81,21 @@ export function PaymentModal({
   };
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-5"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
-                  <QrCode className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">
-                    Link e QR Code de Pagamento
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Fatura #{invoice.invoiceNumber} • ${amountNumber}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={onClose}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      icon={<QrCode className="w-5 h-5" />}
+      title="Link e QR Code de Pagamento"
+      subtitle={`Fatura #${invoice.invoiceNumber} • $${amountNumber}`}
+      backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+      panelClassName="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-5"
+      headerRowClassName="flex items-center justify-between"
+      headerLeftClassName="flex items-center gap-2"
+      iconWrapperClassName="p-2 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100"
+      titleClassName="font-bold text-slate-900 text-sm"
+      closeButtonClassName="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+      closeIconClassName="w-4 h-4"
+    >
 
             {/* Method Tabs: Zelle vs Venmo */}
             <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100/80 rounded-2xl">
@@ -217,9 +201,6 @@ export function PaymentModal({
                 </div>
               </div>
             )}
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+    </ModalShell>
   );
 }

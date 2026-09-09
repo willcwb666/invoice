@@ -1,9 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
-  X,
   Calendar,
   Clock,
   MapPin,
@@ -15,6 +13,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { ClientModal } from "@/components/ui/client-modal";
+import { ModalShell } from "@/components/ui/modal-shell";
 import { useToast } from "@/components/ui/toast";
 import { zonedTimeToUtc, zonedPartsFromUtc } from "@/lib/calendar/timezone";
 
@@ -261,41 +260,21 @@ export function AppointmentModal({
 
   return (
     <>
-      <AnimatePresence>
-        {isOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="w-full max-w-xl bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col"
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-                    <Calendar className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-slate-900">
-                      {isEditing ? "Editar Agendamento" : "Novo Agendamento na Agenda"}
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      {isEditing
-                        ? "Ajuste serviços, valores, horário ou status deste atendimento"
-                        : "Sincroniza automaticamente com o iPhone e feed WebCal"}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={onClose}
-                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
+      <ModalShell
+        isOpen={isOpen}
+        onClose={onClose}
+        icon={<Calendar className="w-5 h-5" />}
+        title={isEditing ? "Editar Agendamento" : "Novo Agendamento na Agenda"}
+        subtitle={
+          isEditing
+            ? "Ajuste serviços, valores, horário ou status deste atendimento"
+            : "Sincroniza automaticamente com o iPhone e feed WebCal"
+        }
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+        panelClassName="w-full max-w-xl bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col"
+        iconWrapperClassName="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600"
+        closeButtonClassName="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+      >
               {/* Form Content */}
               <form
                 onSubmit={handleSubmit}
@@ -576,10 +555,7 @@ export function AppointmentModal({
                   </button>
                 </div>
               </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      </ModalShell>
 
       {/* Embedded Client Modal */}
       <ClientModal

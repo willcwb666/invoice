@@ -1,9 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  X,
   Receipt,
   Plus,
   Trash2,
@@ -18,6 +17,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { ClientModal } from "@/components/ui/client-modal";
+import { ModalShell } from "@/components/ui/modal-shell";
 
 interface EstimateModalProps {
   isOpen: boolean;
@@ -159,38 +159,16 @@ export function EstimateModal({ isOpen, onClose, onSuccess }: EstimateModalProps
 
   return (
     <>
-      <AnimatePresence>
-        {isOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs overflow-y-auto">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 10 }}
-              className="w-full max-w-2xl bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-200/90 my-8 space-y-6"
-            >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200/80">
-                  <Receipt className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Novo Orçamento (Estimate)</h3>
-                  <p className="text-xs text-slate-500">
-                    Crie orçamentos rápidos e converta em faturas em 1 clique
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={onClose}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
+      <ModalShell
+        isOpen={isOpen}
+        onClose={onClose}
+        icon={<Receipt className="w-5 h-5" />}
+        title="Novo Orçamento (Estimate)"
+        subtitle="Crie orçamentos rápidos e converta em faturas em 1 clique"
+        panelClassName="w-full max-w-2xl bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-200/90 my-8 space-y-6"
+        iconWrapperClassName="p-2.5 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200/80"
+        closeButtonClassName="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+      >
             {/* Modal Form */}
             <form onSubmit={handleSubmit} className="space-y-5 text-xs">
               {error && (
@@ -421,10 +399,7 @@ export function EstimateModal({ isOpen, onClose, onSuccess }: EstimateModalProps
                 </button>
               </div>
             </form>
-          </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      </ModalShell>
 
       {/* Quick Add Client Modal with higher z-index to overlay EstimateModal */}
       <ClientModal

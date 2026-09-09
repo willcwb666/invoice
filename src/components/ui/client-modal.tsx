@@ -1,9 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  X,
   UserPlus,
   MapPin,
   Phone,
@@ -12,6 +11,7 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
+import { ModalShell } from "@/components/ui/modal-shell";
 
 interface ClientModalProps {
   isOpen: boolean;
@@ -103,41 +103,18 @@ export function ClientModal({ isOpen, onClose, onSuccess, zIndex = "z-50" }: Cli
   };
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className={`fixed inset-0 ${zIndex} flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs overflow-y-auto`}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 10 }}
-            className="w-full max-w-xl bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-200/90 my-8 space-y-6"
-          >
-          {/* Modal Header */}
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100/80">
-                <UserPlus className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Novo Cliente</h3>
-                <p className="text-xs text-slate-500">
-                  Cadastre dados completos para faturas, rota GPS e agenda
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                resetForm();
-                onClose();
-              }}
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
+    <ModalShell
+      isOpen={isOpen}
+      onClose={() => {
+        resetForm();
+        onClose();
+      }}
+      icon={<UserPlus className="w-5 h-5" />}
+      title="Novo Cliente"
+      subtitle="Cadastre dados completos para faturas, rota GPS e agenda"
+      backdropClassName={`fixed inset-0 ${zIndex} flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs overflow-y-auto`}
+      closeButtonClassName="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+    >
           {/* Form Content */}
           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
             {error && (
@@ -366,9 +343,6 @@ export function ClientModal({ isOpen, onClose, onSuccess, zIndex = "z-50" }: Cli
               </button>
             </div>
           </form>
-        </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+    </ModalShell>
   );
 }

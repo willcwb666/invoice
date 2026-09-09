@@ -14,8 +14,15 @@ export class InvoiceService {
     orderBy: "invoiceNumber" | "issueDate" | "dueDate" | "totalAmount" | "createdAt" = "invoiceNumber",
     orderDir: "asc" | "desc" = "desc"
   ) {
-    // Sincroniza faturas de exemplo caso ainda não existam no banco
-    await ensureExampleInvoicesSeeded();
+    // Sincroniza faturas de exemplo caso ainda não existam no banco. Não
+    // deixa uma falha de seed (ex.: banco momentaneamente indisponível no
+    // boot) derrubar a listagem em si — a query abaixo funciona normalmente
+    // mesmo se o seed não rodou ainda.
+    try {
+      await ensureExampleInvoicesSeeded();
+    } catch (err) {
+      console.error("Erro ao sincronizar dados iniciais antes de listar faturas:", err);
+    }
 
     return prisma.invoice.findMany({
       where: {

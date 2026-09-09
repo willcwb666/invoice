@@ -4,7 +4,31 @@ import { getOrCreateSignatureFile } from "@/lib/pdf-signature";
 import { ensureAdminUser } from "@/lib/security/auth";
 import { DEFAULT_ICLOUD_URL, ensureICloudCalendarSynced } from "@/lib/calendar/icloud";
 
-export async function ensureExampleInvoicesSeeded() {
+// ensureExampleInvoicesSeeded is called defensively from many places (server
+// boot, dashboard layout, invoice listing, appointments, agenda sync,
+// company route) as a self-healing "make sure the real bootstrap data and
+// admin account exist" step. Without memoization each of those calls redid
+// the full ~10 sequential DB round trips (company lookup, signature check,
+// 3 client upserts, 8 invoice existence checks, a full iCloud sync attempt)
+// on essentially every request. The actual work only ever needs to happen
+// once per running server instance — after that it's a no-op by
+// construction (everything here is upsert / "create if missing") — so cache
+// the in-flight/completed promise and hand every caller the same one. A
+// failed attempt clears the cache so the next call retries instead of the
+// process being stuck never-seeded until restart.
+let seedPromise: Promise<void> | null = null;
+
+export function ensureExampleInvoicesSeeded(): Promise<void> {
+  if (!seedPromise) {
+    seedPromise = performSeed().catch((err) => {
+      seedPromise = null;
+      throw err;
+    });
+  }
+  return seedPromise;
+}
+
+async function performSeed(): Promise<void> {
   try {
     // 1. Ensure CompanyProfile exists
     let company = await prisma.companyProfile.findFirst({
@@ -353,7 +377,9 @@ export async function ensureExampleInvoicesSeeded() {
       }
     }
 
-    // 4. Executa rotina de sincronização automática com o iPhone (iCloud)
+    // 4. Executa rotina de sincronização automática com o iPhone (iCloud) —
+    // deliberately non-fatal: a broken/unreachable iCloud feed shouldn't be
+    // treated as "seeding failed" and trigger a retry of the whole function.
     try {
       await ensureICloudCalendarSynced(true);
     } catch (syncErr) {
@@ -361,5 +387,9 @@ export async function ensureExampleInvoicesSeeded() {
     }
   } catch (err) {
     console.error("Erro ao sincronizar faturas do exemplo:", err);
+    // Re-thrown so ensureExampleInvoicesSeeded() knows this attempt failed
+    // and allows the next call to retry, instead of caching a silent no-op
+    // as permanent success for the lifetime of the process.
+    throw err;
   }
 }

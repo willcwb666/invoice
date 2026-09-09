@@ -3,14 +3,8 @@ import { Prisma } from "@prisma/client";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { updateServiceSchema } from "@/lib/validations/service";
 import { ServiceCatalogService } from "@/services/service-catalog-service";
-import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/security/permissions";
-
-async function getTargetCompanyId(preferredCompanyId?: string) {
-  if (preferredCompanyId) return preferredCompanyId;
-  const company = await prisma.companyProfile.findFirst();
-  return company?.id || "";
-}
+import { getTargetCompanyId } from "@/lib/company-context";
 
 export async function PATCH(
   req: NextRequest,

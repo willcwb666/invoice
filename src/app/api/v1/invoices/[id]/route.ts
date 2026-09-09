@@ -1,19 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { InvoiceService } from "@/services/invoice-service";
-import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/security/permissions";
 import { z } from "zod";
-
-async function getTargetCompanyId(preferredCompanyId?: string) {
-  if (preferredCompanyId) return preferredCompanyId;
-  const company = await prisma.companyProfile.findFirst();
-  if (company) return company.id;
-  const created = await prisma.companyProfile.create({
-    data: { name: "Renata Matos de Oliveira" },
-  });
-  return created.id;
-}
+import { getTargetCompanyId } from "@/lib/company-context";
 
 const updateStatusSchema = z.object({
   status: z.enum(["DRAFT", "PENDING", "PAID", "OVERDUE", "CANCELLED"]),

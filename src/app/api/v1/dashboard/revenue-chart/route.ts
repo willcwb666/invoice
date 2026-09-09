@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { requirePermission } from "@/lib/security/permissions";
-import { prisma } from "@/lib/prisma";
 import { RevenueChartService } from "@/services/revenue-chart-service";
-
-async function getTargetCompanyId(preferredCompanyId?: string) {
-  if (preferredCompanyId) return preferredCompanyId;
-  const company = await prisma.companyProfile.findFirst();
-  return company?.id || "";
-}
+import { getTargetCompanyId } from "@/lib/company-context";
 
 export async function GET(req: NextRequest) {
   const ip = getClientIp(req);

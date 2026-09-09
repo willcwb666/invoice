@@ -2,16 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { AppointmentService } from "@/services/appointment-service";
 import { PaymentService } from "@/services/payment-service";
-import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/security/permissions";
 import { updateAppointmentSchema } from "@/lib/validations/appointment";
 import { z } from "zod";
-
-async function getTargetCompanyId(preferredCompanyId?: string) {
-  if (preferredCompanyId) return preferredCompanyId;
-  const company = await prisma.companyProfile.findFirst();
-  return company?.id || "";
-}
+import { getTargetCompanyId } from "@/lib/company-context";
 
 // `billable` (Não Faturável) is handled separately from the rest of the
 // appointment edit fields on purpose: it's a financial flag, not content the

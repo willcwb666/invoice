@@ -1,18 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { EstimateService } from "@/services/estimate-service";
-import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/security/permissions";
-
-async function getTargetCompanyId(preferredCompanyId?: string) {
-  if (preferredCompanyId) return preferredCompanyId;
-  const company = await prisma.companyProfile.findFirst();
-  if (company) return company.id;
-  const created = await prisma.companyProfile.create({
-    data: { name: "Renata Matos de Oliveira" },
-  });
-  return created.id;
-}
+import { getTargetCompanyId } from "@/lib/company-context";
 
 export async function POST(
   req: NextRequest,

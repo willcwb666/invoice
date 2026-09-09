@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
+import { ROLE_DEFINITIONS } from "@/lib/security/rbac";
 import {
   TrendingUp,
   Calendar,
@@ -41,8 +43,12 @@ const secondaryNavItems = [
 export function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const { user } = useCurrentUser();
   const [isOpen, setIsOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  const displayName = user?.name || "Renata Matos";
+  const roleLabel = user ? ROLE_DEFINITIONS[user.role]?.name || user.role : "Admin";
 
   // Fecha o menu móvel ao mudar de rota
   useEffect(() => {
@@ -81,7 +87,7 @@ export function MobileNav() {
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <span className="font-bold text-slate-900 text-sm">Mais Funcionalidades</span>
-                <p className="text-[11px] text-slate-500">Renata Matos • Admin</p>
+                <p className="text-[11px] text-slate-500">{displayName} • {roleLabel}</p>
               </div>
               <button
                 onClick={() => setIsOpen(false)}

@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import {
   FileText,
   Calendar,
@@ -38,7 +39,18 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { user } = useCurrentUser();
   const [loggingOut, setLoggingOut] = useState(false);
+
+  const displayName = user?.name || "Renata Matos";
+  const displayEmail = user?.email || "renatamatoz@gmail.com";
+  const initials = displayName
+    .split(" ")
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -111,14 +123,14 @@ export function Sidebar() {
         <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 overflow-hidden">
             <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
-              RM
+              {initials}
             </div>
             <div className="overflow-hidden">
               <p className="font-bold text-xs text-slate-800 truncate leading-tight">
-                Renata Matos
+                {displayName}
               </p>
               <p className="text-[10px] text-slate-500 truncate">
-                renatamatoz@gmail.com
+                {displayEmail}
               </p>
             </div>
           </div>

@@ -83,9 +83,31 @@ export class AppointmentService {
    * novo snapshot do basePrice atual do serviço).
    */
   static async updateAppointment(id: string, companyId: string, data: UpdateAppointmentInput) {
-    const existing = await prisma.appointment.findFirst({ where: { id, companyId } });
+    const existing = await prisma.appointment.findFirst({
+      where: { id, companyId },
+      include: { services: { select: { serviceId: true } } },
+    });
     if (!existing) {
       throw new Error("Agendamento não encontrado.");
+    }
+
+    // Once an appointment is linked to an invoice, the invoice's line item
+    // is a frozen snapshot of who was billed and how much - silently
+    // changing the appointment's client or price afterwards makes the
+    // appointment and the invoice that documents it disagree, with no
+    // indication either record is now wrong. Everything else (time,
+    // location, notes, status, services) is still editable.
+    if (existing.invoiced) {
+      if (data.clientId !== undefined && data.clientId !== existing.clientId) {
+        throw new Error(
+          "Este agendamento já está vinculado a uma fatura - o cliente não pode ser alterado. Cancele/edite a fatura primeiro."
+        );
+      }
+      if (data.price !== undefined && !new Prisma.Decimal(data.price).equals(existing.price)) {
+        throw new Error(
+          "Este agendamento já está vinculado a uma fatura - o valor não pode ser alterado. Cancele/edite a fatura primeiro."
+        );
+      }
     }
 
     let servicesUpdate: Prisma.AppointmentUpdateInput["services"] = undefined;
@@ -101,6 +123,27 @@ export class AppointmentService {
       };
     }
 
+    // manuallyEdited freezes the appointment out of future iCloud syncs
+    // (see icloud.ts) - it should only flip when something actually
+    // changed, not on every PATCH regardless of content. Without this, just
+    // opening a synced appointment and clicking Save (no real edit) was
+    // enough to permanently detach it from the calendar, with no way back.
+    const newServiceIds = data.serviceIds ? [...data.serviceIds].sort() : undefined;
+    const existingServiceIds = existing.services.map((s) => s.serviceId).sort();
+    const somethingChanged =
+      (data.clientId !== undefined && data.clientId !== existing.clientId) ||
+      (data.title !== undefined && data.title !== existing.title) ||
+      (data.date !== undefined && new Date(data.date).getTime() !== existing.date.getTime()) ||
+      (data.startTime !== undefined && new Date(data.startTime).getTime() !== existing.startTime.getTime()) ||
+      (data.endTime !== undefined && new Date(data.endTime).getTime() !== existing.endTime.getTime()) ||
+      (data.location !== undefined && data.location !== existing.location) ||
+      (data.price !== undefined && !new Prisma.Decimal(data.price).equals(existing.price)) ||
+      (data.notes !== undefined && data.notes !== existing.notes) ||
+      (data.status !== undefined && data.status !== existing.status) ||
+      (newServiceIds !== undefined &&
+        (newServiceIds.length !== existingServiceIds.length ||
+          newServiceIds.some((id, i) => id !== existingServiceIds[i])));
+
     return prisma.appointment.update({
       where: { id },
       data: {
@@ -114,7 +157,7 @@ export class AppointmentService {
         ...(data.notes !== undefined && { notes: data.notes }),
         ...(data.status !== undefined && { status: data.status }),
         ...(servicesUpdate ? { services: servicesUpdate } : {}),
-        manuallyEdited: true,
+        ...(somethingChanged ? { manuallyEdited: true } : {}),
       },
       include: {
         client: true,

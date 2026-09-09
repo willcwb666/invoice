@@ -82,7 +82,24 @@ export class InvoiceService {
   static async getPublicInvoiceById(id: string) {
     return prisma.invoice.findUnique({
       where: { id },
-      include: {
+      // Explicit top-level select — the previous version relied on the
+      // frontend simply not rendering `notes` (a free-text field meant for
+      // internal remarks) to keep it out of the public response, but
+      // anything calling this API directly (curl, devtools) got it anyway.
+      // Only fields that already appear on a printed invoice belong here.
+      select: {
+        id: true,
+        invoiceNumber: true,
+        status: true,
+        issueDate: true,
+        dueDate: true,
+        providerAddress: true,
+        subtotal: true,
+        discount: true,
+        tax: true,
+        totalAmount: true,
+        paidAmount: true,
+        paidAt: true,
         client: {
           select: {
             id: true,
@@ -128,13 +145,26 @@ export class InvoiceService {
       throw new Error("Fatura não encontrada.");
     }
 
+    // Moving TO PAID stamps the full amount/date (unless already set, e.g.
+    // this is a re-save). Moving AWAY from PAID — a correction to CANCELLED
+    // or back to OVERDUE, say — used to unconditionally wipe paidAmount and
+    // paidAt back to 0/null, silently destroying the record that a payment
+    // was ever received. Leave them as-is instead; they're history, not a
+    // "current status" mirror. There's also no way to record a PARTIAL
+    // payment through this method (paidAmount is only ever 0 or the full
+    // total here) — that's a real gap, but a separate feature to build
+    // deliberately rather than something to paper over in this fix.
     const isPaid = status === "PAID";
     return prisma.invoice.update({
       where: { id },
       data: {
         status,
-        paidAt: isPaid ? (invoice.paidAt || new Date()) : null,
-        paidAmount: isPaid ? invoice.totalAmount : new Prisma.Decimal(0),
+        ...(isPaid
+          ? {
+              paidAt: invoice.paidAt || new Date(),
+              paidAmount: invoice.paidAmount.isZero() ? invoice.totalAmount : invoice.paidAmount,
+            }
+          : {}),
       },
       include: {
         client: true,

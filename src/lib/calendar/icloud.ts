@@ -257,6 +257,161 @@ function parseIcsDate(dateStr: string): { date: Date; allDay: boolean } {
   return { date: new Date(), allDay: false };
 }
 
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function addMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+function startOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+const WEEKDAY_CODE_TO_INDEX: Record<string, number> = {
+  SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6,
+};
+
+interface RecurrenceRule {
+  freq: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+  interval: number;
+  count?: number;
+  until?: Date;
+  byDay?: number[]; // weekday indices (0=Sunday), only meaningful for WEEKLY
+}
+
+/**
+ * Faz o parsing de uma propriedade RRULE (RFC 5545) - ex:
+ * "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE" (limpeza a cada duas semanas, seg e qua).
+ * Suporta os padrões reais de agenda recorrente do Calendário do iPhone:
+ * FREQ diário/semanal/mensal/anual, INTERVAL, COUNT, UNTIL e BYDAY (semanal).
+ * Não implementa toda a RFC (ex: BYMONTHDAY, BYSETPOS) - o suficiente para os
+ * casos de uma agenda de limpeza recorrente.
+ */
+function parseRRule(rruleStr: string): RecurrenceRule | null {
+  const map: Record<string, string> = {};
+  for (const part of rruleStr.split(";")) {
+    const [key, value] = part.split("=");
+    if (key && value) map[key.trim().toUpperCase()] = value.trim();
+  }
+
+  const freq = map.FREQ as RecurrenceRule["freq"] | undefined;
+  if (!freq || !["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(freq)) {
+    return null;
+  }
+
+  const interval = map.INTERVAL ? parseInt(map.INTERVAL, 10) : 1;
+  const count = map.COUNT ? parseInt(map.COUNT, 10) : undefined;
+  const until = map.UNTIL ? parseIcsDate(map.UNTIL).date : undefined;
+  const byDay = map.BYDAY
+    ? map.BYDAY.split(",")
+        .map((code) => WEEKDAY_CODE_TO_INDEX[code.trim().slice(-2).toUpperCase()])
+        .filter((idx): idx is number => idx !== undefined)
+    : undefined;
+
+  return {
+    freq,
+    interval: interval > 0 ? interval : 1,
+    count,
+    until,
+    byDay: byDay && byDay.length > 0 ? byDay : undefined,
+  };
+}
+
+// Segurança contra RRULEs sem fim (ex: sem COUNT nem UNTIL) - nenhum evento
+// recorrente de agenda de limpeza precisa de mais que isso à frente.
+const RECURRENCE_HORIZON_DAYS = 730;
+const RECURRENCE_EXPANSION_CAP = 500;
+
+/**
+ * Expande um evento recorrente (RRULE) em todas as suas ocorrências
+ * individuais dentro do horizonte de segurança, pulando datas em EXDATE.
+ * Cada ocorrência vira, depois, um Appointment próprio - é assim que o
+ * restante do sync já deduplica e atualiza atendimentos individualmente.
+ */
+function expandRecurrence(
+  rule: RecurrenceRule,
+  originalStart: Date,
+  originalEnd: Date,
+  exceptionDayStamps: Set<number>
+): { start: Date; end: Date }[] {
+  const durationMs = originalEnd.getTime() - originalStart.getTime();
+  const horizon = addDays(new Date(), RECURRENCE_HORIZON_DAYS);
+  const results: { start: Date; end: Date }[] = [];
+
+  const pushIfValid = (occStart: Date, seriesIndex: number) => {
+    if (rule.until && occStart.getTime() > rule.until.getTime()) return false;
+    if (rule.count !== undefined && seriesIndex >= rule.count) return false;
+    if (occStart.getTime() > horizon.getTime()) return false;
+    if (!exceptionDayStamps.has(startOfDay(occStart).getTime())) {
+      results.push({ start: occStart, end: new Date(occStart.getTime() + durationMs) });
+    }
+    return true;
+  };
+
+  if (rule.freq === "WEEKLY" && rule.byDay) {
+    const sortedDays = [...rule.byDay].sort((a, b) => a - b);
+    let weekStart = addDays(originalStart, -originalStart.getDay()); // domingo daquela semana
+    let seriesIndex = 0;
+    let weeksIterated = 0;
+
+    while (weeksIterated < RECURRENCE_EXPANSION_CAP && results.length < RECURRENCE_EXPANSION_CAP) {
+      weeksIterated++;
+      for (const dayIdx of sortedDays) {
+        const occ = new Date(weekStart);
+        occ.setDate(occ.getDate() + dayIdx);
+        occ.setHours(
+          originalStart.getHours(),
+          originalStart.getMinutes(),
+          originalStart.getSeconds(),
+          0
+        );
+        if (occ.getTime() < originalStart.getTime()) continue;
+        const keepGoing = pushIfValid(occ, seriesIndex);
+        seriesIndex++;
+        if (!keepGoing) return results;
+      }
+      weekStart = addDays(weekStart, 7 * rule.interval);
+      if (weekStart.getTime() > horizon.getTime()) break;
+    }
+    return results;
+  }
+
+  let occ = new Date(originalStart);
+  let seriesIndex = 0;
+  let iterations = 0;
+  while (iterations < RECURRENCE_EXPANSION_CAP) {
+    iterations++;
+    const keepGoing = pushIfValid(occ, seriesIndex);
+    seriesIndex++;
+    if (!keepGoing) break;
+
+    switch (rule.freq) {
+      case "DAILY":
+        occ = addDays(occ, rule.interval);
+        break;
+      case "WEEKLY":
+        occ = addDays(occ, 7 * rule.interval);
+        break;
+      case "MONTHLY":
+        occ = addMonths(occ, rule.interval);
+        break;
+      case "YEARLY":
+        occ = addMonths(occ, 12 * rule.interval);
+        break;
+    }
+  }
+
+  return results;
+}
+
 /**
  * Tenta extrair um valor financeiro (preço) do texto de descrição ou resumo.
  * Ex: "$180", "Valor: 180.00", "$ 200", "Price: $150"
@@ -357,45 +512,20 @@ function detectServicesFromText(text: string, services: SyncableService[]): Sync
   return genericStandard ? [genericStandard] : [];
 }
 
-/**
- * Faz o parsing de um arquivo de texto iCalendar (.ics) e retorna os eventos estruturados.
- */
-export function parseIcsEvents(icsContent: string): ParsedIcsEvent[] {
-  // Desdobramento de linhas (RFC 5545 section 3.1)
-  const unfolded = icsContent
-    .replace(/\r\n[ \t]/g, "")
-    .replace(/\n[ \t]/g, "")
-    .replace(/\r[ \t]/g, "");
-
-  const lines = unfolded.split(/\r\n|\n|\r/);
-  const events: ParsedIcsEvent[] = [];
-
-  let inEvent = false;
-  let currentEventLines: string[] = [];
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed === "BEGIN:VEVENT") {
-      inEvent = true;
-      currentEventLines = [];
-    } else if (trimmed === "END:VEVENT") {
-      if (inEvent) {
-        const parsed = parseSingleVEvent(currentEventLines);
-        if (parsed) {
-          events.push(parsed);
-        }
-      }
-      inEvent = false;
-      currentEventLines = [];
-    } else if (inEvent) {
-      currentEventLines.push(line);
-    }
-  }
-
-  return events;
+interface RawVEvent {
+  uid: string;
+  summary: string;
+  description: string;
+  location: string;
+  dtStartStr: string;
+  dtEndStr: string;
+  statusRaw: string;
+  rrule?: string;
+  exdateStrs: string[];
+  recurrenceIdStr?: string;
 }
 
-function parseSingleVEvent(lines: string[]): ParsedIcsEvent | null {
+function parseRawVEvent(lines: string[]): RawVEvent | null {
   let uid = "";
   let summary = "";
   let description = "";
@@ -403,6 +533,9 @@ function parseSingleVEvent(lines: string[]): ParsedIcsEvent | null {
   let dtStartStr = "";
   let dtEndStr = "";
   let statusRaw = "";
+  let rrule: string | undefined;
+  const exdateStrs: string[] = [];
+  let recurrenceIdStr: string | undefined;
 
   for (const line of lines) {
     const colonIndex = line.indexOf(":");
@@ -435,6 +568,20 @@ function parseSingleVEvent(lines: string[]): ParsedIcsEvent | null {
       case "STATUS":
         statusRaw = valuePart.trim().toUpperCase();
         break;
+      case "RRULE":
+        rrule = valuePart.trim();
+        break;
+      case "EXDATE":
+        exdateStrs.push(
+          ...valuePart
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        );
+        break;
+      case "RECURRENCE-ID":
+        recurrenceIdStr = valuePart.trim();
+        break;
     }
   }
 
@@ -442,11 +589,40 @@ function parseSingleVEvent(lines: string[]): ParsedIcsEvent | null {
     return null;
   }
 
-  const { date: startDate, allDay } = parseIcsDate(dtStartStr);
+  return {
+    uid,
+    summary,
+    description,
+    location,
+    dtStartStr,
+    dtEndStr,
+    statusRaw,
+    rrule,
+    exdateStrs,
+    recurrenceIdStr,
+  };
+}
+
+/**
+ * Monta o evento final a partir dos campos brutos do VEVENT. `overrideStart`/
+ * `overrideEnd`/`uidOverride` são usados ao expandir um evento recorrente:
+ * cada ocorrência tem seu próprio horário e um UID estável (`uid::data`) para
+ * virar - e continuar sendo reconhecida como - um Appointment próprio.
+ */
+function buildParsedEvent(
+  raw: RawVEvent,
+  overrideStart?: Date,
+  overrideEnd?: Date,
+  uidOverride?: string
+): ParsedIcsEvent {
+  const { date: parsedStart, allDay } = parseIcsDate(raw.dtStartStr);
+  const startDate = overrideStart || parsedStart;
 
   let endDate: Date;
-  if (dtEndStr) {
-    endDate = parseIcsDate(dtEndStr).date;
+  if (overrideEnd) {
+    endDate = overrideEnd;
+  } else if (raw.dtEndStr) {
+    endDate = parseIcsDate(raw.dtEndStr).date;
   } else {
     // Se não tiver DTEND, adiciona 2 horas (ou 8 horas se for o dia todo)
     const durationHours = allDay ? 8 : 2;
@@ -459,27 +635,150 @@ function parseSingleVEvent(lines: string[]): ParsedIcsEvent | null {
   }
 
   const eventUid =
-    uid || `event-${startDate.getTime()}-${encodeURIComponent(summary.slice(0, 20))}`;
+    uidOverride ||
+    raw.uid ||
+    `event-${startDate.getTime()}-${encodeURIComponent(raw.summary.slice(0, 20))}`;
 
   let status: "SCHEDULED" | "CANCELLED" | "COMPLETED" = "SCHEDULED";
-  if (statusRaw === "CANCELLED") {
+  if (raw.statusRaw === "CANCELLED") {
     status = "CANCELLED";
   }
 
   const extractedPrice =
-    extractPriceFromText(description) || extractPriceFromText(summary) || undefined;
+    extractPriceFromText(raw.description) || extractPriceFromText(raw.summary) || undefined;
 
   return {
     uid: eventUid,
-    summary: summary || "Atendimento Calendário iPhone",
-    description: description || undefined,
-    location: location || undefined,
+    summary: raw.summary || "Atendimento Calendário iPhone",
+    description: raw.description || undefined,
+    location: raw.location || undefined,
     startDate,
     endDate,
     allDay,
     status,
     price: extractedPrice,
   };
+}
+
+/**
+ * Faz o parsing de um arquivo de texto iCalendar (.ics) e retorna os eventos
+ * estruturados - já expandindo eventos recorrentes (RRULE) em uma ocorrência
+ * por atendimento real, e aplicando EXDATE e substituições (RECURRENCE-ID)
+ * de ocorrências individuais editadas na série.
+ */
+export function parseIcsEvents(icsContent: string): ParsedIcsEvent[] {
+  // Desdobramento de linhas (RFC 5545 section 3.1)
+  const unfolded = icsContent
+    .replace(/\r\n[ \t]/g, "")
+    .replace(/\n[ \t]/g, "")
+    .replace(/\r[ \t]/g, "");
+
+  const lines = unfolded.split(/\r\n|\n|\r/);
+  const rawEvents: RawVEvent[] = [];
+
+  let inEvent = false;
+  let currentEventLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === "BEGIN:VEVENT") {
+      inEvent = true;
+      currentEventLines = [];
+    } else if (trimmed === "END:VEVENT") {
+      if (inEvent) {
+        const raw = parseRawVEvent(currentEventLines);
+        if (raw) {
+          rawEvents.push(raw);
+        }
+      }
+      inEvent = false;
+      currentEventLines = [];
+    } else if (inEvent) {
+      currentEventLines.push(line);
+    }
+  }
+
+  // RECURRENCE-ID marca a substituição de UMA ocorrência específica de uma
+  // série (ex: arrastar só uma limpeza pra outro horário no iPhone) -
+  // separa essas substituições por UID da série antes de expandir, pra
+  // trocar a ocorrência gerada automaticamente em vez de duplicá-la.
+  const overridesByUid = new Map<string, RawVEvent[]>();
+  const regularEvents: RawVEvent[] = [];
+
+  for (const raw of rawEvents) {
+    if (raw.recurrenceIdStr && raw.uid) {
+      const list = overridesByUid.get(raw.uid) || [];
+      list.push(raw);
+      overridesByUid.set(raw.uid, list);
+    } else {
+      regularEvents.push(raw);
+    }
+  }
+
+  const events: ParsedIcsEvent[] = [];
+
+  for (const raw of regularEvents) {
+    if (!raw.rrule) {
+      events.push(buildParsedEvent(raw));
+      continue;
+    }
+
+    const rule = parseRRule(raw.rrule);
+    if (!rule) {
+      // RRULE não reconhecida por este parser - trata como evento único, o
+      // que é melhor do que o atendimento simplesmente desaparecer do sync.
+      events.push(buildParsedEvent(raw));
+      continue;
+    }
+
+    const { date: originalStart } = parseIcsDate(raw.dtStartStr);
+    const originalEnd = raw.dtEndStr
+      ? parseIcsDate(raw.dtEndStr).date
+      : new Date(originalStart.getTime() + 2 * 60 * 60 * 1000);
+
+    const exceptionDayStamps = new Set(
+      raw.exdateStrs.map((s) => startOfDay(parseIcsDate(s).date).getTime())
+    );
+
+    const overrides = overridesByUid.get(raw.uid) || [];
+    const overrideDayStamps = new Set(
+      overrides
+        .map((o) =>
+          o.recurrenceIdStr ? startOfDay(parseIcsDate(o.recurrenceIdStr).date).getTime() : undefined
+        )
+        .filter((t): t is number => t !== undefined)
+    );
+
+    const occurrences = expandRecurrence(rule, originalStart, originalEnd, exceptionDayStamps);
+    for (const occ of occurrences) {
+      // Ocorrências com uma versão editada (override) abaixo são puladas
+      // aqui - a versão editada entra no lugar da gerada automaticamente.
+      if (overrideDayStamps.has(startOfDay(occ.start).getTime())) continue;
+      events.push(
+        buildParsedEvent(raw, occ.start, occ.end, `${raw.uid}::${occ.start.toISOString()}`)
+      );
+    }
+
+    for (const override of overrides) {
+      const { date: overrideStart, allDay } = parseIcsDate(override.dtStartStr || raw.dtStartStr);
+      const overrideEnd = override.dtEndStr
+        ? parseIcsDate(override.dtEndStr).date
+        : new Date(overrideStart.getTime() + (allDay ? 8 : 2) * 60 * 60 * 1000);
+      const recurrenceDate = override.recurrenceIdStr
+        ? parseIcsDate(override.recurrenceIdStr).date
+        : overrideStart;
+      events.push(
+        buildParsedEvent(
+          override,
+          overrideStart,
+          overrideEnd,
+          `${raw.uid}::${recurrenceDate.toISOString()}`
+        )
+      );
+    }
+  }
+
+  return events;
 }
 
 /**

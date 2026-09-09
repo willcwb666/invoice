@@ -16,6 +16,7 @@ export const maxDuration = 60;
 export async function GET(req: NextRequest) {
   const check = await requirePermission(req, "agenda", "read");
   if (check.response) return check.response;
+  const { session } = check;
 
   try {
     await ensureExampleInvoicesSeeded();
@@ -52,11 +53,13 @@ export async function GET(req: NextRequest) {
       syncedCount,
       lastSyncedAt: lastSyncAppt?.updatedAt || company?.updatedAt || null,
       status: configured ? "SYNCHRONIZED" : "NOT_CONFIGURED",
-      // Only ever exposed to an authenticated session (see check above) —
-      // this is the same secret proxy.ts/feed.ics/route.ts accept as a
-      // bypass-auth token for the outbound webcal subscription URL, so it
-      // must never be hardcoded in client-side source.
-      webcalToken: process.env.WEBCAL_SECRET || null,
+      // This is the same secret proxy.ts/feed.ics/route.ts accept as a
+      // bypass-auth token for the outbound webcal subscription URL — holding
+      // it grants permanent, unauthenticated access to every client's name,
+      // phone, address and notes via the .ics feed, with no way to revoke it
+      // short of rotating WEBCAL_SECRET itself. Only ADMIN gets to see it;
+      // "agenda:read" alone (FINANCIAL/OPERATOR/VIEWER) is not enough.
+      webcalToken: session.role === "ADMIN" ? process.env.WEBCAL_SECRET || null : null,
     });
   } catch (error: unknown) {
     console.error("Erro na rota GET /api/v1/agenda/sync:", error);
@@ -138,6 +141,7 @@ export async function POST(req: NextRequest) {
         totalFound: result.totalFound,
         created: result.created,
         updated: result.updated,
+        canceled: result.canceled,
         normalizedUrl: result.normalizedUrl,
         savedUrl: rawUrl.trim(),
       },

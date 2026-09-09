@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, registerUser, ensureAdminUser } from "@/lib/security/auth";
+import { requirePermission } from "@/lib/security/permissions";
 import { z } from "zod";
 
 const createUserSchema = z.object({
@@ -13,16 +14,16 @@ const createUserSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  const session = await getSessionUser(req);
-  if (!session) {
-    return NextResponse.json({ error: "Acesso não autorizado." }, { status: 401 });
-  }
+  const check = await requirePermission(req, "users", "read");
+  if (check.response) return check.response;
+  const { session } = check;
 
   try {
     // Ensure primary admin is seeded if database is fresh
     await ensureAdminUser();
 
     const users = await prisma.user.findMany({
+      where: session.companyId ? { companyId: session.companyId } : undefined,
       orderBy: { createdAt: "desc" },
       select: {
         id: true,

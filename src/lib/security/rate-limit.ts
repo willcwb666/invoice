@@ -74,9 +74,18 @@ export function checkRateLimit(
 }
 
 export function getClientIp(req: Request): string {
+  // X-Forwarded-For is "client, proxy1, proxy2, ..." — every entry except
+  // the last is whatever the CLIENT chose to send (or a previous hop just
+  // copied along), so taking the first entry (the old behavior here) let
+  // anyone reset their own rate-limit bucket by sending a fresh fake value
+  // on every request. Only the entry appended by our own reverse proxy /
+  // platform edge — the LAST one — is outside client control, assuming a
+  // single trusted hop in front of this app. If this is ever deployed
+  // behind more than one trusted proxy, adjust which entry is trusted here.
   const forwardedFor = req.headers.get("x-forwarded-for");
   if (forwardedFor) {
-    return forwardedFor.split(",")[0].trim();
+    const hops = forwardedFor.split(",").map((h) => h.trim()).filter(Boolean);
+    if (hops.length > 0) return hops[hops.length - 1];
   }
   return req.headers.get("x-real-ip") || "127.0.0.1";
 }

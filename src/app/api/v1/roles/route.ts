@@ -16,9 +16,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Acesso não autorizado." }, { status: 401 });
   }
 
-  const company = await prisma.companyProfile.findFirst({
-    select: { rolePermissions: true },
-  });
+  const company = session.companyId
+    ? await prisma.companyProfile.findUnique({
+        where: { id: session.companyId },
+        select: { rolePermissions: true },
+      })
+    : await prisma.companyProfile.findFirst({
+        select: { rolePermissions: true },
+      });
   const matrix =
     (company?.rolePermissions as unknown as RolePermissionsMatrix | null) ||
     DEFAULT_ROLE_PERMISSIONS;
@@ -61,7 +66,9 @@ export async function PUT(req: NextRequest) {
     // Keep ADMIN fully enabled for security
     newMatrix.ADMIN = DEFAULT_ROLE_PERMISSIONS.ADMIN;
 
-    let company = await prisma.companyProfile.findFirst();
+    let company = session.companyId
+      ? await prisma.companyProfile.findUnique({ where: { id: session.companyId } })
+      : await prisma.companyProfile.findFirst();
     if (!company) {
       return NextResponse.json(
         { error: "Perfil da empresa não encontrado." },

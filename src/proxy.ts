@@ -17,6 +17,20 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Strip any x-user-* headers the client may have sent, on every path —
+  // including the public allowlist below. Route handlers no longer trust
+  // these headers (getSessionUser re-verifies the signed cookie itself), but
+  // stripping them here too means a client-supplied x-user-id/x-user-role
+  // can never reach a route handler and be mistaken for something proxy.ts
+  // vouched for, even if a future code path starts reading them again.
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.delete("x-user-id");
+  requestHeaders.delete("x-user-email");
+  requestHeaders.delete("x-user-role");
+  requestHeaders.delete("x-user-name");
+  requestHeaders.delete("x-user-company-id");
+  const next = () => NextResponse.next({ request: { headers: requestHeaders } });
+
   // 2. Explicitly allowed public paths:
   // - /login (auth screen)
   // - /pay/* (public invoice pay and view link for customers)
@@ -41,16 +55,16 @@ export async function proxy(req: NextRequest) {
 
   // Allow public routes
   if (isLoginPage || isPublicPay || isAuthApi || isPublicApi) {
-    return NextResponse.next();
+    return next();
   }
 
   // Calendar feed protection: allow if authenticated OR matching the secret feed token
   if (isWebcalFeed) {
-    if (session) return NextResponse.next();
+    if (session) return next();
     const token = req.nextUrl.searchParams.get("token");
     const expectedToken = process.env.WEBCAL_SECRET;
     if (expectedToken && token && token === expectedToken) {
-      return NextResponse.next();
+      return next();
     }
     return NextResponse.json(
       {
@@ -80,21 +94,10 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 5. Authenticated request: forward user metadata in request headers for zero-overhead access
-  const requestHeaders = new Headers(req.headers);
-  requestHeaders.set("x-user-id", session.sub);
-  requestHeaders.set("x-user-email", session.email);
-  requestHeaders.set("x-user-role", session.role);
-  requestHeaders.set("x-user-name", session.name);
-  if (session.companyId) {
-    requestHeaders.set("x-user-company-id", session.companyId);
-  }
-
-  return NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  });
+  // 5. Authenticated: let the request through with the sanitized headers.
+  // Route handlers re-derive the session from the cookie themselves (see
+  // getSessionUser) rather than trusting headers set here.
+  return next();
 }
 
 export default proxy;

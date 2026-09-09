@@ -35,7 +35,10 @@ export async function PATCH(
       where: { id },
     });
 
-    if (!targetUser) {
+    // 404 rather than 403 when the user exists but belongs to another
+    // company — matching "not found" avoids confirming to a cross-tenant
+    // caller that the id exists at all.
+    if (!targetUser || (session.companyId && targetUser.companyId !== session.companyId)) {
       return NextResponse.json(
         { error: "Usuário não encontrado." },
         { status: 404 }
@@ -155,7 +158,7 @@ export async function DELETE(
       where: { id },
     });
 
-    if (!targetUser) {
+    if (!targetUser || (session.companyId && targetUser.companyId !== session.companyId)) {
       return NextResponse.json(
         { error: "Usuário não encontrado." },
         { status: 404 }

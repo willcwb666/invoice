@@ -41,9 +41,17 @@ export async function requirePermission(
     return { session };
   }
 
-  const company = await prisma.companyProfile.findFirst({
-    select: { rolePermissions: true },
-  });
+  // Scoped to the caller's own company — falling back to findFirst() here
+  // would apply whichever company happens to sort first's custom permission
+  // overrides to every other company's users too.
+  const company = session.companyId
+    ? await prisma.companyProfile.findUnique({
+        where: { id: session.companyId },
+        select: { rolePermissions: true },
+      })
+    : await prisma.companyProfile.findFirst({
+        select: { rolePermissions: true },
+      });
   const matrix =
     (company?.rolePermissions as unknown as RolePermissionsMatrix | null) ||
     DEFAULT_ROLE_PERMISSIONS;

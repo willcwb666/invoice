@@ -276,24 +276,17 @@ export async function getSessionUser(
 ): Promise<SessionPayload | null> {
   if (!req) return null;
 
-  // 1. Check if headers were populated by Next.js middleware
-  const headerUserId = req.headers.get("x-user-id");
-  const headerEmail = req.headers.get("x-user-email");
-  const headerRole = req.headers.get("x-user-role");
-
-  if (headerUserId && headerEmail && headerRole) {
-    return {
-      sub: headerUserId,
-      email: headerEmail,
-      role: headerRole,
-      name: req.headers.get("x-user-name") || "Usuário",
-      companyId: req.headers.get("x-user-company-id") || undefined,
-      exp: 0,
-      iat: 0,
-    };
-  }
-
-  // 2. Otherwise extract session token from cookie header
+  // The session is always re-derived from the signed cookie, never trusted
+  // from plain x-user-* request headers. Those headers used to be treated as
+  // pre-verified (set by proxy.ts after checking the cookie), but that made
+  // authentication depend entirely on proxy.ts running first and stripping
+  // any client-supplied copy of those headers on every path — including the
+  // public allowlist (/api/v1/auth/*, /api/v1/public/*), where they were not
+  // being stripped. A request could set x-user-id/x-user-email/x-user-role
+  // itself and be trusted as that user with no cookie at all. Verifying the
+  // HMAC-signed cookie here instead removes that trust boundary entirely:
+  // the cookie is the only source of truth, and this check is cheap (a
+  // single HMAC verify), so there's no real cost to doing it per request.
   const cookieHeader = req.headers.get("cookie") || "";
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`));
   const token = match ? decodeURIComponent(match[1]) : null;

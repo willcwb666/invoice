@@ -78,7 +78,13 @@ export async function PATCH(
     }
 
     const companyId = await getTargetCompanyId(session.companyId);
-    await ClientService.updateClient(id, companyId, parsed.data);
+    const result = await ClientService.updateClient(id, companyId, parsed.data);
+    if (result.count === 0) {
+      return NextResponse.json(
+        { error: "Cliente não encontrado." },
+        { status: 404 }
+      );
+    }
     const updated = await ClientService.getClientById(id, companyId);
 
     return NextResponse.json({ data: updated });
@@ -101,7 +107,13 @@ export async function DELETE(
   try {
     const { id } = await params;
     const companyId = await getTargetCompanyId(session.companyId);
-    await ClientService.deleteClient(id, companyId);
+    const result = await ClientService.deleteClient(id, companyId);
+    if (result.count === 0) {
+      return NextResponse.json(
+        { error: "Cliente não encontrado." },
+        { status: 404 }
+      );
+    }
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     return NextResponse.json(

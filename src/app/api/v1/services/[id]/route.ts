@@ -37,7 +37,13 @@ export async function PATCH(
     }
 
     const companyId = await getTargetCompanyId(session.companyId);
-    await ServiceCatalogService.updateService(id, companyId, parsed.data);
+    const result = await ServiceCatalogService.updateService(id, companyId, parsed.data);
+    if (result.count === 0) {
+      return NextResponse.json(
+        { error: "Serviço não encontrado." },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch {
@@ -69,7 +75,13 @@ export async function DELETE(
   try {
     const { id } = await params;
     const companyId = await getTargetCompanyId(session.companyId);
-    await ServiceCatalogService.deleteService(id, companyId);
+    const result = await ServiceCatalogService.deleteService(id, companyId);
+    if (result.count === 0) {
+      return NextResponse.json(
+        { error: "Serviço não encontrado." },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {

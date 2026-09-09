@@ -43,18 +43,23 @@ export class ExpenseService {
         }
       : undefined;
 
-    const [invoices, directAppointments, expenses] = await Promise.all([
-      prisma.invoice.findMany({
+    // Grouped/aggregated in the database - one row per status/per
+    // paid/per category instead of one row per invoice/appointment/expense
+    // pulled over the wire just to be summed in JS.
+    const [invoiceStatusTotals, apptPaidTotals, categoryTotals] = await Promise.all([
+      prisma.invoice.groupBy({
+        by: ["status"],
         where: {
           companyId,
           ...(dateFilter ? { issueDate: dateFilter } : {}),
         },
-        select: { status: true, totalAmount: true, paidAmount: true },
+        _sum: { totalAmount: true, paidAmount: true },
       }),
       // A maioria dos clientes nunca recebe uma Invoice - eles pagam direto
       // pela limpeza (ver PaymentService). invoiced=false evita somar de novo
       // um atendimento que já virou item de uma fatura (contado acima).
-      prisma.appointment.findMany({
+      prisma.appointment.groupBy({
+        by: ["paid"],
         where: {
           companyId,
           ...(dateFilter ? { date: dateFilter } : {}),
@@ -62,14 +67,15 @@ export class ExpenseService {
           status: "COMPLETED",
           invoiced: false,
         },
-        select: { price: true, paid: true },
+        _sum: { price: true },
       }),
-      prisma.expense.findMany({
+      prisma.expense.groupBy({
+        by: ["category"],
         where: {
           companyId,
           ...(dateFilter ? { date: dateFilter } : {}),
         },
-        select: { category: true, amount: true },
+        _sum: { amount: true },
       }),
     ]);
 
@@ -77,23 +83,23 @@ export class ExpenseService {
     let totalReceived = 0;
     let totalPending = 0;
 
-    for (const inv of invoices) {
-      const total = Number(inv.totalAmount);
-      const paid = Number(inv.paidAmount);
-      if (inv.status !== "CANCELLED") {
+    for (const row of invoiceStatusTotals) {
+      const total = Number(row._sum.totalAmount || 0);
+      const paid = Number(row._sum.paidAmount || 0);
+      if (row.status !== "CANCELLED") {
         totalBilled += total;
       }
-      if (inv.status === "PAID") {
+      if (row.status === "PAID") {
         totalReceived += total;
-      } else if (inv.status === "PENDING" || inv.status === "OVERDUE") {
+      } else if (row.status === "PENDING" || row.status === "OVERDUE") {
         totalPending += total - paid;
       }
     }
 
-    for (const appt of directAppointments) {
-      const price = Number(appt.price);
+    for (const row of apptPaidTotals) {
+      const price = Number(row._sum.price || 0);
       totalBilled += price;
-      if (appt.paid) {
+      if (row.paid) {
         totalReceived += price;
       } else {
         totalPending += price;
@@ -103,10 +109,10 @@ export class ExpenseService {
     let totalExpenses = 0;
     const expensesByCategory: Record<string, number> = {};
 
-    for (const exp of expenses) {
-      const amt = Number(exp.amount);
+    for (const row of categoryTotals) {
+      const amt = Number(row._sum.amount || 0);
       totalExpenses += amt;
-      expensesByCategory[exp.category] = (expensesByCategory[exp.category] || 0) + amt;
+      expensesByCategory[row.category] = amt;
     }
 
     const netProfit = totalReceived - totalExpenses;

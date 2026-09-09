@@ -269,11 +269,17 @@ export class InvoiceService {
    * Métricas do Dashboard para a empresa
    */
   static async getDashboardMetrics(companyId: string) {
-    const [invoices, clientCount, expenseSum] = await Promise.all([
-      prisma.invoice.findMany({
+    // Sums by status computed in the database (groupBy) instead of pulling
+    // every invoice row over the wire just to add them up in JS - the
+    // result set here is at most one row per InvoiceStatus value, not one
+    // per invoice.
+    const [statusTotals, totalInvoices, clientCount, expenseSum] = await Promise.all([
+      prisma.invoice.groupBy({
+        by: ["status"],
         where: { companyId },
-        select: { status: true, totalAmount: true, paidAmount: true },
+        _sum: { totalAmount: true },
       }),
+      prisma.invoice.count({ where: { companyId } }),
       prisma.client.count({ where: { companyId } }),
       prisma.expense.aggregate({
         where: { companyId },
@@ -281,17 +287,12 @@ export class InvoiceService {
       }),
     ]);
 
-    let totalPaid = 0;
-    let totalPending = 0;
-    let totalOverdue = 0;
+    const sumFor = (status: string) =>
+      Number(statusTotals.find((s) => s.status === status)?._sum.totalAmount || 0);
 
-    for (const inv of invoices) {
-      const val = Number(inv.totalAmount);
-      if (inv.status === "PAID") totalPaid += val;
-      else if (inv.status === "PENDING") totalPending += val;
-      else if (inv.status === "OVERDUE") totalOverdue += val;
-    }
-
+    const totalPaid = sumFor("PAID");
+    const totalPending = sumFor("PENDING");
+    const totalOverdue = sumFor("OVERDUE");
     const totalExpenses = Number(expenseSum._sum.amount || 0);
     const netProfit = totalPaid - totalExpenses;
 
@@ -299,7 +300,7 @@ export class InvoiceService {
       totalPaid,
       totalPending,
       totalOverdue,
-      totalInvoices: invoices.length,
+      totalInvoices,
       clientCount,
       totalExpenses,
       netProfit,

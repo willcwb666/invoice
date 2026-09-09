@@ -87,47 +87,50 @@ export class RevenueChartService {
       0
     ).getDate();
 
-    const periods: RevenuePeriod[] = [];
+    // Buckets are independent of each other - compute every range up front
+    // and fire all the current+previous lookups together, instead of
+    // awaiting one bucket's pair before starting the next bucket's.
+    const applicableBuckets = WEEK_BUCKETS.filter((b) => b.startDay <= lastDayOfMonth);
 
-    for (const bucket of WEEK_BUCKETS) {
-      const endDay = bucket.endDay ?? lastDayOfMonth;
-      if (bucket.startDay > lastDayOfMonth) break; // month has no such range (rare edge case)
+    const results = await Promise.all(
+      applicableBuckets.map(async (bucket) => {
+        const endDay = bucket.endDay ?? lastDayOfMonth;
+        const start = new Date(year, month, bucket.startDay, 0, 0, 0);
+        const end = new Date(year, month, Math.min(endDay, lastDayOfMonth), 23, 59, 59);
 
-      const start = new Date(year, month, bucket.startDay, 0, 0, 0);
-      const end = new Date(year, month, Math.min(endDay, lastDayOfMonth), 23, 59, 59);
+        const prevEndDay = bucket.endDay ?? lastDayOfPrevMonth;
+        const prevStart = new Date(
+          prevMonthDate.getFullYear(),
+          prevMonthDate.getMonth(),
+          bucket.startDay,
+          0, 0, 0
+        );
+        const prevEnd = new Date(
+          prevMonthDate.getFullYear(),
+          prevMonthDate.getMonth(),
+          Math.min(prevEndDay, lastDayOfPrevMonth),
+          23, 59, 59
+        );
 
-      const prevEndDay = bucket.endDay ?? lastDayOfPrevMonth;
-      const prevStart = new Date(
-        prevMonthDate.getFullYear(),
-        prevMonthDate.getMonth(),
-        bucket.startDay,
-        0, 0, 0
-      );
-      const prevEnd = new Date(
-        prevMonthDate.getFullYear(),
-        prevMonthDate.getMonth(),
-        Math.min(prevEndDay, lastDayOfPrevMonth),
-        23, 59, 59
-      );
+        const [current, previous] = await Promise.all([
+          sumRevenueAndExpenses(companyId, start, end),
+          bucket.startDay <= lastDayOfPrevMonth
+            ? sumRevenueAndExpenses(companyId, prevStart, prevEnd)
+            : Promise.resolve(null),
+        ]);
 
-      const [current, previous] = await Promise.all([
-        sumRevenueAndExpenses(companyId, start, end),
-        bucket.startDay <= lastDayOfPrevMonth
-          ? sumRevenueAndExpenses(companyId, prevStart, prevEnd)
-          : Promise.resolve(null),
-      ]);
+        return { bucket, current, previous };
+      })
+    );
 
-      periods.push({
-        label: `Semana ${periods.length + 1}`,
-        subLabel: bucket.label,
-        revenue: current.revenue,
-        expenses: current.expenses,
-        profit: current.revenue - current.expenses,
-        prevRevenue: previous?.revenue,
-      });
-    }
-
-    return periods;
+    return results.map(({ bucket, current, previous }, idx) => ({
+      label: `Semana ${idx + 1}`,
+      subLabel: bucket.label,
+      revenue: current.revenue,
+      expenses: current.expenses,
+      profit: current.revenue - current.expenses,
+      prevRevenue: previous?.revenue,
+    }));
   }
 
   /**
@@ -138,18 +141,29 @@ export class RevenueChartService {
     const now = new Date();
     // Fetch one extra month so the oldest displayed month has a real prevRevenue.
     const totalMonths = months + 1;
-    const monthlyTotals: { revenue: number; expenses: number; year: number; month: number }[] = [];
 
-    for (let i = totalMonths - 1; i >= 0; i--) {
+    // Each month's range is independent of every other's, so there's no
+    // reason to await them one at a time - that just serializes N round
+    // trips to the database for no benefit.
+    const monthRanges = Array.from({ length: totalMonths }, (_, idx) => {
+      const i = totalMonths - 1 - idx;
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const year = d.getFullYear();
       const month = d.getMonth();
-      const start = new Date(year, month, 1, 0, 0, 0);
-      const end = new Date(year, month + 1, 0, 23, 59, 59);
+      return {
+        year,
+        month,
+        start: new Date(year, month, 1, 0, 0, 0),
+        end: new Date(year, month + 1, 0, 23, 59, 59),
+      };
+    });
 
-      const { revenue, expenses } = await sumRevenueAndExpenses(companyId, start, end);
-      monthlyTotals.push({ revenue, expenses, year, month });
-    }
+    const monthlyTotals = await Promise.all(
+      monthRanges.map(async ({ year, month, start, end }) => {
+        const { revenue, expenses } = await sumRevenueAndExpenses(companyId, start, end);
+        return { revenue, expenses, year, month };
+      })
+    );
 
     const periods: RevenuePeriod[] = [];
     for (let i = 1; i < monthlyTotals.length; i++) {

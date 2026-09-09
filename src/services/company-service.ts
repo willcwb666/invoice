@@ -54,48 +54,61 @@ export class CompanyService {
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-    // Faturamento do mês (Faturas emitidas no mês atual)
-    const invoices = await prisma.invoice.findMany({
-      where: {
-        companyId,
-        issueDate: { gte: firstDay, lte: lastDay },
-      },
-      select: { status: true, totalAmount: true },
-    });
+    // Faturamento do mês, agregado no banco (uma linha por status/por
+    // paid, não uma linha por fatura/agendamento) em vez de trazer cada
+    // registro pra somar em JS.
+    const [invoiceStatusTotals, apptPaidTotals, futureAgg] = await Promise.all([
+      prisma.invoice.groupBy({
+        by: ["status"],
+        where: { companyId, issueDate: { gte: firstDay, lte: lastDay } },
+        _sum: { totalAmount: true },
+      }),
+      // A maioria dos clientes nunca recebe uma Invoice - eles pagam direto
+      // pela limpeza (ver PaymentService). invoiced=false evita contar de
+      // novo um atendimento que já virou item de uma fatura (já somado
+      // acima).
+      prisma.appointment.groupBy({
+        by: ["paid"],
+        where: {
+          companyId,
+          date: { gte: firstDay, lte: lastDay },
+          billable: true,
+          status: "COMPLETED",
+          invoiced: false,
+        },
+        _sum: { price: true },
+      }),
+      // Projeção futura com base na Agenda (Agendamentos futuros deste mês)
+      prisma.appointment.aggregate({
+        where: {
+          companyId,
+          date: { gt: now, lte: lastDay },
+          status: { not: "CANCELLED" },
+          billable: true,
+        },
+        _sum: { price: true },
+      }),
+    ]);
 
     let currentBilled = 0;
     let paidAmount = 0;
 
-    for (const inv of invoices) {
-      const val = Number(inv.totalAmount);
+    for (const row of invoiceStatusTotals) {
+      const val = Number(row._sum.totalAmount || 0);
       // DRAFT invoices haven't been issued to the client yet and CANCELLED
       // ones never will be - neither counts toward the billed goal.
-      if (inv.status !== "CANCELLED" && inv.status !== "DRAFT") {
+      if (row.status !== "CANCELLED" && row.status !== "DRAFT") {
         currentBilled += val;
       }
-      if (inv.status === "PAID") {
+      if (row.status === "PAID") {
         paidAmount += val;
       }
     }
 
-    // A maioria dos clientes nunca recebe uma Invoice - eles pagam direto
-    // pela limpeza (ver PaymentService). invoiced=false evita contar de novo
-    // um atendimento que já virou item de uma fatura (já somado acima).
-    const directAppointments = await prisma.appointment.findMany({
-      where: {
-        companyId,
-        date: { gte: firstDay, lte: lastDay },
-        billable: true,
-        status: "COMPLETED",
-        invoiced: false,
-      },
-      select: { price: true, paid: true },
-    });
-
-    for (const appt of directAppointments) {
-      const val = Number(appt.price);
+    for (const row of apptPaidTotals) {
+      const val = Number(row._sum.price || 0);
       currentBilled += val;
-      if (appt.paid) {
+      if (row.paid) {
         paidAmount += val;
       }
     }
@@ -103,21 +116,7 @@ export class CompanyService {
     const remaining = Math.max(0, goal - currentBilled);
     const progressPercent = Math.min(100, Math.round((currentBilled / goal) * 100));
 
-    // Projeção futura com base na Agenda (Agendamentos futuros deste mês)
-    const futureAppointments = await prisma.appointment.findMany({
-      where: {
-        companyId,
-        date: { gt: now, lte: lastDay },
-        status: { not: "CANCELLED" },
-        billable: true,
-      },
-      select: { price: true },
-    });
-
-    const projectedFromAgenda = futureAppointments.reduce(
-      (acc, app) => acc + Number(app.price),
-      0
-    );
+    const projectedFromAgenda = Number(futureAgg._sum.price || 0);
 
     const totalProjected = currentBilled + projectedFromAgenda;
     const projectedProgressPercent = Math.min(100, Math.round((totalProjected / goal) * 100));

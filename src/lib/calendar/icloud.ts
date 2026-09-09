@@ -844,6 +844,16 @@ export function parseIcsEvents(icsContent: string): ParsedIcsEvent[] {
   return events;
 }
 
+// Keyed by companyId so a manual "Sincronizar Agora" click, a second browser
+// tab doing the same, and the automatic sync triggered by a page load can
+// never run concurrently for the same company. Without this, two syncs
+// racing each other both load the same "does this occurrence already
+// exist" snapshot before either writes, both see no match, and both create
+// it — a permanent duplicate appointment. Every caller must go through the
+// exported syncICloudCalendarForCompany below, never the internal
+// implementation directly.
+const companySyncLocks = new Map<string, Promise<SyncICloudResult>>();
+
 /**
  * Executa a sincronização completa do calendário do iCloud para uma empresa:
  * 1. Valida e normaliza o link
@@ -851,8 +861,26 @@ export function parseIcsEvents(icsContent: string): ParsedIcsEvent[] {
  * 3. Faz o download do feed .ics
  * 4. Faz o parse dos eventos
  * 5. Mapeia/cria clientes e atualiza/insere agendamentos (Appointments)
+ *
+ * Locked per companyId (see companySyncLocks above) — a call that arrives
+ * while a sync for the same company is already running simply awaits that
+ * same in-flight result instead of starting a second, racing sync.
  */
-export async function syncICloudCalendarForCompany(
+export function syncICloudCalendarForCompany(
+  companyId: string,
+  rawUrl: string
+): Promise<SyncICloudResult> {
+  const inFlight = companySyncLocks.get(companyId);
+  if (inFlight) return inFlight;
+
+  const promise = syncICloudCalendarForCompanyUnlocked(companyId, rawUrl).finally(() => {
+    companySyncLocks.delete(companyId);
+  });
+  companySyncLocks.set(companyId, promise);
+  return promise;
+}
+
+async function syncICloudCalendarForCompanyUnlocked(
   companyId: string,
   rawUrl: string
 ): Promise<SyncICloudResult> {

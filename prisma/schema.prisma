@@ -234,12 +234,21 @@ model Appointment {
 
   services        AppointmentService[]
 
+  // Prevents two concurrent iCloud syncs (manual + auto, or two tabs) from
+  // both creating an appointment for the same calendar occurrence before
+  // either can see the other's write. Paired with the per-company sync
+  // lock in lib/calendar/icloud.ts, which closes the race at the
+  // application level too. externalEventId is null for INTERNAL/manually
+  // created appointments, and Postgres unique indexes allow any number of
+  // NULLs, so this only constrains ICLOUD_SYNC rows.
+  @@unique([companyId, externalEventId])
   @@index([companyId])
   @@index([clientId])
   @@index([date])
   @@index([status])
   @@index([billable])
   @@index([paid])
+  @@index([companyId, invoiced, billable, status])
   @@map("appointments")
 }
 

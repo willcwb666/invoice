@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { BUSINESS_TIMEZONE, zonedTimeToUtc, zonedPartsFromUtc } from "@/lib/calendar/timezone";
 
 // The real calendar subscription URL is a bearer secret — anyone holding it
 // can read the owner's private iCloud calendar. It must come from the
@@ -7,57 +8,33 @@ import { Prisma } from "@prisma/client";
 // repo or build artifact).
 export const DEFAULT_ICLOUD_URL = process.env.ICLOUD_CALENDAR_URL || "";
 
-// O negócio opera só em Evans/Greeley, Colorado - eventos "floating" do ICS
-// (sem Z e sem TZID, o formato mais comum vindo do Calendário do iPhone) são
-// sempre a hora de parede desse fuso, nunca a hora local do processo Node
-// que roda o sync (que na Vercel é UTC, e pode ser qualquer coisa em dev).
-const BUSINESS_TIMEZONE = "America/Denver";
+/** Dia da semana (0=domingo) de uma data de calendário - independe de fuso. */
+function calendarWeekday(year: number, month: number, day: number): number {
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
 
-/**
- * Converte um horário de parede (ano/mês/dia/hora/min/seg) interpretado no
- * fuso `timeZone` para o instante UTC correspondente - já considerando
- * horário de verão. Mesmo truque usado por bibliotecas como date-fns-tz:
- * assume os números como UTC, vê que hora isso aparenta no fuso alvo, e
- * corrige pela diferença (uma passada é suficiente, exceto no exato instante
- * de troca de DST, um caso raro e sem consequência aqui).
- */
-function zonedTimeToUtc(
+/** Soma dias de calendário a uma data (mês 1-based), sem envolver hora/fuso. */
+function addCalendarDays(
   year: number,
   month: number,
   day: number,
-  hour: number,
-  minute: number,
-  second: number,
-  timeZone: string
-): Date {
-  const utcGuess = Date.UTC(year, month, day, hour, minute, second);
+  days: number
+): { year: number; month: number; day: number } {
+  const d = new Date(Date.UTC(year, month - 1, day));
+  d.setUTCDate(d.getUTCDate() + days);
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
+}
 
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).formatToParts(new Date(utcGuess));
-
-  const map: Record<string, string> = {};
-  for (const part of parts) {
-    if (part.type !== "literal") map[part.type] = part.value;
-  }
-
-  const asIfUtc = Date.UTC(
-    parseInt(map.year, 10),
-    parseInt(map.month, 10) - 1,
-    parseInt(map.day, 10),
-    parseInt(map.hour, 10),
-    parseInt(map.minute, 10),
-    parseInt(map.second, 10)
-  );
-
-  return new Date(utcGuess + (utcGuess - asIfUtc));
+/** Soma meses de calendário a uma data (mês 1-based), sem envolver hora/fuso. */
+function addCalendarMonths(
+  year: number,
+  month: number,
+  day: number,
+  months: number
+): { year: number; month: number; day: number } {
+  const d = new Date(Date.UTC(year, month - 1, day));
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
 }
 
 export interface ParsedIcsEvent {
@@ -78,6 +55,7 @@ export interface SyncICloudResult {
   totalFound: number;
   created: number;
   updated: number;
+  canceled: number;
   normalizedUrl: string;
 }
 
@@ -325,12 +303,6 @@ function addDays(date: Date, days: number): Date {
   return d;
 }
 
-function addMonths(date: Date, months: number): Date {
-  const d = new Date(date);
-  d.setUTCMonth(d.getUTCMonth() + months);
-  return d;
-}
-
 function startOfDay(date: Date): Date {
   const d = new Date(date);
   d.setUTCHours(0, 0, 0, 0);
@@ -418,55 +390,84 @@ function expandRecurrence(
     return true;
   };
 
+  // Cada ocorrência é recalculada a partir do relógio de parede de Denver
+  // (data de calendário + zonedTimeToUtc), nunca por aritmética direta sobre
+  // o instante UTC de originalStart. A diferença importa porque Denver troca
+  // de UTC-6 para UTC-7 (e vice-versa) ao longo do ano: copiar a hora UTC de
+  // originalStart para toda ocorrência futura (como este código fazia antes)
+  // desalinha 1h assim que a série atravessa a troca de horário de verão. Da
+  // mesma forma, o dia da semana usado para BYDAY tem que ser o dia da
+  // semana em Denver, não o de UTC - um evento às 18h+ em Denver já é o dia
+  // seguinte em UTC, e usar getUTCDay() fazia a série cair um dia inteiro
+  // adiantada.
+  const originalLocal = zonedPartsFromUtc(originalStart, BUSINESS_TIMEZONE);
+
   if (rule.freq === "WEEKLY" && rule.byDay) {
     const sortedDays = [...rule.byDay].sort((a, b) => a - b);
-    let weekStart = addDays(originalStart, -originalStart.getUTCDay()); // domingo daquela semana
+    const originalWeekday = calendarWeekday(originalLocal.year, originalLocal.month, originalLocal.day);
+    let weekStart = addCalendarDays(
+      originalLocal.year,
+      originalLocal.month,
+      originalLocal.day,
+      -originalWeekday
+    ); // domingo daquela semana, em Denver
     let seriesIndex = 0;
     let weeksIterated = 0;
 
     while (weeksIterated < RECURRENCE_EXPANSION_CAP && results.length < RECURRENCE_EXPANSION_CAP) {
       weeksIterated++;
       for (const dayIdx of sortedDays) {
-        const occ = new Date(weekStart);
-        occ.setUTCDate(occ.getUTCDate() + dayIdx);
-        occ.setUTCHours(
-          originalStart.getUTCHours(),
-          originalStart.getUTCMinutes(),
-          originalStart.getUTCSeconds(),
-          0
+        const occDate = addCalendarDays(weekStart.year, weekStart.month, weekStart.day, dayIdx);
+        const occ = zonedTimeToUtc(
+          occDate.year,
+          occDate.month - 1,
+          occDate.day,
+          originalLocal.hour,
+          originalLocal.minute,
+          originalLocal.second,
+          BUSINESS_TIMEZONE
         );
         if (occ.getTime() < originalStart.getTime()) continue;
         const keepGoing = pushIfValid(occ, seriesIndex);
         seriesIndex++;
         if (!keepGoing) return results;
       }
-      weekStart = addDays(weekStart, 7 * rule.interval);
-      if (weekStart.getTime() > horizon.getTime()) break;
+      weekStart = addCalendarDays(weekStart.year, weekStart.month, weekStart.day, 7 * rule.interval);
+      if (Date.UTC(weekStart.year, weekStart.month - 1, weekStart.day) > horizon.getTime()) break;
     }
     return results;
   }
 
-  let occ = new Date(originalStart);
+  let currentLocal = { year: originalLocal.year, month: originalLocal.month, day: originalLocal.day };
   let seriesIndex = 0;
   let iterations = 0;
   while (iterations < RECURRENCE_EXPANSION_CAP) {
     iterations++;
+    const occ = zonedTimeToUtc(
+      currentLocal.year,
+      currentLocal.month - 1,
+      currentLocal.day,
+      originalLocal.hour,
+      originalLocal.minute,
+      originalLocal.second,
+      BUSINESS_TIMEZONE
+    );
     const keepGoing = pushIfValid(occ, seriesIndex);
     seriesIndex++;
     if (!keepGoing) break;
 
     switch (rule.freq) {
       case "DAILY":
-        occ = addDays(occ, rule.interval);
+        currentLocal = addCalendarDays(currentLocal.year, currentLocal.month, currentLocal.day, rule.interval);
         break;
       case "WEEKLY":
-        occ = addDays(occ, 7 * rule.interval);
+        currentLocal = addCalendarDays(currentLocal.year, currentLocal.month, currentLocal.day, 7 * rule.interval);
         break;
       case "MONTHLY":
-        occ = addMonths(occ, rule.interval);
+        currentLocal = addCalendarMonths(currentLocal.year, currentLocal.month, currentLocal.day, rule.interval);
         break;
       case "YEARLY":
-        occ = addMonths(occ, 12 * rule.interval);
+        currentLocal = addCalendarMonths(currentLocal.year, currentLocal.month, currentLocal.day, 12 * rule.interval);
         break;
     }
   }
@@ -882,6 +883,7 @@ export async function syncICloudCalendarForCompany(
       totalFound: 0,
       created: 0,
       updated: 0,
+      canceled: 0,
       normalizedUrl,
     };
   }
@@ -1156,9 +1158,34 @@ export async function syncICloudCalendarForCompany(
     }
   }
 
+  // 7. Cancel orphaned appointments: anything ICLOUD_SYNC created from a UID
+  //    that no longer appears in the current feed window. This happens both
+  //    when an event is deleted on the iPhone, and — less obviously — when a
+  //    recurring series is edited there as "this event and future events":
+  //    Apple's CalDAV export caps the old UID's RRULE with an UNTIL and
+  //    starts a brand new UID for the future occurrences, so without this
+  //    step the old UID's already-imported occurrences are silently orphaned
+  //    forever while the new UID imports the same slots again — the exact
+  //    duplicates reported by the user. Never touches a manually-edited,
+  //    already-completed, or in-progress appointment.
+  const feedUidSet = new Set(events.map((e) => e.uid));
+  let canceledCount = 0;
+  for (const appt of existingAppts) {
+    if (!appt.externalEventId) continue;
+    if (feedUidSet.has(appt.externalEventId)) continue;
+    if (appt.manuallyEdited) continue;
+    if (appt.status === "CANCELLED" || appt.status === "COMPLETED" || appt.status === "IN_PROGRESS") continue;
+
+    await prisma.appointment.update({
+      where: { id: appt.id },
+      data: { status: "CANCELLED" },
+    });
+    canceledCount++;
+  }
+
   const message =
-    createdCount > 0 || updatedCount > 0
-      ? `${createdCount} novos atendimentos importados e ${updatedCount} atualizados do iPhone da esposa. (${events.length} de ${allEvents.length} eventos no feed, janela de ${company.icloudSyncWindowDays || 60} dias a partir de hoje)`
+    createdCount > 0 || updatedCount > 0 || canceledCount > 0
+      ? `${createdCount} novos atendimentos importados, ${updatedCount} atualizados e ${canceledCount} cancelados (removidos do iPhone) do iPhone da esposa. (${events.length} de ${allEvents.length} eventos no feed, janela de ${company.icloudSyncWindowDays || 60} dias a partir de hoje)`
       : `${events.length} atendimentos sincronizados do iPhone (já atualizados).`;
 
   try {
@@ -1183,6 +1210,7 @@ export async function syncICloudCalendarForCompany(
           filteredToWindow: events.length,
           created: createdCount,
           updated: updatedCount,
+          canceled: canceledCount,
           message,
           sampleEvents: events.slice(0, 10).map((e) => ({
             uid: e.uid,
@@ -1208,6 +1236,7 @@ export async function syncICloudCalendarForCompany(
     totalFound: allEvents.length,
     created: createdCount,
     updated: updatedCount,
+    canceled: canceledCount,
     normalizedUrl,
   };
 }

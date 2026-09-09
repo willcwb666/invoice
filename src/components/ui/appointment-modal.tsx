@@ -16,6 +16,19 @@ import {
 } from "lucide-react";
 import { ClientModal } from "@/components/ui/client-modal";
 import { useToast } from "@/components/ui/toast";
+import { zonedTimeToUtc, zonedPartsFromUtc } from "@/lib/calendar/timezone";
+
+/** "HH:MM" de um horário armazenado (UTC) no fuso de Denver, para os campos de horário. */
+function toDenverTimeInput(isoOrDate: string | Date): string {
+  const p = zonedPartsFromUtc(new Date(isoOrDate));
+  return `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
+}
+
+/** "YYYY-MM-DD" de um horário armazenado (UTC) no fuso de Denver, para o campo de data. */
+function toDenverDateInput(isoOrDate: string | Date): string {
+  const p = zonedPartsFromUtc(new Date(isoOrDate));
+  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+}
 
 interface AppointmentModalProps {
   isOpen: boolean;
@@ -57,7 +70,7 @@ export function AppointmentModal({
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [autoTitle, setAutoTitle] = useState(""); // last title we auto-generated, so we don't clobber a manual edit
   const [title, setTitle] = useState("");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => toDenverDateInput(new Date()));
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("12:00");
   const [location, setLocation] = useState("");
@@ -108,9 +121,13 @@ export function AppointmentModal({
       setSelectedServiceIds(apptServiceIds);
       setAutoTitle("");
       setTitle(appointment.title || "");
-      setDate(new Date(appointment.date).toISOString().slice(0, 10));
-      setStartTime(new Date(appointment.startTime).toISOString().slice(11, 16));
-      setEndTime(new Date(appointment.endTime).toISOString().slice(11, 16));
+      // startTime/endTime são a fonte confiável de quando o atendimento é de
+      // fato (date pode ser meia-noite UTC do dia, ver appointment-service);
+      // usamos startTime também para a data exibida para não cair no mesmo
+      // problema de "vira o dia seguinte perto da meia-noite em Denver".
+      setDate(toDenverDateInput(appointment.startTime));
+      setStartTime(toDenverTimeInput(appointment.startTime));
+      setEndTime(toDenverTimeInput(appointment.endTime));
       setLocation(appointment.location || "");
       setPrice(Number(appointment.price) || 0);
       setNotes(appointment.notes || "");
@@ -121,7 +138,7 @@ export function AppointmentModal({
       setSelectedServiceIds([]);
       setAutoTitle("");
       setTitle("");
-      setDate(new Date().toISOString().slice(0, 10));
+      setDate(toDenverDateInput(new Date()));
       setStartTime("09:00");
       setEndTime("12:00");
       setLocation("");
@@ -185,9 +202,18 @@ export function AppointmentModal({
     setError(null);
 
     try {
-      const startDateTime = new Date(`${date}T${startTime}:00Z`).toISOString();
-      const endDateTime = new Date(`${date}T${endTime}:00Z`).toISOString();
-      const dateOnly = new Date(`${date}T00:00:00Z`).toISOString();
+      // "date"/"startTime"/"endTime" nos campos do formulário são horário de
+      // parede de Denver (é isso que a pessoa vê e digita), não UTC — usamos
+      // a mesma conversão fuso-aware que o sync do iCloud usa para o feed,
+      // em vez de simplesmente anexar "Z" e tratar o texto como se já fosse
+      // UTC (o que gravava todo agendamento manual 6-7h adiantado).
+      const [year, month, day] = date.split("-").map(Number);
+      const [startHour, startMinute] = startTime.split(":").map(Number);
+      const [endHour, endMinute] = endTime.split(":").map(Number);
+
+      const startDateTime = zonedTimeToUtc(year, month - 1, day, startHour, startMinute, 0).toISOString();
+      const endDateTime = zonedTimeToUtc(year, month - 1, day, endHour, endMinute, 0).toISOString();
+      const dateOnly = zonedTimeToUtc(year, month - 1, day, 0, 0, 0).toISOString();
 
       const payload: Record<string, unknown> = {
         clientId: selectedClientId,

@@ -68,10 +68,34 @@ export class CompanyService {
 
     for (const inv of invoices) {
       const val = Number(inv.totalAmount);
-      if (inv.status !== "CANCELLED") {
+      // DRAFT invoices haven't been issued to the client yet and CANCELLED
+      // ones never will be - neither counts toward the billed goal.
+      if (inv.status !== "CANCELLED" && inv.status !== "DRAFT") {
         currentBilled += val;
       }
       if (inv.status === "PAID") {
+        paidAmount += val;
+      }
+    }
+
+    // A maioria dos clientes nunca recebe uma Invoice - eles pagam direto
+    // pela limpeza (ver PaymentService). invoiced=false evita contar de novo
+    // um atendimento que já virou item de uma fatura (já somado acima).
+    const directAppointments = await prisma.appointment.findMany({
+      where: {
+        companyId,
+        date: { gte: firstDay, lte: lastDay },
+        billable: true,
+        status: "COMPLETED",
+        invoiced: false,
+      },
+      select: { price: true, paid: true },
+    });
+
+    for (const appt of directAppointments) {
+      const val = Number(appt.price);
+      currentBilled += val;
+      if (appt.paid) {
         paidAmount += val;
       }
     }
@@ -85,6 +109,7 @@ export class CompanyService {
         companyId,
         date: { gt: now, lte: lastDay },
         status: { not: "CANCELLED" },
+        billable: true,
       },
       select: { price: true },
     });

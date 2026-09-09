@@ -12,13 +12,13 @@ import {
   X,
   Receipt,
   Fuel,
-  Sparkles,
   Settings,
   LogOut,
   Loader2,
   CalendarCheck,
   UserCheck,
   Wrench,
+  Wallet,
 } from "lucide-react";
 
 const primaryNavItems = [
@@ -32,8 +32,8 @@ const secondaryNavItems = [
   { name: "Agenda", href: "/agenda", icon: Calendar },
   { name: "Serviços", href: "/services", icon: Wrench },
   { name: "Orçamentos", href: "/estimates", icon: Receipt },
+  { name: "Pagamentos", href: "/payments", icon: Wallet },
   { name: "Despesas", href: "/expenses", icon: Fuel },
-  { name: "Marketing IA", href: "/marketing", icon: Sparkles },
   { name: "Usuários & RBAC", href: "/users", icon: UserCheck },
   { name: "Configurações", href: "/settings", icon: Settings },
 ];

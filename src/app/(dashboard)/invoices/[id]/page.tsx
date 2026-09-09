@@ -232,19 +232,17 @@ export default function InvoiceDetailPage({
               </div>
 
               <div className="text-right text-xs text-slate-700">
-                <p>renatamatoz@gmail.com</p>
-                <p className="font-semibold text-slate-900">970 412 9406</p>
+                <p>{invoice.company?.email}</p>
+                <p className="font-semibold text-slate-900">{invoice.company?.phone}</p>
               </div>
             </div>
 
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 text-xs text-slate-700 border-b border-slate-300 pb-4">
               <div>
                 <p className="font-semibold text-slate-900 text-sm">
-                  {invoice.company?.name || "Renata Matos de Oliveira"}
+                  {invoice.company?.tradeName || invoice.company?.name}
                 </p>
-                <p className="font-mono">
-                  {invoice.providerAddress || "4172 MeadowView - Evans, CO - 80620"}
-                </p>
+                <p className="font-mono">{invoice.providerAddress}</p>
               </div>
             </div>
           </div>
@@ -325,14 +323,20 @@ export default function InvoiceDetailPage({
                   ${Number(invoice.subtotal || invoice.totalAmount).toFixed(2)}
                 </span>
               </div>
-              <div className="flex justify-between border-t border-slate-200 pt-1.5">
-                <span className="text-slate-600">Discount 0%</span>
-                <span className="font-mono text-slate-600">$0.00</span>
-              </div>
-              <div className="flex justify-between border-t border-slate-200 pt-1.5">
-                <span className="text-slate-600">Tax 0%</span>
-                <span className="font-mono text-slate-600">$0.00</span>
-              </div>
+              {Number(invoice.discount) > 0 && (
+                <div className="flex justify-between border-t border-slate-200 pt-1.5">
+                  <span className="text-slate-600">Discount</span>
+                  <span className="font-mono text-slate-600">
+                    -${Number(invoice.discount).toFixed(2)}
+                  </span>
+                </div>
+              )}
+              {Number(invoice.tax) > 0 && (
+                <div className="flex justify-between border-t border-slate-200 pt-1.5">
+                  <span className="text-slate-600">Tax</span>
+                  <span className="font-mono text-slate-600">${Number(invoice.tax).toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between border-t-2 border-slate-900 pt-2 text-sm">
                 <span className="font-bold text-slate-900">Balance Due</span>
                 <span className="font-bold font-mono text-slate-900 text-base">
@@ -347,10 +351,7 @@ export default function InvoiceDetailPage({
             <div className="space-y-4">
               <div>
                 <span className="font-bold text-slate-900 block mb-1">Terms</span>
-                <p className="text-slate-600">Payment is due within 7 days of invoice date.</p>
-                <p className="text-slate-600">
-                  Late payments are subject to a 1.5% monthly finance change.
-                </p>
+                <p className="text-slate-600 whitespace-pre-line">{invoice.company?.terms}</p>
               </div>
 
               {/* Real Signature from Example PDF */}
@@ -364,22 +365,15 @@ export default function InvoiceDetailPage({
 
             <div className="space-y-1.5 sm:text-left">
               <span className="font-bold text-slate-900 block mb-1">Payments methods:</span>
-              <p className="text-slate-700">
-                <strong className="text-slate-900">Zelle:</strong> 9704129406
-              </p>
-              <p className="text-slate-700">
-                <strong className="text-slate-900">Venmo:</strong> @RenataMatoz
-              </p>
-              <p className="text-slate-700">
-                <strong className="text-slate-900">Check payable to:</strong> Renata Matos de Oliveira
-              </p>
+              <p className="text-slate-700 whitespace-pre-line">{invoice.company?.paymentMethods}</p>
             </div>
           </div>
 
           {/* Footer */}
           <div className="border-t border-slate-300 pt-4 text-xs text-slate-600 space-y-1">
             <p>
-              If you have any questions regarding this invoice, please contact Renata Matos de Oliveira at the email above.
+              If you have any questions regarding this invoice, please contact{" "}
+              {invoice.company?.tradeName || invoice.company?.name} at the email above.
             </p>
             <p className="font-medium text-slate-900">Thank you for your business.</p>
           </div>

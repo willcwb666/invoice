@@ -19,6 +19,11 @@ export const createAppointmentSchema = z.object({
   origin: z
     .enum(["INTERNAL", "ICLOUD_SYNC", "PUBLIC_BOOKING"])
     .default("INTERNAL"),
+  // Não Faturável: false exclui este atendimento de toda a parte financeira
+  // (meta mensal, gráfico de receita, tela de Pagamentos) mesmo com um preço
+  // preenchido - útil para eventos sincronizados do iCloud que não são
+  // trabalhos pagos.
+  billable: z.boolean().default(true),
   notes: z.string().trim().max(1000, "Observações muito longas").optional().nullable(),
 });
 

@@ -36,10 +36,12 @@ export default function PublicInvoicePayPage({ params }: { params: Promise<{ id:
     return (
       <div className="p-12 text-center bg-white rounded-2xl shadow-md space-y-2">
         <h2 className="text-xl font-bold text-slate-800">Invoice not found</h2>
-        <p className="text-xs text-slate-500">Please check the link provided by Renata Matos de Oliveira.</p>
+        <p className="text-xs text-slate-500">Please check the link provided by the sender.</p>
       </div>
     );
   }
+
+  const companyDisplayName = invoice.company?.tradeName || invoice.company?.name || "";
 
   return (
     <div className="space-y-6">
@@ -47,7 +49,7 @@ export default function PublicInvoicePayPage({ params }: { params: Promise<{ id:
       <div className="flex items-center justify-between print:hidden">
         <div>
           <span className="text-xs text-slate-500">Official Invoice from</span>
-          <h2 className="text-sm font-bold text-slate-900">Renata Matos de Oliveira</h2>
+          <h2 className="text-sm font-bold text-slate-900">{companyDisplayName}</h2>
         </div>
         <button
           onClick={() => window.print()}
@@ -65,12 +67,12 @@ export default function PublicInvoicePayPage({ params }: { params: Promise<{ id:
           <h1 className="text-3xl font-normal text-slate-900 tracking-tight mb-4">Invoice</h1>
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 text-xs text-slate-700 border-b border-slate-300 pb-4">
             <div>
-              <p className="font-semibold text-slate-900 text-sm">Renata Matos de Oliveira</p>
-              <p className="font-mono">{invoice.providerAddress || "4172 MeadowView - Evans, CO - 80620"}</p>
+              <p className="font-semibold text-slate-900 text-sm">{companyDisplayName}</p>
+              <p className="font-mono">{invoice.providerAddress}</p>
             </div>
             <div className="sm:text-right">
-              <p>renatamatoz@gmail.com</p>
-              <p className="font-semibold text-slate-900">970 412 9406</p>
+              <p>{invoice.company?.email}</p>
+              <p className="font-semibold text-slate-900">{invoice.company?.phone}</p>
             </div>
           </div>
         </div>
@@ -133,14 +135,20 @@ export default function PublicInvoicePayPage({ params }: { params: Promise<{ id:
                 ${Number(invoice.subtotal || invoice.totalAmount).toFixed(2)}
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">Discount 0%:</span>
-              <span className="font-mono text-slate-600">$0.00</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">Tax 0%:</span>
-              <span className="font-mono text-slate-600">$0.00</span>
-            </div>
+            {Number(invoice.discount) > 0 && (
+              <div className="flex justify-between">
+                <span className="text-slate-600">Discount:</span>
+                <span className="font-mono text-slate-600">
+                  -${Number(invoice.discount).toFixed(2)}
+                </span>
+              </div>
+            )}
+            {Number(invoice.tax) > 0 && (
+              <div className="flex justify-between">
+                <span className="text-slate-600">Tax:</span>
+                <span className="font-mono text-slate-600">${Number(invoice.tax).toFixed(2)}</span>
+              </div>
+            )}
             <div className="flex justify-between border-t-2 border-slate-900 pt-2 text-sm">
               <span className="font-bold text-slate-900">Balance Due:</span>
               <span className="font-bold font-mono text-slate-900 text-base">
@@ -153,29 +161,29 @@ export default function PublicInvoicePayPage({ params }: { params: Promise<{ id:
         {/* Payment Methods Box */}
         <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2">
           <span className="font-bold text-slate-900 text-sm block">How to Pay:</span>
-          <p className="text-slate-700">
-            <strong>Zelle:</strong> <span className="font-mono font-bold text-indigo-600 text-sm">9704129406</span>
-          </p>
-          <p className="text-slate-700">
-            <strong>Venmo:</strong> <span className="font-mono font-bold text-indigo-600 text-sm">@RenataMatoz</span>
-          </p>
-          <p className="text-slate-700">
-            <strong>Check payable to:</strong> Renata Matos de Oliveira
-          </p>
+          <p className="text-slate-700 whitespace-pre-line">{invoice.company?.paymentMethods}</p>
         </div>
 
         {/* Signature & Terms */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs border-t border-slate-200 pt-4">
           <div className="space-y-1">
             <span className="font-bold text-slate-900 block">Terms:</span>
-            <p className="text-slate-600">Payment is due within 7 days of invoice date.</p>
-            <p className="text-slate-600">Late payments are subject to a 1.5% monthly finance charge.</p>
-            <div className="pt-3 font-serif italic text-2xl text-blue-800 font-semibold">
-              Renata Matos
-            </div>
+            <p className="text-slate-600 whitespace-pre-line">{invoice.company?.terms}</p>
+            {invoice.company?.signatureUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={invoice.company.signatureUrl}
+                alt="Assinatura"
+                className="h-10 object-contain mt-3"
+              />
+            ) : (
+              <div className="pt-3 font-serif italic text-2xl text-blue-800 font-semibold">
+                {companyDisplayName}
+              </div>
+            )}
           </div>
           <div className="text-slate-500 sm:text-right text-[11px] pt-4">
-            If you have questions, please contact Renata Matos de Oliveira at 970 412 9406.<br />
+            If you have questions, please contact {companyDisplayName} at {invoice.company?.phone}.<br />
             <strong>Thank you for your business!</strong>
           </div>
         </div>

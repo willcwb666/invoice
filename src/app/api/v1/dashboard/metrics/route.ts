@@ -3,6 +3,7 @@ import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { CompanyService } from "@/services/company-service";
 import { InvoiceService } from "@/services/invoice-service";
 import { ExpenseService } from "@/services/expense-service";
+import { PaymentService } from "@/services/payment-service";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/security/permissions";
 
@@ -27,10 +28,11 @@ export async function GET(req: NextRequest) {
   try {
     const companyId = await getTargetCompanyId(session.companyId);
 
-    const [goalProgress, invoiceMetrics, financialSummary] = await Promise.all([
+    const [goalProgress, invoiceMetrics, financialSummary, pendingPayments] = await Promise.all([
       CompanyService.getMonthlyGoalProgress(companyId),
       InvoiceService.getDashboardMetrics(companyId),
       ExpenseService.getFinancialSummary(companyId),
+      PaymentService.getPendingSummary(companyId),
     ]);
 
     return NextResponse.json({
@@ -38,6 +40,7 @@ export async function GET(req: NextRequest) {
         goal: goalProgress,
         invoices: invoiceMetrics,
         financial: financialSummary,
+        pendingPayments,
       },
     });
   } catch {

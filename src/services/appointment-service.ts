@@ -62,6 +62,7 @@ export class AppointmentService {
         location,
         price: new Prisma.Decimal(data.price),
         origin: data.origin,
+        billable: data.billable,
         notes: data.notes || null,
         ...(services.length
           ? { services: { create: services.map((s) => ({ serviceId: s.id, price: s.basePrice })) } }

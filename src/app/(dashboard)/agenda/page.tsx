@@ -115,6 +115,7 @@ interface Appointment {
   date: string;
   startTime: string;
   price: number | string;
+  billable?: boolean;
   client?: { name: string };
 }
 
@@ -569,11 +570,21 @@ export default function AgendaPage() {
                             <div className="text-[10px] text-indigo-600 font-medium truncate mt-0.5">
                               {appt.title}
                             </div>
-                            <div className="text-[9px] text-slate-500 font-mono mt-0.5">
-                              {new Date(appt.startTime).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
+                            <div className="flex items-center justify-between mt-0.5">
+                              <span className="text-[9px] text-slate-500 font-mono">
+                                {new Date(appt.startTime).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                              {appt.billable === false && (
+                                <span
+                                  className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-200 text-slate-600"
+                                  title="Não faturável - não entra no financeiro"
+                                >
+                                  N/F
+                                </span>
+                              )}
                             </div>
                           </div>
                         ))

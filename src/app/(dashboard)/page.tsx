@@ -56,6 +56,7 @@ export default function DashboardPage() {
 
   const goal = data?.metrics?.goal;
   const financial = data?.metrics?.financial;
+  const pendingPayments = data?.metrics?.pendingPayments;
 
   return (
     <div className="bg-[#f8fafc] min-h-screen">
@@ -127,6 +128,39 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+          </motion.div>
+        )}
+
+        {/* Alerta de Pagamentos Pendentes (atendimentos de ontem para trás sem pagamento registrado) */}
+        {pendingPayments?.count > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-5 rounded-2xl bg-amber-50 border border-amber-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+          >
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="p-2.5 rounded-xl bg-amber-100 text-amber-700 border border-amber-200 shrink-0">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-amber-900 text-sm">
+                  {pendingPayments.count} pagamento{pendingPayments.count > 1 ? "s" : ""} pendente
+                  {pendingPayments.count > 1 ? "s" : ""} —{" "}
+                  <span className="font-mono">
+                    ${pendingPayments.totalPending.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  </span>
+                </h3>
+                <p className="text-xs text-amber-800/80 mt-0.5">
+                  Atendimentos concluídos até ontem que ainda não foram marcados como pagos.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/payments"
+              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-sm transition-colors shrink-0 text-center"
+            >
+              Ver Pagamentos
+            </Link>
           </motion.div>
         )}
 

@@ -10,8 +10,8 @@ export type ScreenId =
   | "appointments"
   | "agenda"
   | "services"
+  | "payments"
   | "expenses"
-  | "marketing"
   | "settings"
   | "users";
 
@@ -90,18 +90,18 @@ export const SYSTEM_SCREENS: ScreenDefinition[] = [
     category: "operations",
   },
   {
+    id: "payments",
+    name: "Pagamentos",
+    route: "/payments",
+    description: "Controle de quais atendimentos já foram pagos pelo cliente e o que está pendente.",
+    category: "financial",
+  },
+  {
     id: "expenses",
     name: "Despesas",
     route: "/expenses",
     description: "Lançamento de combustível, produtos de limpeza e comprovantes de gastos.",
     category: "financial",
-  },
-  {
-    id: "marketing",
-    name: "Marketing",
-    route: "/marketing",
-    description: "Gerador de posts com Inteligência Artificial e captação de clientes.",
-    category: "core",
   },
   {
     id: "settings",
@@ -132,7 +132,7 @@ export const ROLE_DEFINITIONS: Record<Role, RoleDefinition> = {
     id: "ADMIN",
     name: "Administrador",
     badgeColor: "bg-indigo-50 text-indigo-700 border-indigo-200",
-    description: "Acesso irrestrito a todas as 10 telas e funcionalidades do sistema.",
+    description: "Acesso irrestrito a todas as 11 telas e funcionalidades do sistema.",
     scope: "Gestão Total, Configurações, Usuários & Aprovações",
   },
   FINANCIAL: {
@@ -169,8 +169,8 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     appointments: { read: true, create: true, update: true, delete: true, export: true },
     agenda: { read: true, create: true, update: true, delete: true, export: true },
     services: { read: true, create: true, update: true, delete: true, export: true },
+    payments: { read: true, create: true, update: true, delete: true, export: true },
     expenses: { read: true, create: true, update: true, delete: true, export: true },
-    marketing: { read: true, create: true, update: true, delete: true, export: true },
     settings: { read: true, create: true, update: true, delete: true, export: true },
     users: { read: true, create: true, update: true, delete: true, export: true },
   },
@@ -182,8 +182,8 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     appointments: { read: true, create: false, update: false, delete: false, export: true },
     agenda: { read: true, create: false, update: false, delete: false, export: false },
     services: { read: true, create: true, update: true, delete: false, export: true },
+    payments: { read: true, create: false, update: true, delete: false, export: true },
     expenses: { read: true, create: true, update: true, delete: true, export: true },
-    marketing: { read: true, create: false, update: false, delete: false, export: false },
     settings: { read: false, create: false, update: false, delete: false, export: false },
     users: { read: false, create: false, update: false, delete: false, export: false },
   },
@@ -195,8 +195,8 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     appointments: { read: true, create: true, update: true, delete: false, export: true },
     agenda: { read: true, create: true, update: true, delete: false, export: true },
     services: { read: true, create: true, update: true, delete: false, export: false },
+    payments: { read: false, create: false, update: false, delete: false, export: false },
     expenses: { read: true, create: true, update: false, delete: false, export: false },
-    marketing: { read: false, create: false, update: false, delete: false, export: false },
     settings: { read: false, create: false, update: false, delete: false, export: false },
     users: { read: false, create: false, update: false, delete: false, export: false },
   },
@@ -208,8 +208,8 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     appointments: { read: true, create: false, update: false, delete: false, export: true },
     agenda: { read: true, create: false, update: false, delete: false, export: false },
     services: { read: true, create: false, update: false, delete: false, export: false },
+    payments: { read: true, create: false, update: false, delete: false, export: true },
     expenses: { read: true, create: false, update: false, delete: false, export: false },
-    marketing: { read: true, create: false, update: false, delete: false, export: false },
     settings: { read: false, create: false, update: false, delete: false, export: false },
     users: { read: false, create: false, update: false, delete: false, export: false },
   },

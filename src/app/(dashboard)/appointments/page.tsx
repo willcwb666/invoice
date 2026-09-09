@@ -20,6 +20,7 @@ import {
   CalendarCheck,
   ChevronLeft,
   ChevronRight,
+  Ban,
 } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { AppointmentModal } from "@/components/ui/appointment-modal";
@@ -183,11 +184,13 @@ export default function AppointmentsPage() {
     const completed = appointments.filter((a) => a.status === "COMPLETED").length;
     const scheduled = appointments.filter((a) => a.status === "SCHEDULED").length;
     const revenue = appointments.reduce(
-      (acc, a) => acc + (a.status === "COMPLETED" ? Number(a.price || 0) : 0),
+      (acc, a) =>
+        acc + (a.status === "COMPLETED" && a.billable !== false ? Number(a.price || 0) : 0),
       0
     );
     const pendingRevenue = appointments.reduce(
-      (acc, a) => acc + (a.status === "SCHEDULED" ? Number(a.price || 0) : 0),
+      (acc, a) =>
+        acc + (a.status === "SCHEDULED" && a.billable !== false ? Number(a.price || 0) : 0),
       0
     );
 
@@ -258,6 +261,12 @@ export default function AppointmentsPage() {
               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
                 <Smartphone className="w-2.5 h-2.5" />
                 <span>iPhone</span>
+              </span>
+            )}
+            {appt.billable === false && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-100 text-slate-500 border border-slate-200 shrink-0">
+                <Ban className="w-2.5 h-2.5" />
+                <span>Não Faturável</span>
               </span>
             )}
           </div>

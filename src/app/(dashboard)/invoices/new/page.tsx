@@ -42,6 +42,12 @@ export default function NewInvoicePage() {
   const [error, setError] = useState("");
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
 
+  // null = not loaded yet for the current client (shows the loading state);
+  // [] = loaded and this client simply has no uninvoiced completed jobs.
+  const [uninvoicedAppointments, setUninvoicedAppointments] = useState<any[] | null>(null);
+  const [selectedAppointmentIds, setSelectedAppointmentIds] = useState<string[]>([]);
+  const loadingAppointments = Boolean(selectedClientId) && uninvoicedAppointments === null;
+
   const fetchClients = async () => {
     try {
       const res = await fetch("/api/v1/clients");
@@ -58,14 +64,34 @@ export default function NewInvoicePage() {
     fetchClients();
   }, []);
 
+  // Whenever the client changes, reload their completed-but-not-yet-invoiced
+  // jobs so they can be billed with one click instead of retyped by hand.
+  useEffect(() => {
+    if (!selectedClientId) return;
+    fetch(`/api/v1/appointments?clientId=${selectedClientId}&uninvoiced=true`)
+      .then((r) => r.json())
+      .then((json) => setUninvoicedAppointments(json.data || []))
+      .catch(() => setUninvoicedAppointments([]));
+  }, [selectedClientId]);
+
+  const handleClientChange = (id: string) => {
+    setSelectedClientId(id);
+    setSelectedAppointmentIds([]);
+    setUninvoicedAppointments(id ? null : []);
+  };
+
+  const toggleAppointment = (id: string) => {
+    setSelectedAppointmentIds((prev) =>
+      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
+    );
+  };
+
   const addItem = (description = "", unitPrice = 100) => {
     setItems([...items, { description, quantity: 1, unitPrice }]);
   };
 
   const removeItem = (idx: number) => {
-    if (items.length > 1) {
-      setItems(items.filter((_, i) => i !== idx));
-    }
+    setItems(items.filter((_, i) => i !== idx));
   };
 
   const updateItem = (idx: number, field: string, value: any) => {
@@ -74,11 +100,21 @@ export default function NewInvoicePage() {
     setItems(updated);
   };
 
-  const total = items.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0);
+  const appointmentsTotal = (uninvoicedAppointments || [])
+    .filter((a) => selectedAppointmentIds.includes(a.id))
+    .reduce((acc, a) => acc + Number(a.price), 0);
+  const itemsTotal = items.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0);
+  const total = appointmentsTotal + itemsTotal;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (items.length === 0 && selectedAppointmentIds.length === 0) {
+      setError("Adicione ao menos um item manual ou selecione um agendamento concluído.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -96,6 +132,7 @@ export default function NewInvoicePage() {
             quantity: Number(it.quantity),
             unitPrice: Number(it.unitPrice),
           })),
+          appointmentIds: selectedAppointmentIds,
         }),
       });
 
@@ -151,7 +188,7 @@ export default function NewInvoicePage() {
               <select
                 required
                 value={selectedClientId}
-                onChange={(e) => setSelectedClientId(e.target.value)}
+                onChange={(e) => handleClientChange(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-900 focus:outline-none focus:border-indigo-500 shadow-2xs cursor-pointer"
               >
                 <option value="">Selecione o cliente...</option>
@@ -209,6 +246,57 @@ export default function NewInvoicePage() {
             </div>
           </div>
 
+          {/* Agendamentos concluídos ainda não faturados deste cliente */}
+          {selectedClientId && (loadingAppointments || (uninvoicedAppointments?.length ?? 0) > 0) && (
+            <div className="space-y-2.5 pt-1">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Serviços Concluídos Ainda Não Faturados
+                </span>
+                <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Selecione para faturar automaticamente</span>
+                </div>
+              </div>
+
+              {loadingAppointments ? (
+                <p className="text-xs text-slate-400">Buscando agendamentos do cliente...</p>
+              ) : (
+                <div className="space-y-2">
+                  {(uninvoicedAppointments || []).map((appt) => {
+                    const checked = selectedAppointmentIds.includes(appt.id);
+                    return (
+                      <label
+                        key={appt.id}
+                        className={`flex items-center gap-3 p-3 rounded-xl border text-xs cursor-pointer transition-colors ${
+                          checked
+                            ? "bg-indigo-50 border-indigo-300"
+                            : "bg-white border-slate-200 hover:border-slate-300"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleAppointment(appt.id)}
+                          className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <div className="flex-1">
+                          <p className="font-semibold text-slate-900">{appt.title}</p>
+                          <p className="text-slate-500 font-mono text-[11px]">
+                            {new Date(appt.date).toLocaleDateString("en-US")}
+                          </p>
+                        </div>
+                        <span className="font-mono font-bold text-slate-900">
+                          ${Number(appt.price).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Itens da Fatura */}
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -262,15 +350,13 @@ export default function NewInvoicePage() {
                         className="w-24 pl-6 pr-2 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 font-mono shadow-2xs focus:outline-none focus:border-indigo-500"
                       />
                     </div>
-                    {items.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeItem(idx)}
-                        className="p-2 text-rose-500 hover:text-rose-700 rounded-lg hover:bg-rose-50 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeItem(idx)}
+                      className="p-2 text-rose-500 hover:text-rose-700 rounded-lg hover:bg-rose-50 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))}

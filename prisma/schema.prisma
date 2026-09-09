@@ -216,6 +216,18 @@ model Appointment {
   invoiced        Boolean              @default(false)
   invoiceId       String?
   invoice         Invoice?             @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  // Não Faturável: quando false, este atendimento nunca entra em nenhum
+  // cálculo financeiro (meta mensal, gráfico de receita, tela de Pagamentos)
+  // mesmo tendo um valor preenchido - útil para eventos sincronizados do
+  // iCloud que não são trabalhos pagos (compromisso pessoal, cortesia etc).
+  billable        Boolean              @default(true)
+  // Pagamento direto do atendimento (cliente que paga por limpeza, quinzenal
+  // ou no fim do mês, sem fatura formal). Só tem sentido quando invoiced=false
+  // - um atendimento já faturado usa o status da Invoice como fonte única
+  // de verdade, nunca os dois ao mesmo tempo.
+  paid            Boolean              @default(false)
+  paidAt          DateTime?
+  paymentMethod   String?
   notes           String?
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
@@ -226,6 +238,8 @@ model Appointment {
   @@index([clientId])
   @@index([date])
   @@index([status])
+  @@index([billable])
+  @@index([paid])
   @@map("appointments")
 }
 

@@ -37,6 +37,11 @@ export class InvoiceService {
           },
         },
         items: true,
+        company: {
+          include: {
+            addresses: true,
+          },
+        },
       },
     });
   }
@@ -63,7 +68,9 @@ export class InvoiceService {
   }
 
   /**
-   * Busca fatura pública com cliente e itens (segura para acesso externo)
+   * Busca fatura pública com cliente, itens e dados da empresa emissora
+   * (segura para acesso externo - só campos que já aparecem em uma fatura
+   * impressa, nunca configurações internas como rolePermissions ou metas).
    */
   static async getPublicInvoiceById(id: string) {
     return prisma.invoice.findUnique({
@@ -82,6 +89,18 @@ export class InvoiceService {
           },
         },
         items: true,
+        company: {
+          select: {
+            name: true,
+            tradeName: true,
+            email: true,
+            phone: true,
+            paymentMethods: true,
+            terms: true,
+            signatureUrl: true,
+            logoUrl: true,
+          },
+        },
       },
     });
   }
@@ -118,16 +137,13 @@ export class InvoiceService {
   }
 
   /**
-   * Cria fatura com cálculo atômico e snapshot do endereço vigente da empresa
+   * Cria fatura com cálculo atômico e snapshot do endereço vigente da empresa.
+   * Aceita itens digitados manualmente e/ou agendamentos concluídos ainda não
+   * faturados (data.appointmentIds) - cada agendamento vira uma linha da
+   * fatura automaticamente e é marcado invoiced=true na mesma transação,
+   * para nunca poder ser faturado duas vezes.
    */
   static async createInvoice(companyId: string, data: CreateInvoiceInput) {
-    const totalAmount = data.items.reduce((acc, item) => {
-      const itemTotal = new Prisma.Decimal(item.quantity).mul(
-        new Prisma.Decimal(item.unitPrice)
-      );
-      return acc.add(itemTotal);
-    }, new Prisma.Decimal(0));
-
     const providerAddress = await CompanyService.getDefaultAddress(companyId);
 
     return prisma.$transaction(async (tx) => {
@@ -139,7 +155,48 @@ export class InvoiceService {
         throw new Error("Cliente não encontrado.");
       }
 
-      return tx.invoice.create({
+      let appointments: { id: string; title: string; date: Date; price: Prisma.Decimal }[] = [];
+      if (data.appointmentIds.length > 0) {
+        appointments = await tx.appointment.findMany({
+          where: {
+            id: { in: data.appointmentIds },
+            companyId,
+            clientId: data.clientId,
+            status: "COMPLETED",
+            invoiced: false,
+          },
+          select: { id: true, title: true, date: true, price: true },
+        });
+
+        if (appointments.length !== data.appointmentIds.length) {
+          throw new Error(
+            "Um ou mais agendamentos selecionados não foram encontrados, não pertencem a este cliente, não estão concluídos ou já foram faturados."
+          );
+        }
+      }
+
+      const appointmentItems = appointments.map((appt) => ({
+        description: appt.title,
+        serviceDate: appt.date,
+        quantity: 1,
+        unitPrice: appt.price,
+        total: appt.price,
+      }));
+
+      const manualItems = data.items.map((item) => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: new Prisma.Decimal(item.unitPrice),
+        total: new Prisma.Decimal(item.quantity).mul(new Prisma.Decimal(item.unitPrice)),
+      }));
+
+      const allItems = [...appointmentItems, ...manualItems];
+      const totalAmount = allItems.reduce(
+        (acc, item) => acc.add(item.total),
+        new Prisma.Decimal(0)
+      );
+
+      const invoice = await tx.invoice.create({
         data: {
           companyId,
           clientId: data.clientId,
@@ -151,14 +208,7 @@ export class InvoiceService {
           totalAmount,
           notes: data.notes || null,
           items: {
-            create: data.items.map((item) => ({
-              description: item.description,
-              quantity: item.quantity,
-              unitPrice: new Prisma.Decimal(item.unitPrice),
-              total: new Prisma.Decimal(item.quantity).mul(
-                new Prisma.Decimal(item.unitPrice)
-              ),
-            })),
+            create: allItems,
           },
         },
         include: {
@@ -166,6 +216,15 @@ export class InvoiceService {
           items: true,
         },
       });
+
+      if (appointments.length > 0) {
+        await tx.appointment.updateMany({
+          where: { id: { in: appointments.map((a) => a.id) } },
+          data: { invoiced: true, invoiceId: invoice.id },
+        });
+      }
+
+      return invoice;
     });
   }
 

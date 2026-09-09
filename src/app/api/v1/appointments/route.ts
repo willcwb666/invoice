@@ -30,6 +30,15 @@ export async function GET(req: NextRequest) {
   try {
     await ensureExampleInvoicesSeeded();
     const companyId = await getTargetCompanyId(session.companyId);
+
+    const clientId = req.nextUrl.searchParams.get("clientId");
+    const uninvoicedOnly = req.nextUrl.searchParams.get("uninvoiced") === "true";
+
+    if (clientId && uninvoicedOnly) {
+      const uninvoiced = await AppointmentService.getUninvoicedAppointments(clientId, companyId);
+      return NextResponse.json({ data: uninvoiced });
+    }
+
     const appts = await AppointmentService.listAppointments(companyId);
 
     return NextResponse.json({ data: appts });

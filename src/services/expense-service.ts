@@ -43,13 +43,26 @@ export class ExpenseService {
         }
       : undefined;
 
-    const [invoices, expenses] = await Promise.all([
+    const [invoices, directAppointments, expenses] = await Promise.all([
       prisma.invoice.findMany({
         where: {
           companyId,
           ...(dateFilter ? { issueDate: dateFilter } : {}),
         },
         select: { status: true, totalAmount: true, paidAmount: true },
+      }),
+      // A maioria dos clientes nunca recebe uma Invoice - eles pagam direto
+      // pela limpeza (ver PaymentService). invoiced=false evita somar de novo
+      // um atendimento que já virou item de uma fatura (contado acima).
+      prisma.appointment.findMany({
+        where: {
+          companyId,
+          ...(dateFilter ? { date: dateFilter } : {}),
+          billable: true,
+          status: "COMPLETED",
+          invoiced: false,
+        },
+        select: { price: true, paid: true },
       }),
       prisma.expense.findMany({
         where: {
@@ -74,6 +87,16 @@ export class ExpenseService {
         totalReceived += total;
       } else if (inv.status === "PENDING" || inv.status === "OVERDUE") {
         totalPending += total - paid;
+      }
+    }
+
+    for (const appt of directAppointments) {
+      const price = Number(appt.price);
+      totalBilled += price;
+      if (appt.paid) {
+        totalReceived += price;
+      } else {
+        totalPending += price;
       }
     }
 

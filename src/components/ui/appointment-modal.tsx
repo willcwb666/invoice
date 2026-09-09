@@ -64,6 +64,7 @@ export function AppointmentModal({
   const [price, setPrice] = useState(0);
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<AppointmentStatus>("SCHEDULED");
+  const [billable, setBillable] = useState(true);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +115,7 @@ export function AppointmentModal({
       setPrice(Number(appointment.price) || 0);
       setNotes(appointment.notes || "");
       setStatus((appointment.status as AppointmentStatus) || "SCHEDULED");
+      setBillable(appointment.billable !== false);
     } else {
       setSelectedClientId("");
       setSelectedServiceIds([]);
@@ -126,6 +128,7 @@ export function AppointmentModal({
       setPrice(0);
       setNotes("");
       setStatus("SCHEDULED");
+      setBillable(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, appointment]);
@@ -196,6 +199,7 @@ export function AppointmentModal({
         location: location || null,
         price: Number(price),
         notes: notes || null,
+        billable,
       };
 
       if (isEditing) {
@@ -497,6 +501,24 @@ export function AppointmentModal({
                     className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs resize-none"
                   />
                 </div>
+
+                {/* Não Faturável */}
+                <label className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!billable}
+                    onChange={(e) => setBillable(!e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>
+                    <span className="font-semibold text-slate-900 block">Não Faturável</span>
+                    <span className="text-slate-500">
+                      Marque para eventos que não devem contar no financeiro (compromisso
+                      pessoal, cortesia, etc). O valor acima não entra na meta, no gráfico de
+                      receita nem em Pagamentos.
+                    </span>
+                  </span>
+                </label>
 
                 {/* Footer Actions */}
                 <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2.5">

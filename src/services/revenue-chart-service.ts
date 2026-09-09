@@ -32,14 +32,29 @@ async function sumRevenueAndExpenses(
   start: Date,
   end: Date
 ): Promise<{ revenue: number; expenses: number }> {
-  const [invoices, expenses] = await Promise.all([
+  const [invoices, directAppointments, expenses] = await Promise.all([
     prisma.invoice.findMany({
       where: {
         companyId,
         issueDate: { gte: start, lte: end },
-        status: { not: "CANCELLED" },
+        // DRAFT invoices haven't been issued to the client yet and CANCELLED
+        // ones never will be - neither counts as real billed revenue.
+        status: { notIn: ["DRAFT", "CANCELLED"] },
       },
       select: { totalAmount: true },
+    }),
+    // A maioria dos clientes nunca recebe uma Invoice - eles pagam direto
+    // pela limpeza (ver PaymentService). invoiced=false evita somar de novo
+    // um atendimento que já virou item de uma fatura (contado acima).
+    prisma.appointment.findMany({
+      where: {
+        companyId,
+        date: { gte: start, lte: end },
+        billable: true,
+        status: "COMPLETED",
+        invoiced: false,
+      },
+      select: { price: true },
     }),
     prisma.expense.findMany({
       where: { companyId, date: { gte: start, lte: end } },
@@ -47,7 +62,9 @@ async function sumRevenueAndExpenses(
     }),
   ]);
 
-  const revenue = invoices.reduce((acc, inv) => acc + Number(inv.totalAmount), 0);
+  const revenue =
+    invoices.reduce((acc, inv) => acc + Number(inv.totalAmount), 0) +
+    directAppointments.reduce((acc, appt) => acc + Number(appt.price), 0);
   const expenseTotal = expenses.reduce((acc, exp) => acc + Number(exp.amount), 0);
 
   return { revenue, expenses: expenseTotal };

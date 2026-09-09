@@ -10,7 +10,6 @@ import {
   Users,
   Fuel,
   Settings,
-  Sparkles,
   TrendingUp,
   ShieldCheck,
   Flame,
@@ -19,6 +18,7 @@ import {
   CalendarCheck,
   UserCheck,
   Wrench,
+  Wallet,
 } from "lucide-react";
 
 const navItems = [
@@ -28,9 +28,9 @@ const navItems = [
   { name: "Serviços", href: "/services", icon: Wrench },
   { name: "Faturas (Invoices)", href: "/invoices", icon: FileText },
   { name: "Orçamentos", href: "/estimates", icon: Receipt },
+  { name: "Pagamentos", href: "/payments", icon: Wallet },
   { name: "Clientes & GPS", href: "/clients", icon: Users },
   { name: "Despesas", href: "/expenses", icon: Fuel },
-  { name: "Marketing IA", href: "/marketing", icon: Sparkles },
   { name: "Usuários & RBAC", href: "/users", icon: UserCheck },
   { name: "Configurações", href: "/settings", icon: Settings },
 ];

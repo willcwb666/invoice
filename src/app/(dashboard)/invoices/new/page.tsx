@@ -32,7 +32,10 @@ export default function NewInvoicePage() {
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 7);
-    return d.toISOString().slice(0, 10);
+    // Local date, not toISOString() (UTC) - otherwise the suggested due
+    // date is off by a day once it's evening in Denver (UTC has already
+    // rolled over to the next date).
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
   const [items, setItems] = useState([
     { description: "House - Standard Regular Cleaning", quantity: 1, unitPrice: 180 },

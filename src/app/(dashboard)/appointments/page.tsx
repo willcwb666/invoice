@@ -30,8 +30,13 @@ type ViewMode = "month" | "week" | "today";
 
 const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
+// "YYYY-MM-DD" in the BROWSER's own local timezone - never toISOString(),
+// which reports the UTC date instead. Denver trails UTC by 6-7h, so
+// toISOString() has already rolled over to tomorrow's date by ~5-6pm
+// Denver time - that's what was filing/highlighting appointments under the
+// wrong day every afternoon/evening.
 function dateKey(d: Date) {
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export default function AppointmentsPage() {
@@ -168,7 +173,7 @@ export default function AppointmentsPage() {
   const appointmentsByDate = useMemo(() => {
     const map: Record<string, any[]> = {};
     for (const appt of filtered) {
-      const key = new Date(appt.date).toISOString().slice(0, 10);
+      const key = dateKey(new Date(appt.startTime || appt.date));
       if (!map[key]) map[key] = [];
       map[key].push(appt);
     }

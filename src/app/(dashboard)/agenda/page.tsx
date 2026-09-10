@@ -119,6 +119,18 @@ interface Appointment {
   client?: { name: string };
 }
 
+// "YYYY-MM-DD" in the BROWSER's own local timezone - never toISOString(),
+// which reports the UTC date instead. For a user physically in Colorado,
+// the browser's local timezone already is Denver, so this alone fixes the
+// "today"/day-bucket mismatch: toISOString() rolls over to tomorrow's UTC
+// date by ~5-6pm Denver time (Denver trails UTC by 6-7h), which is exactly
+// why the agenda started highlighting/filing appointments under the wrong
+// day every afternoon.
+function toLocalDateKey(value: string | Date): string {
+  const d = typeof value === "string" ? new Date(value) : value;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export default function AgendaPage() {
   const [schedule, setSchedule] = useState<DaySchedule[]>(DEFAULT_SCHEDULE);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -206,7 +218,7 @@ export default function AgendaPage() {
   const weekAppointmentsByDate = useMemo(() => {
     const map: Record<string, Appointment[]> = {};
     for (const appt of appointments) {
-      const dateStr = new Date(appt.date).toISOString().slice(0, 10);
+      const dateStr = toLocalDateKey(appt.startTime || appt.date);
       if (!map[dateStr]) map[dateStr] = [];
       map[dateStr].push(appt);
     }
@@ -490,11 +502,11 @@ export default function AgendaPage() {
           {/* 7-column Week Grid */}
           <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
             {weekDays.map((dayDate) => {
-              const dateKey = dayDate.toISOString().slice(0, 10);
+              const dateKey = toLocalDateKey(dayDate);
               const dayOfWeek = dayDate.getDay();
               const config = schedule.find((s) => s.dayId === dayOfWeek);
               const dayAppts = weekAppointmentsByDate[dateKey] || [];
-              const isToday = new Date().toISOString().slice(0, 10) === dateKey;
+              const isToday = toLocalDateKey(new Date()) === dateKey;
 
               return (
                 <div

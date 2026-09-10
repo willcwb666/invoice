@@ -832,7 +832,7 @@ export default function SettingsPage() {
                     <input
                       type="number"
                       min={1}
-                      max={365}
+                      max={730}
                       step={1}
                       value={formData.icloudSyncWindowDays}
                       onChange={(e) =>
@@ -843,10 +843,11 @@ export default function SettingsPage() {
                       }
                       className="w-24 px-3 py-2 rounded-xl bg-white border border-emerald-300 text-slate-900 font-mono text-xs focus:outline-none focus:border-emerald-500 shadow-2xs"
                     />
-                    <span className="text-xs text-slate-500">dias (padrão: 60, ~2 meses)</span>
+                    <span className="text-xs text-slate-500">dias (padrão: 60, ~2 meses; máximo: 730, ~2 anos)</span>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1.5">
                     A agenda nunca é editada em dias já passados, então o sync só olha de hoje até essa quantidade de dias à frente — deixa cada sincronização bem mais rápida.
+                    Se compromissos futuros do iPhone não estão aparecendo, aumente esse número: eventos além dessa janela nunca são importados, mesmo que já existam no calendário.
                   </p>
                 </div>
 

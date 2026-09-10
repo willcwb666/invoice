@@ -20,7 +20,10 @@ export const updateCompanySchema = z.object({
   signatureUrl: z.string().trim().max(500).optional(),
   logoUrl: z.string().trim().max(500).optional(),
   icloudCalendarUrl: z.string().trim().max(1000).optional(),
-  icloudSyncWindowDays: z.coerce.number().int().min(1).max(365).optional(),
+  // Capped at 730 to match RECURRENCE_HORIZON_DAYS in lib/calendar/icloud.ts
+  // - no point letting the window ask for more than the recurrence expander
+  // itself is willing to generate.
+  icloudSyncWindowDays: z.coerce.number().int().min(1).max(730).optional(),
 });
 export type UpdateCompanyInput = z.infer<typeof updateCompanySchema>;
 

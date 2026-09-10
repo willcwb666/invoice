@@ -978,9 +978,17 @@ async function syncICloudCalendarForCompanyUnlocked(
 
   let createdCount = 0;
   let updatedCount = 0;
+  // One malformed/unexpected event (a bad Decimal, an unusual character, a
+  // constraint violation) used to throw out of this loop entirely, silently
+  // dropping every event still to come - feed order isn't chronological, so
+  // that could drop events anywhere in the window, not just at the end.
+  // Isolated per event instead: one failure is logged and skipped, the rest
+  // of the batch still runs.
+  const failedEvents: { uid: string; summary: string; error: string }[] = [];
   const clientCache = new Map(existingClients.map((c) => [c.name.toLowerCase(), c]));
 
   for (const event of events) {
+   try {
     const summaryLower = event.summary.toLowerCase().trim();
     const locationLower = (event.location || "").toLowerCase().trim();
 
@@ -1184,6 +1192,11 @@ async function syncICloudCalendarForCompanyUnlocked(
       });
       createdCount++;
     }
+   } catch (eventErr: unknown) {
+    const msg = eventErr instanceof Error ? eventErr.message : String(eventErr);
+    console.error(`[iCloud Sync] Falha ao processar evento "${event.summary}" (${event.uid}):`, msg);
+    failedEvents.push({ uid: event.uid, summary: event.summary, error: msg });
+   }
   }
 
   // 7. Cancel orphaned appointments: anything ICLOUD_SYNC created from a UID
@@ -1212,9 +1225,12 @@ async function syncICloudCalendarForCompanyUnlocked(
   }
 
   const message =
-    createdCount > 0 || updatedCount > 0 || canceledCount > 0
+    (createdCount > 0 || updatedCount > 0 || canceledCount > 0
       ? `${createdCount} novos atendimentos importados, ${updatedCount} atualizados e ${canceledCount} cancelados (removidos do iPhone) do iPhone da esposa. (${events.length} de ${allEvents.length} eventos no feed, janela de ${company.icloudSyncWindowDays || 60} dias a partir de hoje)`
-      : `${events.length} atendimentos sincronizados do iPhone (já atualizados).`;
+      : `${events.length} atendimentos sincronizados do iPhone (já atualizados).`) +
+    (failedEvents.length > 0
+      ? ` ⚠️ ${failedEvents.length} evento(s) do feed falharam ao processar e foram pulados — veja os logs do servidor.`
+      : "");
 
   try {
     const fs = await import("fs");
@@ -1239,6 +1255,7 @@ async function syncICloudCalendarForCompanyUnlocked(
           created: createdCount,
           updated: updatedCount,
           canceled: canceledCount,
+          failed: failedEvents,
           message,
           sampleEvents: events.slice(0, 10).map((e) => ({
             uid: e.uid,

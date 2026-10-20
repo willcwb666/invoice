@@ -44,9 +44,11 @@ enum ServiceType {
 
 enum EstimateStatus {
   DRAFT
+  PENDING
   SENT
   ACCEPTED
   REJECTED
+  EXPIRED
   CONVERTED
 }
 
@@ -92,11 +94,30 @@ model CompanyProfile {
   // Quantos dias a partir de hoje o sync do iCloud deve olhar pra frente.
   // Dias passados nunca são reprocessados (a agenda não é mexida de hoje pra trás).
   icloudSyncWindowDays Int            @default(60)
+  lastICloudSyncAt   DateTime?
   // Admin-editable override of DEFAULT_ROLE_PERMISSIONS (see lib/security/rbac.ts).
   // Null means "use the defaults". Stored here (a singleton row) rather than
   // in an in-memory variable, which does not survive a server restart/redeploy
   // and is not shared across serverless instances.
   rolePermissions    Json?
+
+  // Recuperação de Orçamentos Abandonados
+  abandonedRecoveryEnabled      Boolean          @default(true)
+  abandonedRecoveryMinutes      Int              @default(30)
+  abandonedRecoveryDiscount     Decimal          @default(10.00) @db.Decimal(5, 2)
+  abandonedRecoveryDiscountType String           @default("PERCENTAGE") // "PERCENTAGE" ou "FIXED"
+  abandonedRecoverySubject      String           @default("Oferta especial para a limpeza da sua casa! ✨")
+  abandonedRecoveryBody         String           @default("Olá [cliente]!\n\nVimos que você calculou o orçamento para a limpeza da sua casa no valor de $[valor].\n\nPara ajudar você a fechar conosco hoje, liberamos um desconto exclusivo de [desconto]!\n\nSeu valor especial com desconto fica por apenas $[valor_final].\n\nClique no botão abaixo para garantir sua vaga e agendar seu atendimento.")
+
+  // Parâmetros de Rota & Agendamento
+  workDayStartHour              String           @default("08:00")
+  workDayEndHour                String           @default("18:00")
+  workDays                      String           @default("MON,TUE,WED,THU,FRI")
+  travelBufferMinutes           Int              @default(10)
+  defaultStandardDurationMinutes Int             @default(120)
+  defaultDeepDurationMinutes    Int              @default(300)
+  recurrenceHorizonMonths       Int              @default(2)
+
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
@@ -108,6 +129,8 @@ model CompanyProfile {
   invoices           Invoice[]
   estimates          Estimate[]
   expenses           Expense[]
+  professionals      Professional[]
+  notifications      Notification[]
 
   @@map("company_profiles")
 }
@@ -130,25 +153,78 @@ model CompanyAddress {
 }
 
 model User {
-  id                  String         @id @default(uuid())
-  email               String         @unique
+  id                  String          @id @default(uuid())
+  email               String          @unique
   name                String?
+  image               String?
   phone               String?
-  role                Role           @default(OPERATOR)
-  status              UserStatus     @default(PENDING_APPROVAL)
-  emailVerified       DateTime?
+  passwordHash        String?
+  gender              String?         @default("FEMALE") // "MALE" | "FEMALE"
+  role                Role            @default(OPERATOR)
+  status              UserStatus      @default(PENDING_APPROVAL)
+  emailVerified       Boolean         @default(false)
   verificationToken   String?
   verificationExpires DateTime?
   companyId           String?
   company             CompanyProfile? @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
+  sessions            Session[]
+  accounts            Account[]
   auditLogs           AuditLog[]
+  notifications       Notification[]
 
   @@index([companyId])
   @@index([status])
   @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id @default(uuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Verification {
+  id         String    @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
+
+  @@index([identifier])
+  @@map("verifications")
 }
 
 model Client {
@@ -184,6 +260,7 @@ model Service {
   type                   ServiceType          @default(STANDARD)
   basePrice              Decimal              @db.Decimal(10, 2)
   defaultDurationMinutes Int                  @default(120)
+  availableInEstimates   Boolean              @default(true)
   createdAt              DateTime             @default(now())
   updatedAt              DateTime             @updatedAt
 
@@ -229,10 +306,19 @@ model Appointment {
   paidAt          DateTime?
   paymentMethod   String?
   notes           String?
+  estimateId      String?
+  estimate        Estimate?            @relation(fields: [estimateId], references: [id], onDelete: SetNull)
+
+  // Recorrência Nativa (Séries de agendamento: Semanal, Bi-semanal, 3 Semanas, Mensal)
+  recurrenceRule  String?              // "NONE" | "WEEKLY" | "BIWEEKLY" | "EVERY_3_WEEKS" | "MONTHLY"
+  seriesId        String?              // UUID para agrupar agendamentos da mesma série recorrente
+  recurrenceIndex Int?                 // 0, 1, 2... índice da ocorrência na série
+
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
   services        AppointmentService[]
+  professionals   AppointmentProfessional[]
 
   // Prevents two concurrent iCloud syncs (manual + auto, or two tabs) from
   // both creating an appointment for the same calendar occurrence before
@@ -248,7 +334,11 @@ model Appointment {
   @@index([status])
   @@index([billable])
   @@index([paid])
+  @@index([seriesId])
   @@index([companyId, invoiced, billable, status])
+  @@index([companyId, date])
+  @@index([companyId, endTime])
+  @@index([estimateId])
   @@map("appointments")
 }
 
@@ -272,26 +362,32 @@ model AppointmentService {
 }
 
 model Estimate {
-  id                 String         @id @default(uuid())
-  companyId          String
-  company            CompanyProfile @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  clientId           String
-  client             Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  estimateNumber     String         @unique // Ex: "EST-01-2026"
-  status             EstimateStatus @default(DRAFT)
-  issueDate          DateTime       @default(now())
-  validUntil         DateTime
-  providerAddress    String         // Snapshot do endereço
-  subtotal           Decimal        @db.Decimal(10, 2)
-  discount           Decimal        @default(0) @db.Decimal(10, 2)
-  tax                Decimal        @default(0) @db.Decimal(10, 2)
-  totalAmount        Decimal        @db.Decimal(10, 2)
-  notes              String?
-  convertedInvoiceId String?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  id                       String         @id @default(uuid())
+  companyId                String
+  company                  CompanyProfile @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clientId                 String
+  client                   Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  estimateNumber           String         @unique // Ex: "EST-01-2026"
+  publicToken              String?        @unique // Token para acesso público do cliente
+  status                   EstimateStatus @default(DRAFT)
+  issueDate                DateTime       @default(now())
+  validUntil               DateTime
+  providerAddress          String         // Snapshot do endereço
+  subtotal                 Decimal        @db.Decimal(10, 2)
+  discount                 Decimal        @default(0) @db.Decimal(10, 2)
+  tax                      Decimal        @default(0) @db.Decimal(10, 2)
+  totalAmount              Decimal        @db.Decimal(10, 2)
+  estimatedDurationMinutes Int?           // Duração calculada em minutos para agendamento
+  abandonedEmailSentAt     DateTime?      // Data/hora que o e-mail de recuperação de abandono foi disparado
+  abandonedDiscountApplied Boolean        @default(false)
+  notes                    String?
+  metadata                 Json?
+  convertedInvoiceId       String?
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
 
-  items              EstimateItem[]
+  items                    EstimateItem[]
+  appointments             Appointment[]
 
   @@index([companyId])
   @@index([clientId])
@@ -340,6 +436,7 @@ model Invoice {
   appointments    Appointment[]
 
   @@index([companyId])
+  @@index([companyId, issueDate])
   @@index([clientId])
   @@index([status])
   @@index([dueDate])
@@ -369,6 +466,7 @@ model Expense {
   description String
   amount      Decimal         @db.Decimal(10, 2)
   date        DateTime        @default(now())
+  recurrence  String?         @default("ONE_TIME") // ONE_TIME, WEEKLY, BI_WEEKLY, MONTHLY
   receiptUrl  String?
   notes       String?
   createdAt   DateTime        @default(now())
@@ -397,3 +495,89 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
+
+model Professional {
+  id              String                          @id @default(uuid())
+  companyId       String
+  company         CompanyProfile                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name            String
+  role            String                          @default("Especialista de Limpeza")
+  roleTitle       String?
+  email           String?
+  phone           String?
+  color           String                          @default("indigo")
+  isOwner         Boolean                         @default(false)
+  active          Boolean                         @default(true)
+  notes           String?
+  commissions     Json                            // { STANDARD: { mode: "PERCENTAGE", value: 50 }, ... }
+  commissionRules Json                            // { STANDARD: { category: "STANDARD", label: "...", mode: "PERCENTAGE", value: 50 }, ... }
+  createdAt       DateTime                        @default(now())
+  updatedAt       DateTime                        @updatedAt
+
+  history         ProfessionalCommissionHistory[]
+  appointments    AppointmentProfessional[]
+
+  @@index([companyId])
+  @@index([companyId, active])
+  @@map("professionals")
+}
+
+model ProfessionalCommissionHistory {
+  id             String       @id @default(uuid())
+  professionalId String
+  professional   Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  effectiveFrom  String       // "YYYY-MM-DD" no fuso Mountain Time
+  commissions    Json         // Snapshot das regras de comissão válidas a partir de effectiveFrom
+  note           String?
+  createdAt      DateTime     @default(now())
+
+  @@index([professionalId])
+  @@index([professionalId, effectiveFrom])
+  @@map("professional_commission_histories")
+}
+
+model AppointmentProfessional {
+  id               String       @id @default(uuid())
+  appointmentId    String
+  appointment      Appointment  @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  professionalId   String
+  professional     Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  cleaningCategory String?      // STANDARD, DEEP, MOVE_IN_OUT, CUSTOM
+  createdAt        DateTime     @default(now())
+
+  @@unique([appointmentId, professionalId])
+  @@index([appointmentId])
+  @@index([professionalId])
+  @@map("appointment_professionals")
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  SUCCESS
+  URGENT
+}
+
+model Notification {
+  id             String           @id @default(uuid())
+  companyId      String
+  company        CompanyProfile   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  professionalId String?
+  title          String
+  message        String
+  type           NotificationType @default(INFO)
+  read           Boolean          @default(false)
+  link           String?
+  metadata       Json?
+  createdAt      DateTime         @default(now())
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([professionalId])
+  @@index([read])
+  @@index([createdAt])
+  @@map("notifications")
+}
+

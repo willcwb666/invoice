@@ -12,8 +12,12 @@ export type ScreenId =
   | "services"
   | "payments"
   | "expenses"
+  | "financeiro"
+  | "commissions"
+  | "professionals"
   | "settings"
-  | "users";
+  | "users"
+  | "reports";
 
 export type ActionId = "read" | "create" | "update" | "delete" | "export";
 
@@ -104,6 +108,27 @@ export const SYSTEM_SCREENS: ScreenDefinition[] = [
     category: "financial",
   },
   {
+    id: "financeiro",
+    name: "Dashboard Financeiro",
+    route: "/financeiro",
+    description: "Painel executivo completo de faturamento, margem de lucro, despesas e fluxo de caixa.",
+    category: "financial",
+  },
+  {
+    id: "commissions",
+    name: "Comissões",
+    route: "/commissions",
+    description: "Cálculo e histórico de repasses da equipe, regras percentuais e valores por atendimento.",
+    category: "financial",
+  },
+  {
+    id: "professionals",
+    name: "Profissionais",
+    route: "/professionals",
+    description: "Cadastro de colaboradores da equipe, parâmetros de comissão e status operacional.",
+    category: "management",
+  },
+  {
     id: "settings",
     name: "Configurações",
     route: "/settings",
@@ -116,6 +141,13 @@ export const SYSTEM_SCREENS: ScreenDefinition[] = [
     route: "/users",
     description: "Gestão de acessos, aprovação de cadastros e matriz de permissões RBAC.",
     category: "management",
+  },
+  {
+    id: "reports",
+    name: "Relatórios",
+    route: "/reports",
+    description: "Relatórios consolidados financeiros e operacionais com filtros avançados e exportação.",
+    category: "financial",
   },
 ];
 
@@ -132,7 +164,7 @@ export const ROLE_DEFINITIONS: Record<Role, RoleDefinition> = {
     id: "ADMIN",
     name: "Administrador",
     badgeColor: "bg-indigo-50 text-indigo-700 border-indigo-200",
-    description: "Acesso irrestrito a todas as 11 telas e funcionalidades do sistema.",
+    description: "Acesso irrestrito a todas as funcionalidades do sistema.",
     scope: "Gestão Total, Configurações, Usuários & Aprovações",
   },
   FINANCIAL: {
@@ -171,8 +203,12 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     services: { read: true, create: true, update: true, delete: true, export: true },
     payments: { read: true, create: true, update: true, delete: true, export: true },
     expenses: { read: true, create: true, update: true, delete: true, export: true },
+    financeiro: { read: true, create: true, update: true, delete: true, export: true },
+    commissions: { read: true, create: true, update: true, delete: true, export: true },
+    professionals: { read: true, create: true, update: true, delete: true, export: true },
     settings: { read: true, create: true, update: true, delete: true, export: true },
     users: { read: true, create: true, update: true, delete: true, export: true },
+    reports: { read: true, create: true, update: true, delete: true, export: true },
   },
   FINANCIAL: {
     dashboard: { read: true, create: false, update: false, delete: false, export: true },
@@ -184,8 +220,12 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     services: { read: true, create: true, update: true, delete: false, export: true },
     payments: { read: true, create: false, update: true, delete: false, export: true },
     expenses: { read: true, create: true, update: true, delete: true, export: true },
+    financeiro: { read: true, create: true, update: true, delete: false, export: true },
+    commissions: { read: true, create: false, update: false, delete: false, export: true },
+    professionals: { read: true, create: false, update: false, delete: false, export: false },
     settings: { read: false, create: false, update: false, delete: false, export: false },
     users: { read: false, create: false, update: false, delete: false, export: false },
+    reports: { read: true, create: false, update: false, delete: false, export: true },
   },
   OPERATOR: {
     dashboard: { read: true, create: false, update: false, delete: false, export: false },
@@ -197,8 +237,12 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     services: { read: true, create: true, update: true, delete: false, export: false },
     payments: { read: false, create: false, update: false, delete: false, export: false },
     expenses: { read: true, create: true, update: false, delete: false, export: false },
+    financeiro: { read: false, create: false, update: false, delete: false, export: false },
+    commissions: { read: true, create: false, update: false, delete: false, export: false },
+    professionals: { read: false, create: false, update: false, delete: false, export: false },
     settings: { read: false, create: false, update: false, delete: false, export: false },
     users: { read: false, create: false, update: false, delete: false, export: false },
+    reports: { read: true, create: false, update: false, delete: false, export: true },
   },
   VIEWER: {
     dashboard: { read: true, create: false, update: false, delete: false, export: false },
@@ -210,8 +254,12 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     services: { read: true, create: false, update: false, delete: false, export: false },
     payments: { read: true, create: false, update: false, delete: false, export: true },
     expenses: { read: true, create: false, update: false, delete: false, export: false },
+    financeiro: { read: true, create: false, update: false, delete: false, export: false },
+    commissions: { read: false, create: false, update: false, delete: false, export: false },
+    professionals: { read: false, create: false, update: false, delete: false, export: false },
     settings: { read: false, create: false, update: false, delete: false, export: false },
     users: { read: false, create: false, update: false, delete: false, export: false },
+    reports: { read: true, create: false, update: false, delete: false, export: true },
   },
 };
 

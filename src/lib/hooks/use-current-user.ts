@@ -7,9 +7,18 @@ export interface CurrentUserData {
   id: string;
   email: string;
   name: string;
+  image?: string | null;
+  phone?: string | null;
+  gender?: "MALE" | "FEMALE" | string | null;
   role: Role;
   status: UserStatus;
   companyId?: string | null;
+  createdAt?: string;
+  company?: {
+    id: string;
+    name: string;
+    tradeName?: string | null;
+  } | null;
 }
 
 export function useCurrentUser() {

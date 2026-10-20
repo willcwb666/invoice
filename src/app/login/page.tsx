@@ -11,7 +11,7 @@ import {
   EyeOff,
   Sparkles,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { authClient } from "@/lib/auth-client";
 import { useToast } from "@/components/ui/toast";
 
 function GoogleIcon({ className = "w-4 h-4" }: { className?: string }) {
@@ -67,25 +67,14 @@ function LoginForm() {
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
     try {
-      const origin = typeof window !== "undefined" ? window.location.origin : "";
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      const destination = from.startsWith("/") && from !== "/login" ? from : "/";
+      await authClient.signIn.social({
         provider: "google",
-        options: {
-          redirectTo: `${origin}/api/v1/auth/callback`,
-          queryParams: {
-            access_type: "offline",
-            prompt: "select_account",
-          },
-        },
+        callbackURL: destination,
       });
-
-      if (oauthError) {
-        showToast(oauthError.message || "Erro ao conectar ao Google.", "error");
-        setGoogleLoading(false);
-      }
     } catch (err: unknown) {
       showToast(
-        err instanceof Error ? err.message : "Não foi possível iniciar autenticação com o Google.",
+        err instanceof Error ? err.message : "Não foi possível iniciar autenticação com o Google via Better Auth.",
         "error"
       );
       setGoogleLoading(false);
@@ -277,7 +266,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col justify-center items-center p-4 selection:bg-indigo-500 selection:text-white relative overflow-hidden">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans flex flex-col justify-center items-center p-4 selection:bg-indigo-500 selection:text-white relative overflow-hidden">
       {/* Subtle Background Glows */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
         <div className="absolute top-1/4 left-1/3 w-96 h-96 bg-indigo-500/8 rounded-full blur-3xl" />

@@ -66,6 +66,10 @@ export async function POST(req: NextRequest) {
       ? 30 * 24 * 3600 // 30 days
       : 7 * 24 * 3600; // 7 days
 
+    // This app's own session cookie. Google OAuth logins go through Better
+    // Auth's /api/auth/* handler and get a real session there; a plain
+    // `response.cookies.set` here can't produce one, since Better Auth's
+    // getSession() only accepts a cookie it signed itself via setSignedCookie.
     const token = await createSessionToken(
       {
         sub: user.id,

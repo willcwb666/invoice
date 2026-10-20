@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/security/tokens";
+import { auth } from "@/lib/auth";
 
 /**
  * Next.js 16 Proxy Convention
@@ -34,22 +35,50 @@ export async function proxy(req: NextRequest) {
   // 2. Explicitly allowed public paths:
   // - /login (auth screen)
   // - /pay/* (public invoice pay and view link for customers)
+  // - /api/auth/* (Better Auth endpoints)
   // - /api/v1/auth/* (login, logout, register, me)
   // - /api/v1/public/* (public endpoints for invoice customer portal)
   const isLoginPage = pathname === "/login";
   const isPublicPay = pathname.startsWith("/pay/");
-  const isAuthApi = pathname.startsWith("/api/v1/auth/");
+  const isAuthApi = pathname.startsWith("/api/v1/auth/") || pathname.startsWith("/api/auth/");
   const isPublicApi = pathname.startsWith("/api/v1/public/");
   const isWebcalFeed = pathname === "/api/v1/agenda/feed.ics";
 
-  // 3. Extract and cryptographically verify session token from cookie
-  const sessionCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value;
-  const session = sessionCookie ? await verifySessionToken(sessionCookie) : null;
+  // 3. Extract and cryptographically verify session (Better Auth or legacy token)
+  let session: any = null;
+  try {
+    const betterSession = await auth.api.getSession({ headers: req.headers });
+    const betterUser = betterSession?.user as any;
+    // Mirrors getSessionUser's ACTIVE check - Better Auth's own autoSignIn
+    // doesn't know about this app's PENDING_APPROVAL/SUSPENDED statuses, so
+    // without this a newly self-registered or suspended user would hold a
+    // valid Better Auth cookie that still gets past this page gate.
+    if (betterUser && (!betterUser.status || betterUser.status === "ACTIVE")) {
+      session = {
+        sub: betterUser.id,
+        email: betterUser.email,
+        name: betterUser.name,
+        role: betterUser.role,
+        companyId: betterUser.companyId,
+      };
+    }
+  } catch {}
+
+  if (!session) {
+    const sessionCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+    session = sessionCookie ? await verifySessionToken(sessionCookie) : null;
+  }
 
   // If already authenticated and accesses /login, redirect directly to dashboard
   if (isLoginPage && session) {
     const from = req.nextUrl.searchParams.get("from");
-    const redirectUrl = from && from.startsWith("/") && from !== "/login" ? from : "/";
+    const isSafeFrom =
+      from &&
+      from.startsWith("/") &&
+      !from.startsWith("//") &&
+      !from.startsWith("/\\") &&
+      from !== "/login";
+    const redirectUrl = isSafeFrom ? from : "/";
     return NextResponse.redirect(new URL(redirectUrl, req.url));
   }
 

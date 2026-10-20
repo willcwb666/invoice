@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth as betterAuth } from "@/lib/auth";
 import {
   SessionPayload,
   SESSION_COOKIE_NAME,
@@ -21,12 +22,13 @@ const DEFAULT_ADMIN_NAME = "Renata Matos de Oliveira";
  */
 function resolveAdminBootstrapPassword(): string {
   const configured = process.env.ADMIN_INITIAL_PASSWORD;
-  if (configured) return configured;
+  if (configured && configured.trim().length > 0) return configured.trim();
 
   const generated = generateRandomPassword();
   console.warn(
-    `[Auth] ADMIN_INITIAL_PASSWORD não configurada. Uma senha temporária foi gerada para ${DEFAULT_ADMIN_EMAIL}: ${generated}\n` +
-      "Defina ADMIN_INITIAL_PASSWORD no ambiente para controlar essa senha e evite depender desta geração automática em produção."
+    `[Auth] ADMIN_INITIAL_PASSWORD não configurada para ${DEFAULT_ADMIN_EMAIL}. ` +
+      "Uma credencial aleatória criptograficamente segura foi atribuída (nunca impressa em logs). " +
+      "Autentique-se via Google OAuth ou defina ADMIN_INITIAL_PASSWORD nas variáveis de ambiente."
   );
   return generated;
 }
@@ -52,7 +54,7 @@ export async function ensureAdminUser() {
 
     if (!admin) {
       const passwordHash = await hashPassword(resolveAdminBootstrapPassword());
-      return await prisma.user.create({
+      const createdAdmin = await prisma.user.create({
         data: {
           email: DEFAULT_ADMIN_EMAIL.toLowerCase(),
           name: DEFAULT_ADMIN_NAME,
@@ -60,22 +62,28 @@ export async function ensureAdminUser() {
           role: "ADMIN",
           status: "ACTIVE",
           companyId: company.id,
-          verificationToken: passwordHash, // Stored safely in verificationToken column
+          passwordHash,
+          verificationToken: null,
         },
       });
+
+      return createdAdmin;
     }
 
-    // If admin exists but has no password hash set
-    if (!admin.verificationToken) {
-      const passwordHash = await hashPassword(resolveAdminBootstrapPassword());
-      return await prisma.user.update({
+    // Se o admin existir mas não tiver passwordHash preenchido
+    if (!admin.passwordHash) {
+      const hashToUse = admin.verificationToken || (await hashPassword(resolveAdminBootstrapPassword()));
+      const updatedAdmin = await prisma.user.update({
         where: { id: admin.id },
         data: {
-          verificationToken: passwordHash,
+          passwordHash: hashToUse,
+          verificationToken: null,
           status: "ACTIVE",
           role: "ADMIN",
         },
       });
+
+      return updatedAdmin;
     }
 
     return admin;
@@ -150,8 +158,9 @@ export async function registerUser({
       role: assignedRole,
       status: assignedStatus,
       companyId: company.id,
-      verificationToken: passwordHash,
-      emailVerified: null,
+      passwordHash,
+      verificationToken: null,
+      emailVerified: false,
     },
   });
 
@@ -213,7 +222,7 @@ export async function authenticateCredentials(
       };
     }
 
-    const storedHash = user.verificationToken;
+    const storedHash = user.passwordHash || user.verificationToken;
     if (!storedHash) {
       return {
         success: false,
@@ -227,6 +236,16 @@ export async function authenticateCredentials(
         success: false,
         error: "Credenciais inválidas. Verifique seu e-mail e senha.",
       };
+    }
+
+    // Se o usuário ainda não tinha passwordHash salvo nativamente, migra no banco
+    if (!user.passwordHash) {
+      try {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { passwordHash: storedHash, verificationToken: null },
+        });
+      } catch {}
     }
 
     // Register audit log for login
@@ -276,23 +295,68 @@ export async function getSessionUser(
 ): Promise<SessionPayload | null> {
   if (!req) return null;
 
-  // The session is always re-derived from the signed cookie, never trusted
-  // from plain x-user-* request headers. Those headers used to be treated as
-  // pre-verified (set by proxy.ts after checking the cookie), but that made
-  // authentication depend entirely on proxy.ts running first and stripping
-  // any client-supplied copy of those headers on every path — including the
-  // public allowlist (/api/v1/auth/*, /api/v1/public/*), where they were not
-  // being stripped. A request could set x-user-id/x-user-email/x-user-role
-  // itself and be trusted as that user with no cookie at all. Verifying the
-  // HMAC-signed cookie here instead removes that trust boundary entirely:
-  // the cookie is the only source of truth, and this check is cheap (a
-  // single HMAC verify), so there's no real cost to doing it per request.
+  // 1. Check Better Auth session first
+  try {
+    const betterSession = await betterAuth.api.getSession({
+      headers: req.headers,
+    });
+
+    if (betterSession?.user) {
+      const u = betterSession.user as any;
+      // Ensure user is active in DB
+      if (u.status && u.status !== "ACTIVE") {
+        return null;
+      }
+      const sessionExpires = betterSession.session?.expiresAt
+        ? Math.floor(new Date(betterSession.session.expiresAt).getTime() / 1000)
+        : Math.floor(Date.now() / 1000) + 30 * 24 * 3600;
+      const sessionIat = betterSession.session?.createdAt
+        ? Math.floor(new Date(betterSession.session.createdAt).getTime() / 1000)
+        : Math.floor(Date.now() / 1000);
+
+      return {
+        sub: u.id,
+        email: u.email,
+        name: u.name || "Usuário",
+        role: u.role || "OPERATOR",
+        companyId: u.companyId || undefined,
+        exp: sessionExpires,
+        iat: sessionIat,
+      };
+    }
+  } catch (baErr) {
+    // If Better Auth fails or is bypassed, fall back to legacy token check
+  }
+
+  // 2. Legacy token fallback
   const cookieHeader = req.headers.get("cookie") || "";
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`));
   const token = match ? decodeURIComponent(match[1]) : null;
 
   if (!token) return null;
-  return await verifySessionToken(token);
+  const payload = await verifySessionToken(token);
+  if (!payload) return null;
+
+  try {
+    const dbUser = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { status: true, role: true, companyId: true, name: true },
+    });
+
+    if (!dbUser || dbUser.status !== "ACTIVE") {
+      return null;
+    }
+
+    return {
+      ...payload,
+      role: dbUser.role,
+      name: dbUser.name || payload.name,
+      companyId: dbUser.companyId ?? payload.companyId,
+    };
+  } catch (err) {
+    console.error("Erro ao verificar status de sessão do usuário no banco:", err);
+    return null;
+  }
 }
 
 /**

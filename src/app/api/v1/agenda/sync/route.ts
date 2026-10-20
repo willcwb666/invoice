@@ -11,7 +11,14 @@ import { ensureExampleInvoicesSeeded } from "@/lib/seed-data";
 
 // Allow up to 60 seconds for the iCloud sync (feed can be large)
 export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
+const NO_CACHE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  Pragma: "no-cache",
+  Expires: "0",
+};
 
 export async function GET(req: NextRequest) {
   const check = await requirePermission(req, "agenda", "read");
@@ -25,6 +32,7 @@ export async function GET(req: NextRequest) {
       select: {
         id: true,
         icloudCalendarUrl: true,
+        lastICloudSyncAt: true,
         updatedAt: true,
       },
     });
@@ -47,25 +55,28 @@ export async function GET(req: NextRequest) {
 
     const configured = Boolean(company?.icloudCalendarUrl);
 
-    return NextResponse.json({
-      configured,
-      icloudCalendarUrl: company?.icloudCalendarUrl || DEFAULT_ICLOUD_URL,
-      syncedCount,
-      lastSyncedAt: lastSyncAppt?.updatedAt || company?.updatedAt || null,
-      status: configured ? "SYNCHRONIZED" : "NOT_CONFIGURED",
-      // This is the same secret proxy.ts/feed.ics/route.ts accept as a
-      // bypass-auth token for the outbound webcal subscription URL — holding
-      // it grants permanent, unauthenticated access to every client's name,
-      // phone, address and notes via the .ics feed, with no way to revoke it
-      // short of rotating WEBCAL_SECRET itself. Only ADMIN gets to see it;
-      // "agenda:read" alone (FINANCIAL/OPERATOR/VIEWER) is not enough.
-      webcalToken: session.role === "ADMIN" ? process.env.WEBCAL_SECRET || null : null,
-    });
+    return NextResponse.json(
+      {
+        configured,
+        icloudCalendarUrl: company?.icloudCalendarUrl || DEFAULT_ICLOUD_URL,
+        syncedCount,
+        lastSyncedAt: company?.lastICloudSyncAt || lastSyncAppt?.updatedAt || company?.updatedAt || null,
+        status: configured ? "SYNCHRONIZED" : "NOT_CONFIGURED",
+        // This is the same secret proxy.ts/feed.ics/route.ts accept as a
+        // bypass-auth token for the outbound webcal subscription URL — holding
+        // it grants permanent, unauthenticated access to every client's name,
+        // phone, address and notes via the .ics feed, with no way to revoke it
+        // short of rotating WEBCAL_SECRET itself. Only ADMIN gets to see it;
+        // "agenda:read" alone (FINANCIAL/OPERATOR/VIEWER) is not enough.
+        webcalToken: session.role === "ADMIN" ? process.env.WEBCAL_SECRET || null : null,
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (error: unknown) {
     console.error("Erro na rota GET /api/v1/agenda/sync:", error);
     return NextResponse.json(
       { error: "Erro ao consultar status da sincronização." },
-      { status: 500 }
+      { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }
@@ -134,6 +145,12 @@ export async function POST(req: NextRequest) {
 
     const result = await syncICloudCalendarForCompany(company.id, rawUrl.trim());
 
+    // Agendamentos sincronizados do iPhone sem profissional explícito já
+    // recebem os "owners" da empresa automaticamente na leitura (ver
+    // ProfessionalService.enrichAppointments) — nada a persistir aqui.
+    const { AppointmentService } = await import("@/services/appointment-service");
+    await AppointmentService.ensureRecurrenceHorizon(company.id);
+
     return NextResponse.json({
       success: true,
       message: result.message,
@@ -144,6 +161,7 @@ export async function POST(req: NextRequest) {
         canceled: result.canceled,
         normalizedUrl: result.normalizedUrl,
         savedUrl: rawUrl.trim(),
+        lastSyncedAt: new Date().toISOString(),
       },
     });
   } catch (error: unknown) {

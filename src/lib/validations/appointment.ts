@@ -25,11 +25,12 @@ export const createAppointmentSchema = z.object({
   // trabalhos pagos.
   billable: z.boolean().default(true),
   notes: z.string().trim().max(1000, "Observações muito longas").optional().nullable(),
-});
-
-export const updateAppointmentStatusSchema = z.object({
-  id: z.string().min(1, "ID do agendamento obrigatório"),
-  status: z.enum(["SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]),
+  recurrenceRule: z
+    .enum(["NONE", "WEEKLY", "BIWEEKLY", "EVERY_3_WEEKS", "MONTHLY"])
+    .optional(),
+  recurrenceDurationMonths: z.number().int().min(1).max(24).optional(),
+  professionalIds: z.array(z.string().min(1)).optional(),
+  cleaningCategory: z.enum(["STANDARD", "DEEP", "MOVE_IN_OUT", "CUSTOM"]).optional(),
 });
 
 // Full edit of an existing appointment (e.g. clicking one imported from the
@@ -45,6 +46,17 @@ export const updateAppointmentSchema = z.object({
   price: z.number().positive("Preço deve ser maior que zero").max(100000, "Valor muito alto").optional(),
   notes: z.string().trim().max(1000, "Observações muito longas").optional().nullable(),
   status: z.enum(["SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]).optional(),
+  recurrenceRule: z
+    .enum(["NONE", "WEEKLY", "BIWEEKLY", "EVERY_3_WEEKS", "MONTHLY"])
+    .optional()
+    .nullable(),
+  recurrenceDurationMonths: z.number().int().min(1).max(24).optional().default(12),
+  updateScope: z
+    .enum(["THIS_ONLY", "THIS_AND_FOLLOWING", "ALL_SERIES"])
+    .optional()
+    .default("THIS_ONLY"),
+  professionalIds: z.array(z.string().min(1)).optional(),
+  cleaningCategory: z.enum(["STANDARD", "DEEP", "MOVE_IN_OUT", "CUSTOM"]).optional(),
 });
 
 export type CreateAppointmentInput = z.infer<typeof createAppointmentSchema>;

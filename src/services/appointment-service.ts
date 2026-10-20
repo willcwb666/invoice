@@ -1,6 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { CreateAppointmentInput, UpdateAppointmentInput } from "@/lib/validations/appointment";
 import { Prisma } from "@prisma/client";
+import {
+  generateRecurrenceOccurrences,
+  generateNextOccurrencesUntil,
+  getRecurrenceHorizonBoundary,
+  RecurrenceFrequency,
+  AppointmentUpdateScope,
+  AppointmentDeleteScope,
+} from "@/lib/scheduling/recurrence";
+import crypto from "crypto";
 
 export class AppointmentService {
   /**
@@ -32,9 +41,38 @@ export class AppointmentService {
   }
 
   /**
-   * Cria um novo agendamento com valor negociável
+   * Obtém os próximos compromissos da agenda a partir da data/hora atual (em ordem cronológica)
    */
-  static async createAppointment(companyId: string, data: CreateAppointmentInput) {
+  static async getUpcomingAppointments(companyId: string, limit = 5, from?: Date) {
+    const threshold = from || new Date(Date.now() - 30 * 60 * 1000);
+    return prisma.appointment.findMany({
+      where: {
+        companyId,
+        status: { not: "CANCELLED" },
+        endTime: { gte: threshold },
+      },
+      orderBy: { startTime: "asc" },
+      take: limit,
+      include: {
+        client: {
+          select: { id: true, name: true, phone: true, address: true, city: true, state: true, zipCode: true },
+        },
+        services: {
+          include: { service: { select: { id: true, name: true, type: true } } },
+        },
+      },
+    });
+  }
+
+  /**
+   * Cria um novo agendamento ou uma série recorrente (semanal, bi-semanal, a cada 3 semanas, mensal).
+   * Suporta atribuição atômica de múltiplos profissionais e serviços para cada ocorrência da série.
+   */
+  static async createAppointment(
+    companyId: string,
+    data: CreateAppointmentInput,
+    extra?: { professionalIds?: string[]; cleaningCategory?: string }
+  ) {
     const client = await prisma.client.findFirst({
       where: { id: data.clientId, companyId },
     });
@@ -51,52 +89,156 @@ export class AppointmentService {
         })
       : [];
 
-    return prisma.appointment.create({
-      data: {
-        companyId,
-        clientId: data.clientId,
-        title: data.title,
-        date: new Date(data.date),
-        startTime: new Date(data.startTime),
-        endTime: new Date(data.endTime),
-        location,
-        price: new Prisma.Decimal(data.price),
-        origin: data.origin,
-        billable: data.billable,
-        notes: data.notes || null,
-        ...(services.length
-          ? { services: { create: services.map((s) => ({ serviceId: s.id, price: s.basePrice })) } }
-          : {}),
-      },
-      include: {
-        client: true,
-        services: { include: { service: true } },
-      },
+    const recurrenceRule = (data.recurrenceRule || "NONE") as RecurrenceFrequency;
+
+    // 1. Caso NÃO seja recorrente (atendimento avulso em data única)
+    if (recurrenceRule === "NONE") {
+      const appt = await prisma.appointment.create({
+        data: {
+          companyId,
+          clientId: data.clientId,
+          title: data.title,
+          date: new Date(data.date),
+          startTime: new Date(data.startTime),
+          endTime: new Date(data.endTime),
+          location,
+          price: new Prisma.Decimal(data.price),
+          origin: data.origin,
+          billable: data.billable,
+          notes: data.notes || null,
+          recurrenceRule: "NONE",
+          seriesId: null,
+          recurrenceIndex: 0,
+          ...(services.length
+            ? { services: { create: services.map((s) => ({ serviceId: s.id, price: s.basePrice })) } }
+            : {}),
+        },
+        include: {
+          client: true,
+          services: { include: { service: true } },
+        },
+      });
+
+      if (extra?.professionalIds && extra.professionalIds.length > 0) {
+        const validProfIds = (
+          await prisma.professional.findMany({
+            where: { id: { in: extra.professionalIds }, companyId },
+            select: { id: true },
+          })
+        ).map((p) => p.id);
+
+        if (validProfIds.length > 0) {
+          await prisma.appointmentProfessional.createMany({
+            data: validProfIds.map((pId) => ({
+              appointmentId: appt.id,
+              professionalId: pId,
+              cleaningCategory: extra.cleaningCategory || null,
+            })),
+          });
+        }
+      }
+
+      return appt;
+    }
+
+    // 2. Caso SEJA recorrente (WEEKLY, BIWEEKLY, EVERY_3_WEEKS, MONTHLY)
+    const company = await prisma.companyProfile.findUnique({
+      where: { id: companyId },
+      select: { recurrenceHorizonMonths: true },
     });
+    const horizonMonths = data.recurrenceDurationMonths || company?.recurrenceHorizonMonths || 2;
+    const { horizonEndUtc } = getRecurrenceHorizonBoundary({
+      referenceDate: new Date(data.startTime),
+      horizonMonths,
+    });
+
+    const seriesId = crypto.randomUUID();
+    const occurrences = generateRecurrenceOccurrences({
+      startDateTime: new Date(data.startTime),
+      endDateTime: new Date(data.endTime),
+      frequency: recurrenceRule,
+      untilUtc: horizonEndUtc,
+    });
+
+    const validProfIds = extra?.professionalIds?.length
+      ? (
+          await prisma.professional.findMany({
+            where: { id: { in: extra.professionalIds }, companyId },
+            select: { id: true },
+          })
+        ).map((p) => p.id)
+      : [];
+
+    const createdAppointments = [];
+
+    for (const occ of occurrences) {
+      const appt = await prisma.appointment.create({
+        data: {
+          companyId,
+          clientId: data.clientId,
+          title: data.title,
+          date: occ.date,
+          startTime: occ.startTime,
+          endTime: occ.endTime,
+          location,
+          price: new Prisma.Decimal(data.price),
+          origin: data.origin,
+          billable: data.billable,
+          notes: data.notes || null,
+          recurrenceRule,
+          seriesId,
+          recurrenceIndex: occ.index,
+          ...(services.length
+            ? { services: { create: services.map((s) => ({ serviceId: s.id, price: s.basePrice })) } }
+            : {}),
+        },
+        include: {
+          client: true,
+          services: { include: { service: true } },
+        },
+      });
+
+      if (validProfIds.length > 0) {
+        await prisma.appointmentProfessional.createMany({
+          data: validProfIds.map((pId) => ({
+            appointmentId: appt.id,
+            professionalId: pId,
+            cleaningCategory: extra?.cleaningCategory || null,
+          })),
+        });
+      }
+
+      createdAppointments.push(appt);
+    }
+
+    return createdAppointments[0];
   }
 
   /**
-   * Edita um agendamento existente (ex: um evento importado do iPhone que o
-   * usuário quer corrigir na aplicação) — todo campo é opcional, atualiza só
-   * o que veio no payload. Quando `serviceIds` é enviado, substitui todos os
-   * vínculos de serviço do agendamento pelos novos (preço de cada um é um
-   * novo snapshot do basePrice atual do serviço).
+   * Edita um agendamento existente com suporte completo a escopos de série recorrente:
+   * - "THIS_ONLY": Atualiza apenas a ocorrência pontual.
+   * - "THIS_AND_FOLLOWING": Mantém intactos os registros históricos anteriores e reprograma
+   *   a rotina daqui para frente (nova data, horário ou frequência bi-semanal/semanal).
+   * - "ALL_SERIES": Atualiza campos cadastrais de toda a série não faturada.
    */
-  static async updateAppointment(id: string, companyId: string, data: UpdateAppointmentInput) {
+  static async updateAppointment(
+    id: string,
+    companyId: string,
+    data: UpdateAppointmentInput,
+    extra?: { professionalIds?: string[]; cleaningCategory?: string }
+  ) {
     const existing = await prisma.appointment.findFirst({
       where: { id, companyId },
-      include: { services: { select: { serviceId: true } } },
+      include: {
+        services: { select: { serviceId: true } },
+        professionals: { select: { professionalId: true } },
+        invoice: { select: { id: true, status: true } },
+      },
     });
     if (!existing) {
       throw new Error("Agendamento não encontrado.");
     }
 
-    // Once an appointment is linked to an invoice, the invoice's line item
-    // is a frozen snapshot of who was billed and how much - silently
-    // changing the appointment's client or price afterwards makes the
-    // appointment and the invoice that documents it disagree, with no
-    // indication either record is now wrong. Everything else (time,
-    // location, notes, status, services) is still editable.
     if (existing.invoiced) {
       if (data.clientId !== undefined && data.clientId !== existing.clientId) {
         throw new Error(
@@ -110,6 +252,102 @@ export class AppointmentService {
       }
     }
 
+    const scope: AppointmentUpdateScope = data.updateScope || "THIS_ONLY";
+
+    // =========================================================================
+    // CENÁRIO 1: "THIS_AND_FOLLOWING" (Este e todos os futuros da série)
+    // =========================================================================
+    if (scope === "THIS_AND_FOLLOWING" && existing.seriesId) {
+      // 1. Identifica agendamentos futuros da série antiga a partir do horário original deste evento
+      const futureAppts = await prisma.appointment.findMany({
+        where: {
+          companyId,
+          seriesId: existing.seriesId,
+          startTime: { gte: existing.startTime },
+        },
+        include: {
+          invoice: { select: { status: true } },
+        },
+      });
+
+      // 2. Remove apenas os que NÃO foram pagos e NÃO estão em fatura PAGA
+      const removableIds = futureAppts
+        .filter((a) => !a.paid && a.invoice?.status !== "PAID")
+        .map((a) => a.id);
+
+      if (removableIds.length > 0) {
+        await prisma.appointment.deleteMany({
+          where: { id: { in: removableIds } },
+        });
+      }
+
+      // 3. Determina parâmetros para a nova série
+      const targetFrequency = (data.recurrenceRule !== undefined
+        ? data.recurrenceRule
+        : existing.recurrenceRule || "WEEKLY") as RecurrenceFrequency;
+
+      const baseStart = data.startTime ? new Date(data.startTime) : existing.startTime;
+      const baseEnd = data.endTime ? new Date(data.endTime) : existing.endTime;
+      const baseDate = data.date ? new Date(data.date) : existing.date;
+      const targetTitle = data.title !== undefined ? data.title : existing.title;
+      const targetLocation = data.location !== undefined ? data.location : existing.location;
+      const targetPrice = data.price !== undefined ? data.price : Number(existing.price);
+      const targetNotes = data.notes !== undefined ? data.notes : existing.notes;
+      const targetClientId = data.clientId !== undefined ? data.clientId : existing.clientId;
+      const targetServiceIds =
+        data.serviceIds !== undefined
+          ? data.serviceIds
+          : existing.services.map((s) => s.serviceId);
+      const targetProfIds =
+        extra?.professionalIds || existing.professionals.map((p) => p.professionalId);
+      const targetCategory = extra?.cleaningCategory;
+
+      // 4. Se a nova frequência for NONE, cria apenas um atendimento avulso no novo dia/horário
+      if (targetFrequency === "NONE") {
+        return this.createAppointment(
+          companyId,
+          {
+            clientId: targetClientId,
+            serviceIds: targetServiceIds,
+            title: targetTitle,
+            date: baseDate.toISOString(),
+            startTime: baseStart.toISOString(),
+            endTime: baseEnd.toISOString(),
+            location: targetLocation,
+            price: targetPrice,
+            notes: targetNotes,
+            origin: existing.origin,
+            billable: existing.billable,
+            recurrenceRule: "NONE",
+          },
+          { professionalIds: targetProfIds, cleaningCategory: targetCategory }
+        );
+      }
+
+      // 5. Se for recorrente, gera a nova série com novo seriesId a partir da nova data e horário
+      return this.createAppointment(
+        companyId,
+        {
+          clientId: targetClientId,
+          serviceIds: targetServiceIds,
+          title: targetTitle,
+          date: baseDate.toISOString(),
+          startTime: baseStart.toISOString(),
+          endTime: baseEnd.toISOString(),
+          location: targetLocation,
+          price: targetPrice,
+          notes: targetNotes,
+          origin: existing.origin,
+          billable: existing.billable,
+          recurrenceRule: targetFrequency,
+          recurrenceDurationMonths: data.recurrenceDurationMonths || 12,
+        },
+        { professionalIds: targetProfIds, cleaningCategory: targetCategory }
+      );
+    }
+
+    // Campos "cadastrais" compartilhados pelos cenários 2 (ALL_SERIES) e 3
+    // (THIS_ONLY) — calculados uma vez e reaproveitados nos dois.
     let servicesUpdate: Prisma.AppointmentUpdateInput["services"] = undefined;
     if (data.serviceIds) {
       const services = await prisma.service.findMany({
@@ -123,11 +361,47 @@ export class AppointmentService {
       };
     }
 
-    // manuallyEdited freezes the appointment out of future iCloud syncs
-    // (see icloud.ts) - it should only flip when something actually
-    // changed, not on every PATCH regardless of content. Without this, just
-    // opening a synced appointment and clicking Save (no real edit) was
-    // enough to permanently detach it from the calendar, with no way back.
+    // =========================================================================
+    // CENÁRIO 2: "ALL_SERIES" (Todos os agendamentos da série)
+    // Aplica os mesmos campos cadastrais do CENÁRIO 3 a toda a série não
+    // faturada — não só title/location/price/notes (bug anterior: clientId/
+    // serviceIds/status/recurrenceRule só eram aplicados ao agendamento
+    // único, contradizendo o docstring "Atualiza campos cadastrais de toda
+    // a série"). date/startTime/endTime continuam de responsabilidade só do
+    // CENÁRIO 3 — cada ocorrência tem seu próprio horário por definição.
+    // =========================================================================
+    if (scope === "ALL_SERIES" && existing.seriesId) {
+      const updatableSeriesAppts = await prisma.appointment.findMany({
+        where: {
+          companyId,
+          seriesId: existing.seriesId,
+          paid: false,
+          invoiced: false,
+        },
+      });
+
+      for (const appt of updatableSeriesAppts) {
+        await prisma.appointment.update({
+          where: { id: appt.id },
+          data: {
+            ...(data.title !== undefined && { title: data.title }),
+            ...(data.location !== undefined && { location: data.location }),
+            ...(data.price !== undefined && { price: new Prisma.Decimal(data.price) }),
+            ...(data.notes !== undefined && { notes: data.notes }),
+            ...(data.clientId !== undefined && { clientId: data.clientId }),
+            ...(data.status !== undefined && { status: data.status }),
+            ...(data.recurrenceRule !== undefined && { recurrenceRule: data.recurrenceRule }),
+            ...(servicesUpdate ? { services: servicesUpdate } : {}),
+            manuallyEdited: true,
+          },
+        });
+      }
+    }
+
+    // =========================================================================
+    // CENÁRIO 3: "THIS_ONLY" (Apenas este agendamento)
+    // =========================================================================
+
     const newServiceIds = data.serviceIds ? [...data.serviceIds].sort() : undefined;
     const existingServiceIds = existing.services.map((s) => s.serviceId).sort();
     const somethingChanged =
@@ -140,6 +414,7 @@ export class AppointmentService {
       (data.price !== undefined && !new Prisma.Decimal(data.price).equals(existing.price)) ||
       (data.notes !== undefined && data.notes !== existing.notes) ||
       (data.status !== undefined && data.status !== existing.status) ||
+      (data.recurrenceRule !== undefined && data.recurrenceRule !== existing.recurrenceRule) ||
       (newServiceIds !== undefined &&
         (newServiceIds.length !== existingServiceIds.length ||
           newServiceIds.some((id, i) => id !== existingServiceIds[i])));
@@ -156,6 +431,7 @@ export class AppointmentService {
         ...(data.price !== undefined && { price: new Prisma.Decimal(data.price) }),
         ...(data.notes !== undefined && { notes: data.notes }),
         ...(data.status !== undefined && { status: data.status }),
+        ...(data.recurrenceRule !== undefined && { recurrenceRule: data.recurrenceRule }),
         ...(servicesUpdate ? { services: servicesUpdate } : {}),
         ...(somethingChanged ? { manuallyEdited: true } : {}),
       },
@@ -164,6 +440,103 @@ export class AppointmentService {
         services: { include: { service: true } },
       },
     });
+  }
+
+  /**
+   * Exclui um agendamento com suporte a escopos de série recorrente:
+   * - "THIS_ONLY": Remove apenas esta ocorrência.
+   * - "THIS_AND_FOLLOWING": Mantém o histórico passado intacto e remove este e os futuros não faturados.
+   * - "ALL_SERIES": Remove toda a série não faturada.
+   */
+  static async deleteAppointment(
+    id: string,
+    companyId: string,
+    deleteScope: AppointmentDeleteScope = "THIS_ONLY"
+  ) {
+    const existing = await prisma.appointment.findFirst({
+      where: { id, companyId },
+      include: {
+        invoice: { select: { id: true, status: true } },
+      },
+    });
+
+    if (!existing) {
+      throw new Error("Agendamento não encontrado.");
+    }
+
+    if (existing.paid || existing.invoice?.status === "PAID") {
+      throw new Error(
+        "Não é possível excluir um atendimento que já foi pago. Cancele o atendimento ou estorne o pagamento primeiro."
+      );
+    }
+
+    if (deleteScope === "THIS_AND_FOLLOWING" && existing.seriesId) {
+      const futureAppts = await prisma.appointment.findMany({
+        where: {
+          companyId,
+          seriesId: existing.seriesId,
+          startTime: { gte: existing.startTime },
+        },
+        include: {
+          invoice: { select: { status: true } },
+        },
+      });
+
+      const removableIds = futureAppts
+        .filter((a) => !a.paid && a.invoice?.status !== "PAID")
+        .map((a) => a.id);
+
+      if (removableIds.length > 0) {
+        await prisma.appointment.deleteMany({
+          where: { id: { in: removableIds } },
+        });
+      }
+
+      // Desativa a regra de recorrência das ocorrências restantes passadas
+      // para evitar que o horizonte rolling window volte a estender essa série cancelada
+      await prisma.appointment.updateMany({
+        where: {
+          companyId,
+          seriesId: existing.seriesId,
+        },
+        data: {
+          recurrenceRule: "NONE",
+        },
+      });
+
+      return { count: removableIds.length };
+    }
+
+    if (deleteScope === "ALL_SERIES" && existing.seriesId) {
+      const seriesAppts = await prisma.appointment.findMany({
+        where: {
+          companyId,
+          seriesId: existing.seriesId,
+        },
+        include: {
+          invoice: { select: { status: true } },
+        },
+      });
+
+      const removableIds = seriesAppts
+        .filter((a) => !a.paid && a.invoice?.status !== "PAID")
+        .map((a) => a.id);
+
+      if (removableIds.length > 0) {
+        await prisma.appointment.deleteMany({
+          where: { id: { in: removableIds } },
+        });
+      }
+
+      return { count: removableIds.length };
+    }
+
+    // Default: THIS_ONLY
+    await prisma.appointment.delete({
+      where: { id },
+    });
+
+    return { count: 1 };
   }
 
   /**
@@ -220,5 +593,123 @@ export class AppointmentService {
       googleMaps: `https://www.google.com/maps/dir/?api=1&destination=${encoded}`,
       waze: `https://waze.com/ul?q=${encoded}`,
     };
+  }
+
+  private static lastHorizonCheck = new Map<string, number>();
+
+  /**
+   * Garante que todas as séries recorrentes ativas da empresa estejam geradas até o
+   * limite do horizonte configurado (ex: 2 meses à frente).
+   * 
+   * Ao virar o mês ou quando a série atinge o último mês da janela, este método
+   * estende automaticamente os novos atendimentos no fuso de Denver, mantendo o
+   * banco de dados enxuto e a agenda sempre abastecida sem intervenção manual.
+   */
+  static async ensureRecurrenceHorizon(companyId: string, force = false) {
+    const now = Date.now();
+    const lastCheck = this.lastHorizonCheck.get(companyId) || 0;
+    // Debounce de 60 segundos por empresa para performance máxima
+    if (!force && now - lastCheck < 60_000) {
+      return { extendedSeriesCount: 0, newAppointmentsCount: 0 };
+    }
+    this.lastHorizonCheck.set(companyId, now);
+
+    try {
+      const company = await prisma.companyProfile.findUnique({
+        where: { id: companyId },
+        select: { recurrenceHorizonMonths: true },
+      });
+
+      const horizonMonths = company?.recurrenceHorizonMonths || 2;
+      const { horizonEndUtc } = getRecurrenceHorizonBoundary({ horizonMonths });
+
+      // Busca a última ocorrência de cada série recorrente ativa
+      const activeSeriesLastAppts = await prisma.appointment.findMany({
+        where: {
+          companyId,
+          seriesId: { not: null },
+          recurrenceRule: { notIn: ["NONE", ""] },
+          status: { not: "CANCELLED" },
+        },
+        orderBy: { startTime: "desc" },
+        distinct: ["seriesId"],
+        include: {
+          services: true,
+          professionals: true,
+        },
+      });
+
+      let newAppointmentsCount = 0;
+      let extendedSeriesCount = 0;
+
+      for (const lastAppt of activeSeriesLastAppts) {
+        if (!lastAppt.seriesId || !lastAppt.recurrenceRule) continue;
+
+        // Se a última ocorrência já atinge ou ultrapassa o final do horizonte, está atualizado
+        if (lastAppt.startTime.getTime() >= horizonEndUtc.getTime()) {
+          continue;
+        }
+
+        const nextOccurrences = generateNextOccurrencesUntil({
+          lastOccurrenceStartTime: lastAppt.startTime,
+          lastOccurrenceEndTime: lastAppt.endTime,
+          frequency: lastAppt.recurrenceRule as RecurrenceFrequency,
+          untilUtc: horizonEndUtc,
+          startIndex: (lastAppt.recurrenceIndex ?? 0) + 1,
+        });
+
+        if (nextOccurrences.length === 0) continue;
+
+        extendedSeriesCount++;
+
+        for (const occ of nextOccurrences) {
+          const createdAppt = await prisma.appointment.create({
+            data: {
+              companyId,
+              clientId: lastAppt.clientId,
+              title: lastAppt.title,
+              date: occ.date,
+              startTime: occ.startTime,
+              endTime: occ.endTime,
+              location: lastAppt.location,
+              price: lastAppt.price,
+              origin: "INTERNAL",
+              billable: lastAppt.billable,
+              notes: lastAppt.notes,
+              recurrenceRule: lastAppt.recurrenceRule,
+              seriesId: lastAppt.seriesId,
+              recurrenceIndex: occ.index,
+              ...(lastAppt.services.length > 0
+                ? {
+                    services: {
+                      create: lastAppt.services.map((s) => ({
+                        serviceId: s.serviceId,
+                        price: s.price,
+                      })),
+                    },
+                  }
+                : {}),
+            },
+          });
+
+          if (lastAppt.professionals.length > 0) {
+            await prisma.appointmentProfessional.createMany({
+              data: lastAppt.professionals.map((p) => ({
+                appointmentId: createdAppt.id,
+                professionalId: p.professionalId,
+                cleaningCategory: p.cleaningCategory,
+              })),
+            });
+          }
+
+          newAppointmentsCount++;
+        }
+      }
+
+      return { extendedSeriesCount, newAppointmentsCount };
+    } catch (err) {
+      console.error("Erro ao estender horizonte de recorrência da agenda:", err);
+      return { extendedSeriesCount: 0, newAppointmentsCount: 0 };
+    }
   }
 }

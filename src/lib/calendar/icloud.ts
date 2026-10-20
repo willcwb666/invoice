@@ -114,13 +114,18 @@ export function validateICloudCalendarUrl(url: string): {
       };
     }
 
-    // Hostname check: ensure it's an iCloud domain or valid calendar host
+    // Hostname check: strictly allow only official Apple iCloud calendar domains to prevent SSRF
     const hostname = parsed.hostname.toLowerCase();
-    const isICloud = hostname.endsWith("icloud.com") || hostname.includes("caldav");
+    const isAllowedICloudHost =
+      hostname === "icloud.com" ||
+      hostname.endsWith(".icloud.com");
 
-    if (!isICloud && !parsed.pathname.includes(".ics")) {
-      // Still allow if it contains valid calendar path or params, but guide user if completely off
-      // We accept general valid calendar urls too
+    if (!isAllowedICloudHost) {
+      return {
+        valid: false,
+        normalizedUrl: normalized,
+        error: "Domínio não autorizado. Utilize apenas links oficiais do Calendário do iCloud (*.icloud.com).",
+      };
     }
 
     return { valid: true, normalizedUrl: normalized };
@@ -159,7 +164,12 @@ export async function fetchICloudCalendarFeed(url: string): Promise<string> {
 
     try {
       for (let i = 0; i < maxRedirects; i++) {
-        const res = await fetch(currentUrl, {
+        const hopValidation = validateICloudCalendarUrl(currentUrl);
+        if (!hopValidation.valid) {
+          throw new Error(hopValidation.error || "Redirecionamento para domínio não autorizado bloqueado.");
+        }
+
+        const res = await fetch(hopValidation.normalizedUrl, {
           method: "GET",
           headers: {
             "User-Agent": ua,
@@ -170,7 +180,7 @@ export async function fetchICloudCalendarFeed(url: string): Promise<string> {
           redirect: "manual",
         });
 
-        // Handle 301, 302, 307, 308 redirects manually to convert webcal:// to https://
+        // Handle 301, 302, 307, 308 redirects manually to convert webcal:// to https:// and validate each hop
         if (res.status >= 300 && res.status < 400) {
           const location = res.headers.get("location");
           if (!location) break;
@@ -182,11 +192,16 @@ export async function fetchICloudCalendarFeed(url: string): Promise<string> {
             try {
               nextUrl = new URL(nextUrl, currentUrl).toString();
             } catch {
-              // keep as is
+              throw new Error("URL de redirecionamento inválida.");
             }
           }
 
-          currentUrl = nextUrl;
+          const nextHopValidation = validateICloudCalendarUrl(nextUrl);
+          if (!nextHopValidation.valid) {
+            throw new Error(nextHopValidation.error || "Redirecionamento para domínio externo bloqueado.");
+          }
+
+          currentUrl = nextHopValidation.normalizedUrl;
           continue;
         }
 
@@ -203,27 +218,6 @@ export async function fetchICloudCalendarFeed(url: string): Promise<string> {
     } catch (fetchErr: unknown) {
       lastError = fetchErr;
     }
-  }
-
-  // Fallback: standard fetch with redirect: follow
-  try {
-    const followRes = await fetch(baseNormalized, {
-      method: "GET",
-      headers: {
-        "User-Agent": userAgents[0],
-        Accept: "text/calendar, text/plain, */*",
-      },
-      redirect: "follow",
-    });
-
-    if (followRes.ok) {
-      const text = await followRes.text();
-      if (text.includes("BEGIN:VCALENDAR")) {
-        return text;
-      }
-    }
-  } catch (followErr: unknown) {
-    lastError = followErr;
   }
 
   const lastErrorMessage = lastError instanceof Error ? lastError.message : "Erro de conexão";
@@ -575,6 +569,102 @@ function detectServicesFromText(text: string, services: SyncableService[]): Sync
   return genericStandard ? [genericStandard] : [];
 }
 
+// Palavras-chave genéricas que indicam que o evento do calendário não é um
+// atendimento de cliente de verdade (tarefa interna, dia de folga, etc.) —
+// usadas para não criar um "cliente" falso a partir desses títulos. Não
+// inclui nada específico de uma empresa/pessoa (eventos pessoais específicos
+// não generalizam para outras empresas e são dados sensíveis).
+const GENERIC_CALENDAR_TASKS = new Set([
+  "banheiro", "banheiros", "cozinha", "geladeira", "forno", "rodapé",
+  "move out", "move in", "moving out", "moving in", "deep clean", "deep cleaning",
+  "helper", "visita", "novo evento", "day off", "no school", "sem aulas",
+]);
+
+export interface CleanClientDetails {
+  clientName: string;
+  price?: number;
+  serviceNotes?: string;
+  isGenericTask: boolean;
+}
+
+export function extractClientAndDetails(summary: string): CleanClientDetails {
+  if (!summary) {
+    return { clientName: "Atendimento Avulso", isGenericTask: true };
+  }
+
+  let text = summary.trim();
+
+  // 1. Extrair Preço ($130, $ 130.00, $130$, $97,50, 130$)
+  let price: number | undefined;
+  const priceMatch = text.match(/\$\s*(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s*\$/i);
+  if (priceMatch) {
+    const valStr = (priceMatch[1] || priceMatch[2]).replace(",", ".");
+    price = parseFloat(valStr);
+  }
+
+  // 2. Remover o preço do texto
+  text = text.replace(/\$\s*\d+(?:[.,]\d{1,2})?\s*\+?\s*\d*\$?/gi, " ");
+  text = text.replace(/\b\d+(?:[.,]\d{1,2})?\s*\$/gi, " ");
+  text = text.replace(/\$\s*\d+(?:[.,]\d{1,2})?/gi, " ");
+
+  // 3. Remover prefixos de pagamento (Pg, Pago, Pagou, Paga, Saldo, Paid, Pd)
+  text = text.replace(/^\s*(?:pg|pgo|pago|paga|pagou|pagamento|paid|pd|saldo)\b[\s.:—-]*/i, "");
+  text = text.replace(/^\s*pg(?=[A-Z\s])/i, "");
+
+  // 4. Remover prefixos de serviço (Limpeza, Faxina, Cleaning, Atendimento)
+  text = text.replace(/^\s*(?:limpeza|faxina|cleaning|clean|atendimento|serviço|servico)\b[\s.:—-]*/i, "");
+
+  // Tratar menções como "Porão Laura Reynalds" -> Cliente "Laura Reynalds", Nota "Porão"
+  let extraRoomNote: string | undefined;
+  const poraoMatch = text.match(/\b(?:porão|porao)\b/i);
+  if (poraoMatch) {
+    extraRoomNote = "Porão";
+    text = text.replace(/\b(?:porão|porao)\b/gi, " ");
+  }
+
+  // 5. Remover pontuações nas bordas
+  text = text.replace(/^[\s-:—.,/\\|&$;+]+/, "").replace(/[\s-:—.,/\\|&$;+]+$/, "").trim();
+
+  const lower = text.toLowerCase();
+  if (GENERIC_CALENDAR_TASKS.has(lower) || lower === "banheiro" || lower === "banheiros") {
+    return {
+      clientName: "Atendimento Avulso",
+      price,
+      serviceNotes: text,
+      isGenericTask: true,
+    };
+  }
+
+  // Separar subtítulo com hífen (ex: Emily - marido Chileno)
+  let serviceNotes = extraRoomNote;
+  const parts = text.split(/\s+[-—]\s+/);
+  if (parts.length === 2) {
+    text = parts[0].trim();
+    if (!serviceNotes) serviceNotes = parts[1].trim();
+  }
+
+  // Capitalização limpa
+  text = text
+    .split(/\s+/)
+    .map((w) => {
+      if (w.length <= 2 && /^(de|da|do|dos|das|e)$/i.test(w)) return w.toLowerCase();
+      if (w.startsWith("(") && w.length > 2) {
+        return "(" + w.charAt(1).toUpperCase() + w.slice(2);
+      }
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    })
+    .join(" ");
+
+  if (text.length < 2) text = "Cliente Avulso";
+
+  return {
+    clientName: text,
+    price,
+    serviceNotes,
+    isGenericTask: false,
+  };
+}
+
 interface RawVEvent {
   uid: string;
   summary: string;
@@ -707,8 +797,13 @@ function buildParsedEvent(
     status = "CANCELLED";
   }
 
+  const summaryPrice =
+    extractPriceFromText(raw.summary) ?? extractClientAndDetails(raw.summary).price ?? null;
+  const descriptionPrice = extractPriceFromText(raw.description);
   const extractedPrice =
-    extractPriceFromText(raw.description) || extractPriceFromText(raw.summary) || undefined;
+    summaryPrice !== null && summaryPrice !== undefined
+      ? summaryPrice
+      : (descriptionPrice || undefined);
 
   return {
     uid: eventUid,
@@ -870,6 +965,22 @@ export function syncICloudCalendarForCompany(
   companyId: string,
   rawUrl: string
 ): Promise<SyncICloudResult> {
+  if (
+    process.env.NEXT_PHASE === "phase-production-build" ||
+    process.env.npm_lifecycle_event === "build" ||
+    process.env.NEXT_BUILD === "1"
+  ) {
+    return Promise.resolve({
+      success: true,
+      message: "Sync bypassed during build phase.",
+      totalFound: 0,
+      created: 0,
+      updated: 0,
+      canceled: 0,
+      normalizedUrl: rawUrl,
+    });
+  }
+
   const inFlight = companySyncLocks.get(companyId);
   if (inFlight) return inFlight;
 
@@ -916,17 +1027,18 @@ async function syncICloudCalendarForCompanyUnlocked(
     };
   }
 
-  // 4. Filter to a forward-looking window only: the agenda is never edited
-  //    for days already past, so there is no need to re-process history —
-  //    only from today through `icloudSyncWindowDays` days ahead (configurable
-  //    in Settings, default 60 / ~2 months). This keeps every sync fast
-  //    regardless of how many past events pile up in the feed over time.
+  // 4. Filter to a dynamic sync window: includes past 60 days to ensure recent history
+  //    (current and previous month) is complete, plus upcoming windowDays (default 90).
   const now = new Date();
+  const pastDays = 60;
   const windowStart = new Date(now);
-  // UTC, não hora local do processo - ver parseIcsDate/addDays acima.
+  windowStart.setUTCDate(windowStart.getUTCDate() - pastDays);
   windowStart.setUTCHours(0, 0, 0, 0);
-  const windowEnd = new Date(windowStart);
-  windowEnd.setUTCDate(windowEnd.getUTCDate() + (company.icloudSyncWindowDays || 60));
+
+  const futureDays = Math.max(company.icloudSyncWindowDays || 90, 90);
+  const windowEnd = new Date(now);
+  windowEnd.setUTCDate(windowEnd.getUTCDate() + futureDays);
+  windowEnd.setUTCHours(23, 59, 59, 999);
 
   const events = allEvents.filter(
     (e) => e.startDate >= windowStart && e.startDate <= windowEnd
@@ -948,7 +1060,11 @@ async function syncICloudCalendarForCompanyUnlocked(
   //    Also scoped to the same forward-looking window — past appointments are
   //    frozen and never revisited.
   const existingAppts = await prisma.appointment.findMany({
-    where: { companyId, origin: "ICLOUD_SYNC", date: { gte: windowStart } },
+    where: {
+      companyId,
+      origin: "ICLOUD_SYNC",
+      date: { gte: windowStart, lte: windowEnd },
+    },
     select: {
       id: true,
       externalEventId: true,
@@ -962,6 +1078,10 @@ async function syncICloudCalendarForCompanyUnlocked(
       price: true,
       clientId: true,
       manuallyEdited: true,
+      paid: true,
+      invoiced: true,
+      invoiceId: true,
+      invoice: { select: { id: true, status: true } },
       services: { select: { serviceId: true } },
     },
   });
@@ -985,57 +1105,121 @@ async function syncICloudCalendarForCompanyUnlocked(
   // Isolated per event instead: one failure is logged and skipped, the rest
   // of the batch still runs.
   const failedEvents: { uid: string; summary: string; error: string }[] = [];
-  const clientCache = new Map(existingClients.map((c) => [c.name.toLowerCase(), c]));
+  const normalizeForNameMatch = (name: string): string =>
+    name.toLowerCase().replace(/[\s\-_(),.]+/g, " ").trim();
+
+  const normalizeForAddressMatch = (addr: string): string =>
+    addr
+      .toLowerCase()
+      .replace(/[\r\n]+/g, ", ")
+      .replace(/\b(united states|usa)\b/gi, "")
+      .replace(/[^a-z0-9]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const extractStreetCore = (addr: string): string => {
+    if (!addr) return "";
+    const firstPart = addr.split(/[\r\n,]/)[0].trim().toLowerCase();
+    return firstPart.replace(/[^a-z0-9]/g, "");
+  };
+
+  const clientCache = new Map(
+    existingClients.map((c) => [normalizeForNameMatch(c.name), c])
+  );
 
   for (const event of events) {
    try {
     const summaryLower = event.summary.toLowerCase().trim();
-    const locationLower = (event.location || "").toLowerCase().trim();
+    const locationTrimmed = (event.location || "").trim();
+    const locationNorm = normalizeForAddressMatch(locationTrimmed);
+    const locationCore = extractStreetCore(locationTrimmed);
+    const extracted = extractClientAndDetails(event.summary);
+
+    // Helper para casar por endereço físico robusto
+    const findClientByAddress = () => {
+      if (!locationTrimmed || locationTrimmed.length < 5 || locationTrimmed.toLowerCase().includes("endereço via")) {
+        return undefined;
+      }
+      return existingClients.find((c) => {
+        if (!c.address || c.name.toLowerCase() === "atendimento avulso") return false;
+        const cCore = extractStreetCore(c.address);
+        if (locationCore.length >= 6 && cCore.length >= 6 && locationCore === cCore) {
+          return true;
+        }
+        const cNorm = normalizeForAddressMatch(c.address);
+        return (
+          (locationNorm.length >= 8 && cNorm.includes(locationNorm)) ||
+          (cNorm.length >= 8 && locationNorm.includes(cNorm))
+        );
+      });
+    };
 
     // --- Client matching ---
     let clientId: string | null = null;
 
-    // Match by full name
-    const matchedByName = existingClients.find((c) => {
-      const cName = c.name.toLowerCase().trim();
-      return summaryLower.includes(cName) || (cName.length > 3 && cName.includes(summaryLower));
-    });
-    if (matchedByName) {
-      clientId = matchedByName.id;
+    if (extracted.isGenericTask) {
+      // Tarefas genéricas ($40 Banheiro, Buscar água, etc.) casam por endereço com cliente real se houver
+      const matchedByAddress = findClientByAddress();
+      if (matchedByAddress) {
+        clientId = matchedByAddress.id;
+      }
+      // Se não tem endereço ou não casou com cliente real, direciona ao "Atendimento Avulso"
+      if (!clientId) {
+        const avulso = existingClients.find((c) => c.name.toLowerCase() === "atendimento avulso");
+        if (avulso) clientId = avulso.id;
+      }
     } else {
-      // Match by first name
-      const matchedByFirstName = existingClients.find((c) => {
-        const firstName = c.name.split(/\s+/)[0].toLowerCase().trim();
-        return firstName.length >= 3 && summaryLower.includes(firstName);
+      const cleanLower = extracted.clientName.toLowerCase().trim();
+      const normClientName = normalizeForNameMatch(extracted.clientName);
+
+      // 1. Casamento exato por nome limpo ou normalizado
+      const exactMatch = existingClients.find((c) => {
+        const cClean = c.name.toLowerCase().trim();
+        return cClean === cleanLower || normalizeForNameMatch(c.name) === normClientName;
       });
-      if (matchedByFirstName) {
-        clientId = matchedByFirstName.id;
-      } else if (locationLower) {
-        const matchedByAddress = existingClients.find((c) => {
-          if (!c.address) return false;
-          const cAddr = c.address.toLowerCase().trim();
-          return locationLower.includes(cAddr) || (cAddr.length > 5 && cAddr.includes(locationLower));
-        });
+
+      if (exactMatch) {
+        clientId = exactMatch.id;
+      } else {
+        // 2. Casamento por endereço físico (rua e número exatos)
+        const matchedByAddress = findClientByAddress();
         if (matchedByAddress) {
           clientId = matchedByAddress.id;
+        } else {
+          // 3. Casamento por inclusão de nome (apenas palavras com >= 4 letras, nunca por preços ou genéricos)
+          const subMatch = existingClients.find((c) => {
+            const cNameLower = c.name.toLowerCase().trim();
+            if (cNameLower === "atendimento avulso" || cNameLower.length < 4 || cleanLower.length < 4) return false;
+            return cNameLower.includes(cleanLower) || cleanLower.includes(cNameLower);
+          });
+          if (subMatch) {
+            clientId = subMatch.id;
+          }
         }
       }
     }
 
     // Auto-create client if none matched
     if (!clientId) {
-      let derivedName = event.summary
-        .replace(/^(limpeza|cleaning|atendimento|serviço|faxina)\s*[-:]?\s*/i, "")
-        .replace(/\s*[-:]?\s*\$?\d+(?:[.,]\d{2})?.*$/, "")
-        .trim();
-
-      if (!derivedName || derivedName.length < 2) {
-        derivedName = event.summary.trim() || "Cliente iPhone iCloud";
-      }
-      if (derivedName.length > 100) derivedName = derivedName.substring(0, 100);
-
-      const cacheKey = derivedName.toLowerCase();
+      const derivedName = (extracted.isGenericTask ? "Atendimento Avulso" : extracted.clientName).trim();
+      const cacheKey = normalizeForNameMatch(derivedName);
       let autoClient = clientCache.get(cacheKey);
+
+      // Verificação em banco para evitar race condition entre execuções concorrentes de sync
+      if (!autoClient) {
+        const existingInDb = await prisma.client.findFirst({
+          where: {
+            companyId,
+            name: { equals: derivedName, mode: "insensitive" },
+          },
+        });
+
+        if (existingInDb) {
+          autoClient = existingInDb;
+          existingClients.push(autoClient);
+          clientCache.set(cacheKey, autoClient);
+        }
+      }
 
       if (!autoClient) {
         let city = "Greeley";
@@ -1096,8 +1280,9 @@ async function syncICloudCalendarForCompanyUnlocked(
     );
     const existing = existingByUid || existingByTitleTime;
 
-    const calculatedPrice = event.price !== undefined
-      ? new Prisma.Decimal(event.price)
+    const effectivePrice = event.price !== undefined ? event.price : extracted.price;
+    const calculatedPrice = effectivePrice !== undefined
+      ? new Prisma.Decimal(effectivePrice)
       : existing
       ? existing.price
       : new Prisma.Decimal(matchedServicesSum > 0 ? matchedServicesSum : 150.0);
@@ -1108,17 +1293,27 @@ async function syncICloudCalendarForCompanyUnlocked(
     const appointmentServicesData = matchedServices.map((s) => ({
       serviceId: s.id,
       price:
-        matchedServices.length === 1 && event.price !== undefined
-          ? new Prisma.Decimal(event.price)
+        matchedServices.length === 1 && effectivePrice !== undefined
+          ? new Prisma.Decimal(effectivePrice)
           : s.basePrice,
     }));
     const matchedServiceIds = matchedServices.map((s) => s.id).sort();
 
+    const safeSummary = (event.summary || "Atendimento").slice(0, 255);
+    const safeLocation = event.location ? event.location.slice(0, 500) : null;
+    const safeNotes = event.description ? event.description.slice(0, 5000) : null;
+    const safeUid = event.uid.slice(0, 255);
+
     if (existing) {
-      // Manually-completed appointments are never reverted back to SCHEDULED
-      // by a stale calendar entry.
+      const dateChanged =
+        existing.date.getTime() !== event.startDate.getTime() ||
+        existing.startTime.getTime() !== event.startDate.getTime();
+
+      // Manually-completed appointments on the SAME date are never reverted back to SCHEDULED
+      // by a stale calendar entry. BUT if the date or time moved on the calendar,
+      // it was explicitly rescheduled by the user on the iPhone and MUST be updated!
       const isProtectedCompletion =
-        existing.status === "COMPLETED" && apptStatus === "SCHEDULED";
+        !dateChanged && existing.status === "COMPLETED" && apptStatus === "SCHEDULED";
 
       // Once a user edits this appointment by hand in the app (services,
       // price, time, etc.), the iPhone calendar is no longer the source of
@@ -1128,15 +1323,15 @@ async function syncICloudCalendarForCompanyUnlocked(
       }
 
       const resolvedClientId = clientId || existing.clientId;
-      const resolvedLocation = event.location || null;
-      const resolvedNotes = event.description || null;
+      const resolvedLocation = safeLocation;
+      const resolvedNotes = safeNotes;
       const existingServiceIds = existing.services.map((s) => s.serviceId).sort();
       const sameServices =
         existingServiceIds.length === matchedServiceIds.length &&
         existingServiceIds.every((id, i) => id === matchedServiceIds[i]);
 
       const unchanged =
-        existing.title === event.summary &&
+        existing.title === safeSummary &&
         existing.clientId === resolvedClientId &&
         existing.date.getTime() === event.startDate.getTime() &&
         existing.startTime.getTime() === event.startDate.getTime() &&
@@ -1151,17 +1346,17 @@ async function syncICloudCalendarForCompanyUnlocked(
         await prisma.appointment.update({
           where: { id: existing.id },
           data: {
-            title: event.summary,
+            title: safeSummary,
             clientId: resolvedClientId,
             date: event.startDate,
             startTime: event.startDate,
             endTime: event.endDate,
-            location: event.location || undefined,
-            notes: event.description || undefined,
+            location: safeLocation || undefined,
+            notes: safeNotes || undefined,
             price: calculatedPrice,
             status: apptStatus,
             origin: "ICLOUD_SYNC",
-            externalEventId: event.uid,
+            externalEventId: safeUid,
             services: {
               deleteMany: {},
               ...(appointmentServicesData.length ? { create: appointmentServicesData } : {}),
@@ -1171,26 +1366,111 @@ async function syncICloudCalendarForCompanyUnlocked(
         updatedCount++;
       }
     } else {
-      await prisma.appointment.create({
-        data: {
-          companyId,
-          clientId: clientId!,
-          title: event.summary,
-          date: event.startDate,
-          startTime: event.startDate,
-          endTime: event.endDate,
-          location: event.location || null,
-          price: calculatedPrice,
-          status: apptStatus,
-          origin: "ICLOUD_SYNC",
-          externalEventId: event.uid,
-          notes: event.description || null,
-          ...(appointmentServicesData.length
-            ? { services: { create: appointmentServicesData } }
-            : {}),
-        },
-      });
-      createdCount++;
+      // Check if an appointment with this externalEventId already exists anywhere in DB (e.g. created prior to windowStart)
+      const existingInDb = safeUid
+        ? await prisma.appointment.findUnique({
+            where: {
+              companyId_externalEventId: {
+                companyId,
+                externalEventId: safeUid,
+              },
+            },
+            select: { id: true, manuallyEdited: true },
+          })
+        : null;
+
+      if (existingInDb) {
+        if (!existingInDb.manuallyEdited) {
+          await prisma.appointment.update({
+            where: { id: existingInDb.id },
+            data: {
+              title: safeSummary,
+              clientId: clientId!,
+              date: event.startDate,
+              startTime: event.startDate,
+              endTime: event.endDate,
+              location: safeLocation || undefined,
+              notes: safeNotes || undefined,
+              price: calculatedPrice,
+              status: apptStatus,
+              origin: "ICLOUD_SYNC",
+              services: {
+                deleteMany: {},
+                ...(appointmentServicesData.length ? { create: appointmentServicesData } : {}),
+              },
+            },
+          });
+          updatedCount++;
+        }
+      } else {
+        if (safeUid) {
+          const upsertedAppt = await prisma.appointment.upsert({
+            where: {
+              companyId_externalEventId: {
+                companyId,
+                externalEventId: safeUid,
+              },
+            },
+            update: {
+              title: safeSummary,
+              clientId: clientId!,
+              date: event.startDate,
+              startTime: event.startDate,
+              endTime: event.endDate,
+              location: safeLocation || undefined,
+              notes: safeNotes || undefined,
+              price: calculatedPrice,
+              status: apptStatus,
+              origin: "ICLOUD_SYNC",
+              services: {
+                deleteMany: {},
+                ...(appointmentServicesData.length
+                  ? { create: appointmentServicesData }
+                  : {}),
+              },
+            },
+            create: {
+              companyId,
+              clientId: clientId!,
+              title: safeSummary,
+              date: event.startDate,
+              startTime: event.startDate,
+              endTime: event.endDate,
+              location: safeLocation,
+              price: calculatedPrice,
+              status: apptStatus,
+              origin: "ICLOUD_SYNC",
+              externalEventId: safeUid,
+              notes: safeNotes,
+              ...(appointmentServicesData.length
+                ? { services: { create: appointmentServicesData } }
+                : {}),
+            },
+          });
+          apptByUid.set(safeUid, upsertedAppt as any);
+          createdCount++;
+        } else {
+          const createdAppt = await prisma.appointment.create({
+            data: {
+              companyId,
+              clientId: clientId!,
+              title: safeSummary,
+              date: event.startDate,
+              startTime: event.startDate,
+              endTime: event.endDate,
+              location: safeLocation,
+              price: calculatedPrice,
+              status: apptStatus,
+              origin: "ICLOUD_SYNC",
+              notes: safeNotes,
+              ...(appointmentServicesData.length
+                ? { services: { create: appointmentServicesData } }
+                : {}),
+            },
+          });
+          createdCount++;
+        }
+      }
     }
    } catch (eventErr: unknown) {
     const msg = eventErr instanceof Error ? eventErr.message : String(eventErr);
@@ -1200,34 +1480,40 @@ async function syncICloudCalendarForCompanyUnlocked(
   }
 
   // 7. Cancel orphaned appointments: anything ICLOUD_SYNC created from a UID
-  //    that no longer appears in the current feed window. This happens both
-  //    when an event is deleted on the iPhone, and — less obviously — when a
-  //    recurring series is edited there as "this event and future events":
-  //    Apple's CalDAV export caps the old UID's RRULE with an UNTIL and
-  //    starts a brand new UID for the future occurrences, so without this
-  //    step the old UID's already-imported occurrences are silently orphaned
-  //    forever while the new UID imports the same slots again — the exact
-  //    duplicates reported by the user. Never touches a manually-edited,
-  //    already-completed, or in-progress appointment.
+  //    that no longer appears in the current feed window. This happens when an
+  //    event is deleted on the iPhone (either single event, exception or series
+  //    truncation/cancellation). If the user deleted it from the iPhone calendar,
+  //    that service was cancelled or did not take place.
+  //    We preserve only appointments that:
+  //    - Were manually edited by hand inside the web application (manuallyEdited: true)
+  //    - Have already been paid (paid: true or attached to a PAID invoice)
+  //    Anything else is marked CANCELLED and unlinked from unpaid invoices.
   const feedUidSet = new Set(events.map((e) => e.uid));
   let canceledCount = 0;
   for (const appt of existingAppts) {
     if (!appt.externalEventId) continue;
+    if (appt.date < windowStart || appt.date > windowEnd) continue;
     if (feedUidSet.has(appt.externalEventId)) continue;
     if (appt.manuallyEdited) continue;
-    if (appt.status === "CANCELLED" || appt.status === "COMPLETED" || appt.status === "IN_PROGRESS") continue;
+    if (appt.paid) continue;
+    if (appt.invoice?.status === "PAID") continue;
+    if (appt.status === "CANCELLED") continue;
 
     await prisma.appointment.update({
       where: { id: appt.id },
-      data: { status: "CANCELLED" },
+      data: {
+        status: "CANCELLED",
+        invoiced: false,
+        invoiceId: null,
+      },
     });
     canceledCount++;
   }
 
   const message =
     (createdCount > 0 || updatedCount > 0 || canceledCount > 0
-      ? `${createdCount} novos atendimentos importados, ${updatedCount} atualizados e ${canceledCount} cancelados (removidos do iPhone) do iPhone da esposa. (${events.length} de ${allEvents.length} eventos no feed, janela de ${company.icloudSyncWindowDays || 60} dias a partir de hoje)`
-      : `${events.length} atendimentos sincronizados do iPhone (já atualizados).`) +
+      ? `${createdCount} novos atendimentos importados, ${updatedCount} atualizados e ${canceledCount} cancelados do calendário do iPhone (Trabalhos). (${events.length} atendimentos na janela ativa)`
+      : `${events.length} atendimentos sincronizados do calendário do iPhone (já atualizados).`) +
     (failedEvents.length > 0
       ? ` ⚠️ ${failedEvents.length} evento(s) do feed falharam ao processar e foram pulados — veja os logs do servidor.`
       : "");
@@ -1275,6 +1561,15 @@ async function syncICloudCalendarForCompanyUnlocked(
     console.warn("Não foi possível gravar .data/icloud-sync-status.json:", saveErr);
   }
 
+  try {
+    await prisma.companyProfile.update({
+      where: { id: companyId },
+      data: { lastICloudSyncAt: new Date() },
+    });
+  } catch (syncTimeErr) {
+    console.warn("Não foi possível atualizar lastICloudSyncAt no perfil:", syncTimeErr);
+  }
+
   return {
     success: true,
     message,
@@ -1296,6 +1591,14 @@ let lastSyncTimestamp = 0;
 export async function ensureICloudCalendarSynced(
   force = false
 ): Promise<SyncICloudResult | null> {
+  if (
+    process.env.NEXT_PHASE === "phase-production-build" ||
+    process.env.npm_lifecycle_event === "build" ||
+    process.env.NEXT_BUILD === "1"
+  ) {
+    return null;
+  }
+
   if (activeSyncPromise) {
     console.log("[iCloud Auto-Sync] Sincronização já em andamento, aguardando término...");
     return activeSyncPromise;

@@ -47,10 +47,5 @@ export const createInvoiceSchema = z
     path: ["items"],
   });
 
-export const updateInvoiceStatusSchema = z.object({
-  id: z.string().min(1, "ID da fatura obrigatório"),
-  status: z.enum(["DRAFT", "PENDING", "PAID", "OVERDUE", "CANCELLED"]),
-});
-
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 export type InvoiceItemInput = z.infer<typeof invoiceItemSchema>;

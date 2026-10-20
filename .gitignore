@@ -45,3 +45,10 @@ exemple/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated analysis and agent state
+graphify-out/
+.agents/
+.claude-flow/
+.swarm/
+skills-lock.json

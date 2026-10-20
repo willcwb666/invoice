@@ -43,9 +43,4 @@ export const createClientSchema = z.object({
   notes: z.string().trim().max(1000).optional().or(z.literal("")),
 });
 
-export const updateClientSchema = createClientSchema.partial().extend({
-  id: z.string().min(1, "ID de cliente obrigatório"),
-});
-
 export type CreateClientInput = z.infer<typeof createClientSchema>;
-export type UpdateClientInput = z.infer<typeof updateClientSchema>;

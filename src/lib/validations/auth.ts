@@ -14,3 +14,11 @@ export const loginSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+export const updateProfileSchema = z.object({
+  name: z.string().trim().min(2, "O nome deve ter pelo menos 2 caracteres").optional(),
+  phone: z.string().trim().max(30, "Telefone muito longo").optional(),
+  gender: z.enum(["MALE", "FEMALE"]).optional(),
+});
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

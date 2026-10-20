@@ -12,7 +12,8 @@ export class InvoiceService {
     companyId: string,
     status?: string,
     orderBy: "invoiceNumber" | "issueDate" | "dueDate" | "totalAmount" | "createdAt" = "invoiceNumber",
-    orderDir: "asc" | "desc" = "desc"
+    orderDir: "asc" | "desc" = "desc",
+    limit?: number
   ) {
     // Sincroniza faturas de exemplo caso ainda não existam no banco. Não
     // deixa uma falha de seed (ex.: banco momentaneamente indisponível no
@@ -29,6 +30,7 @@ export class InvoiceService {
         companyId,
         ...(status ? { status: status as any } : {}),
       },
+      take: limit && limit > 0 ? limit : undefined,
       orderBy: { [orderBy]: orderDir },
       include: {
         client: {
@@ -102,10 +104,7 @@ export class InvoiceService {
         paidAt: true,
         client: {
           select: {
-            id: true,
             name: true,
-            email: true,
-            phone: true,
             address: true,
             city: true,
             state: true,
@@ -180,11 +179,43 @@ export class InvoiceService {
    * fatura automaticamente e é marcado invoiced=true na mesma transação,
    * para nunca poder ser faturado duas vezes.
    */
+  private static formatCleanAppointmentDescription(
+    rawTitle: string,
+    price: number,
+    services?: Array<{ service?: { name?: string | null } | null }>
+  ): string {
+    const linkedNames = (services || [])
+      .map((s) => s.service?.name?.trim())
+      .filter(Boolean) as string[];
+    if (linkedNames.length > 0) {
+      return linkedNames.join(" + ");
+    }
+
+    const t = (rawTitle || "").toLowerCase();
+    const isOffice =
+      t.includes("escritório") ||
+      t.includes("escritorio") ||
+      t.includes("office");
+    const isHalf =
+      t.includes("parcial") || t.includes("half") || (isOffice && price > 0 && price <= 80);
+
+    if (isOffice) {
+      return isHalf ? "Office - Half standard cleaning" : "Office - Standard cleaning";
+    }
+    if (t.includes("move") || t.includes("mudança") || t.includes("moving")) {
+      return "Move-out cleaning";
+    }
+    if (t.includes("deep") || t.includes("pesada") || t.includes("profunda")) {
+      return "House - Deep cleaning";
+    }
+    return "House - Standard cleaning";
+  }
+
   static async createInvoice(companyId: string, data: CreateInvoiceInput) {
     const providerAddress = await CompanyService.getDefaultAddress(companyId);
 
     return prisma.$transaction(async (tx) => {
-      const client = await tx.client.findFirst({
+      let client = await tx.client.findFirst({
         where: { id: data.clientId, companyId },
       });
 
@@ -192,7 +223,13 @@ export class InvoiceService {
         throw new Error("Cliente não encontrado.");
       }
 
-      let appointments: { id: string; title: string; date: Date; price: Prisma.Decimal }[] = [];
+      let appointments: {
+        id: string;
+        title: string;
+        date: Date;
+        price: Prisma.Decimal;
+        services: { service: { name: string } }[];
+      }[] = [];
       if (data.appointmentIds.length > 0) {
         appointments = await tx.appointment.findMany({
           where: {
@@ -202,18 +239,77 @@ export class InvoiceService {
             status: "COMPLETED",
             invoiced: false,
           },
-          select: { id: true, title: true, date: true, price: true },
+          select: {
+            id: true,
+            title: true,
+            date: true,
+            price: true,
+            services: { include: { service: { select: { name: true } } } },
+          },
         });
 
         if (appointments.length !== data.appointmentIds.length) {
           throw new Error(
-            "Um ou mais agendamentos selecionados não foram encontrados, não pertencem a este cliente, não estão concluídos ou já foram faturados."
+            "Um ou mais agendamentos selecionados não foram encontrados, estão cancelados ou já foram faturados."
           );
         }
       }
 
+      // Se o cliente enviado for um registro apelido importado do iPhone, resolve para o cliente oficial cadastrado no sistema
+      const isIphoneClient = Boolean(
+        client.notes && client.notes.includes("Importado automaticamente do Calendário iPhone")
+      );
+      if (isIphoneClient) {
+        const systemClients = await tx.client.findMany({
+          where: {
+            companyId,
+            OR: [
+              { notes: null },
+              { NOT: { notes: { contains: "Importado automaticamente do Calendário iPhone" } } },
+            ],
+          },
+        });
+
+        if (systemClients.length > 0) {
+          const combinedHaystack = [
+            client.name,
+            client.address || "",
+            ...appointments.map((a) => a.title),
+          ]
+            .join(" ")
+            .toLowerCase();
+
+          let matched = systemClients.find((sc) => {
+            const scLower = sc.name.toLowerCase();
+            return (
+              scLower.includes(client!.name.toLowerCase()) ||
+              client!.name.toLowerCase().includes(scLower)
+            );
+          });
+
+          if (!matched) {
+            // Token matching against system client names
+            matched = systemClients.find((sc) => {
+              const tokens = sc.name
+                .toLowerCase()
+                .split(/[\s&-]+/)
+                .filter((t) => t.length >= 4);
+              return tokens.some((tok) => combinedHaystack.includes(tok));
+            });
+          }
+
+          if (matched) {
+            client = matched;
+          }
+        }
+      }
+
       const appointmentItems = appointments.map((appt) => ({
-        description: appt.title,
+        description: this.formatCleanAppointmentDescription(
+          appt.title,
+          Number(appt.price),
+          appt.services
+        ),
         serviceDate: appt.date,
         quantity: 1,
         unitPrice: appt.price,
@@ -236,7 +332,7 @@ export class InvoiceService {
       const invoice = await tx.invoice.create({
         data: {
           companyId,
-          clientId: data.clientId,
+          clientId: client.id,
           invoiceNumber: data.invoiceNumber,
           status: data.status,
           dueDate: new Date(data.dueDate),
@@ -269,11 +365,7 @@ export class InvoiceService {
    * Métricas do Dashboard para a empresa
    */
   static async getDashboardMetrics(companyId: string) {
-    // Sums by status computed in the database (groupBy) instead of pulling
-    // every invoice row over the wire just to add them up in JS - the
-    // result set here is at most one row per InvoiceStatus value, not one
-    // per invoice.
-    const [statusTotals, totalInvoices, clientCount, expenseSum] = await Promise.all([
+    const [statusTotals, totalInvoices, clientCount, expenseSum, apptTotals] = await Promise.all([
       prisma.invoice.groupBy({
         by: ["status"],
         where: { companyId },
@@ -285,14 +377,31 @@ export class InvoiceService {
         where: { companyId },
         _sum: { amount: true },
       }),
+      prisma.appointment.groupBy({
+        by: ["paid"],
+        where: {
+          companyId,
+          billable: true,
+          status: "COMPLETED",
+          invoiced: false,
+        },
+        _sum: { price: true },
+      }),
     ]);
 
     const sumFor = (status: string) =>
       Number(statusTotals.find((s) => s.status === status)?._sum.totalAmount || 0);
 
-    const totalPaid = sumFor("PAID");
-    const totalPending = sumFor("PENDING");
-    const totalOverdue = sumFor("OVERDUE");
+    const invoicePaid = sumFor("PAID");
+    const invoicePending = sumFor("PENDING");
+    const invoiceOverdue = sumFor("OVERDUE");
+
+    const apptPaid = Number(apptTotals.find((a) => a.paid)?._sum.price || 0);
+    const apptPending = Number(apptTotals.find((a) => !a.paid)?._sum.price || 0);
+
+    const totalPaid = invoicePaid + apptPaid;
+    const totalPending = invoicePending + apptPending;
+    const totalOverdue = invoiceOverdue;
     const totalExpenses = Number(expenseSum._sum.amount || 0);
     const netProfit = totalPaid - totalExpenses;
 

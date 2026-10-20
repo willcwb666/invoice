@@ -11,7 +11,12 @@ export const createEstimateSchema = z.object({
   clientId: z.string().min(1, "ID do cliente obrigatório"),
   estimateNumber: z.string().trim().min(1).optional(),
   validUntil: z.string().min(1, "Data de validade obrigatória"),
-  notes: z.string().trim().max(1000).optional().nullable(),
+  notes: z.string().trim().max(2000).optional().nullable(),
+  discount: z.number().min(0).default(0).optional(),
+  status: z.enum(["DRAFT", "PENDING", "SENT", "ACCEPTED", "REJECTED", "EXPIRED", "CONVERTED"]).optional(),
+  publicToken: z.string().optional().nullable(),
+  estimatedDurationMinutes: z.number().int().positive().optional().nullable(),
+  metadata: z.record(z.string(), z.any()).optional().nullable(),
   items: z.array(estimateItemSchema).min(1, "Orçamento precisa de ao menos 1 item"),
 });
 

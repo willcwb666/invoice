@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getOrCreateSignatureFile } from "@/lib/pdf-signature";
 import { ensureAdminUser } from "@/lib/security/auth";
-import { DEFAULT_ICLOUD_URL, ensureICloudCalendarSynced } from "@/lib/calendar/icloud";
+import { DEFAULT_ICLOUD_URL } from "@/lib/calendar/icloud";
 import { SEED_CLIENTS, SEED_INVOICES } from "@/lib/seed-fixtures";
 
 // ensureExampleInvoicesSeeded is called defensively from many places (server
@@ -155,15 +155,6 @@ async function performSeed(): Promise<void> {
           },
         });
       }
-    }
-
-    // 4. Executa rotina de sincronização automática com o iPhone (iCloud) —
-    // deliberately non-fatal: a broken/unreachable iCloud feed shouldn't be
-    // treated as "seeding failed" and trigger a retry of the whole function.
-    try {
-      await ensureICloudCalendarSynced(true);
-    } catch (syncErr) {
-      console.error("Erro na sincronização automática do iCloud:", syncErr);
     }
   } catch (err) {
     console.error("Erro ao sincronizar faturas do exemplo:", err);

@@ -78,6 +78,45 @@ export async function PATCH(req: NextRequest) {
         ...(data.icloudSyncWindowDays !== undefined && {
           icloudSyncWindowDays: data.icloudSyncWindowDays,
         }),
+        ...(data.abandonedRecoveryEnabled !== undefined && {
+          abandonedRecoveryEnabled: data.abandonedRecoveryEnabled,
+        }),
+        ...(data.abandonedRecoveryMinutes !== undefined && {
+          abandonedRecoveryMinutes: data.abandonedRecoveryMinutes,
+        }),
+        ...(data.abandonedRecoveryDiscount !== undefined && {
+          abandonedRecoveryDiscount: data.abandonedRecoveryDiscount,
+        }),
+        ...(data.abandonedRecoveryDiscountType !== undefined && {
+          abandonedRecoveryDiscountType: data.abandonedRecoveryDiscountType,
+        }),
+        ...(data.abandonedRecoverySubject !== undefined && {
+          abandonedRecoverySubject: data.abandonedRecoverySubject,
+        }),
+        ...(data.abandonedRecoveryBody !== undefined && {
+          abandonedRecoveryBody: data.abandonedRecoveryBody,
+        }),
+        ...(data.workDayStartHour !== undefined && {
+          workDayStartHour: data.workDayStartHour,
+        }),
+        ...(data.workDayEndHour !== undefined && {
+          workDayEndHour: data.workDayEndHour,
+        }),
+        ...(data.workDays !== undefined && {
+          workDays: data.workDays,
+        }),
+        ...(data.travelBufferMinutes !== undefined && {
+          travelBufferMinutes: data.travelBufferMinutes,
+        }),
+        ...(data.defaultStandardDurationMinutes !== undefined && {
+          defaultStandardDurationMinutes: data.defaultStandardDurationMinutes,
+        }),
+        ...(data.defaultDeepDurationMinutes !== undefined && {
+          defaultDeepDurationMinutes: data.defaultDeepDurationMinutes,
+        }),
+        ...(data.recurrenceHorizonMonths !== undefined && {
+          recurrenceHorizonMonths: data.recurrenceHorizonMonths,
+        }),
       },
       include: {
         addresses: {
@@ -85,6 +124,11 @@ export async function PATCH(req: NextRequest) {
         },
       },
     });
+
+    if (data.recurrenceHorizonMonths !== undefined) {
+      const { AppointmentService } = await import("@/services/appointment-service");
+      await AppointmentService.ensureRecurrenceHorizon(company.id, true);
+    }
 
     return NextResponse.json({ data: updated, message: "Configurações salvas com sucesso!" });
   } catch (error: unknown) {

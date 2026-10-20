@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { EstimateService } from "@/services/estimate-service";
+import { createEstimateSchema } from "@/lib/validations/estimate";
 import { requirePermission } from "@/lib/security/permissions";
 import { z } from "zod";
 import { getTargetCompanyId } from "@/lib/company-context";
 
 const updateStatusSchema = z.object({
-  status: z.enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED", "CONVERTED"]).optional(),
+  status: z.enum(["DRAFT", "PENDING", "SENT", "ACCEPTED", "REJECTED", "EXPIRED", "CONVERTED"]).optional(),
   notes: z.string().optional(),
 });
 
@@ -70,6 +71,24 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await req.json();
+    const companyId = await getTargetCompanyId(session.companyId);
+
+    // Se o payload contiver items, executa atualização completa do orçamento (ex: rascunho ou finalização)
+    if (body && Array.isArray(body.items)) {
+      const parsedFull = createEstimateSchema.safeParse(body);
+      if (!parsedFull.success) {
+        return NextResponse.json(
+          {
+            error: "Dados inválidos para atualização do orçamento.",
+            details: parsedFull.error.flatten().fieldErrors,
+          },
+          { status: 400 }
+        );
+      }
+      const updated = await EstimateService.updateEstimate(id, companyId, parsedFull.data);
+      return NextResponse.json({ data: updated });
+    }
+
     const parsed = updateStatusSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -82,7 +101,6 @@ export async function PATCH(
       );
     }
 
-    const companyId = await getTargetCompanyId(session.companyId);
     if (parsed.data.status) {
       const updated = await EstimateService.updateEstimateStatus(
         id,

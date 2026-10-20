@@ -304,7 +304,7 @@ export default function EstimatesListPage() {
             data={filtered}
             currentPage={currentPage}
             pageSize={pageSize}
-            defaultSortKey="estimateNumber"
+            defaultSortKey="issueDate"
             defaultSortDir="desc"
             keyExtractor={(item) => item.id}
             emptyMessage={

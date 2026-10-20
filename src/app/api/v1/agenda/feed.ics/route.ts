@@ -27,7 +27,11 @@ export async function GET(req: NextRequest) {
     const companyId = company?.id;
 
     const appointments = await prisma.appointment.findMany({
-      where: companyId ? { companyId, status: { not: "CANCELLED" } } : { status: { not: "CANCELLED" } },
+      where: {
+        ...(companyId ? { companyId } : {}),
+        status: { not: "CANCELLED" },
+        origin: { not: "ICLOUD_SYNC" }, // Evita duplicação: não reexporta eventos que já vieram do iPhone
+      },
       include: { client: true },
       orderBy: { date: "asc" },
     });

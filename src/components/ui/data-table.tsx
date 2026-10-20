@@ -28,7 +28,7 @@ interface DataTableProps<T> {
 export function DataTable<T>({
   columns,
   data,
-  defaultSortKey = "invoiceNumber",
+  defaultSortKey = "date",
   defaultSortDir = "desc",
   keyExtractor,
   emptyMessage = "Nenhum registro encontrado.",
@@ -46,7 +46,7 @@ export function DataTable<T>({
       setSortDir(sortDir === "asc" ? "desc" : "asc");
     } else {
       setSortKey(colKey);
-      setSortDir("desc");
+      setSortDir("asc");
     }
   };
 

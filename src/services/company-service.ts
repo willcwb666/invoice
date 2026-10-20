@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { BUSINESS_TIMEZONE, zonedPartsFromUtc, zonedTimeToUtc } from "@/lib/calendar/timezone";
 
 export class CompanyService {
   /**
@@ -39,98 +40,131 @@ export class CompanyService {
   }
 
   /**
-   * Progresso da Meta Mensal de Faturamento com Projeção da Agenda
+   * Progresso da Meta de Faturamento (Semanal ou Mensal) com Projeção da Agenda
+   * 
+   * Semanal: estritamente de Domingo a Sábado da semana corrente (Mountain Time).
+   * Mensal: estritamente do primeiro ao último dia do mês corrente (Mountain Time).
+   * 
+   * A meta e o restante são calculados pelo total agendado (faturado + agenda futura),
+   * pois na operação de limpeza todo agendamento executado é pago imediatamente.
    */
-  static async getMonthlyGoalProgress(companyId: string) {
+  static async getGoalProgress(companyId: string, period: "weekly" | "monthly" = "monthly") {
     const company = await prisma.companyProfile.findUnique({
       where: { id: companyId },
       select: { monthlyRevenueGoal: true },
     });
 
-    const goal = company ? Number(company.monthlyRevenueGoal) : 6000;
+    const monthlyGoal = company ? Number(company.monthlyRevenueGoal) : 6000;
+    const goal = period === "weekly" ? Math.round((monthlyGoal / 4) * 100) / 100 : monthlyGoal;
 
-    // Primeiro dia e último dia do mês atual
     const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    const localNow = zonedPartsFromUtc(now, BUSINESS_TIMEZONE);
+    let startDate: Date;
+    let endDate: Date;
 
-    // Faturamento do mês, agregado no banco (uma linha por status/por
-    // paid, não uma linha por fatura/agendamento) em vez de trazer cada
-    // registro pra somar em JS.
-    const [invoiceStatusTotals, apptPaidTotals, futureAgg] = await Promise.all([
-      prisma.invoice.groupBy({
-        by: ["status"],
-        where: { companyId, issueDate: { gte: firstDay, lte: lastDay } },
-        _sum: { totalAmount: true },
-      }),
-      // A maioria dos clientes nunca recebe uma Invoice - eles pagam direto
-      // pela limpeza (ver PaymentService). invoiced=false evita contar de
-      // novo um atendimento que já virou item de uma fatura (já somado
-      // acima).
-      prisma.appointment.groupBy({
-        by: ["paid"],
-        where: {
-          companyId,
-          date: { gte: firstDay, lte: lastDay },
-          billable: true,
-          status: "COMPLETED",
-          invoiced: false,
-        },
-        _sum: { price: true },
-      }),
-      // Projeção futura com base na Agenda (Agendamentos futuros deste mês)
+    if (period === "weekly") {
+      // Semana de Domingo a Sábado no fuso do Colorado
+      const currentDayDate = new Date(Date.UTC(localNow.year, localNow.month - 1, localNow.day));
+      const dayOfWeek = currentDayDate.getUTCDay(); // 0 = Domingo, ..., 6 = Sábado
+
+      const sundayUtc = new Date(currentDayDate);
+      sundayUtc.setUTCDate(sundayUtc.getUTCDate() - dayOfWeek);
+      startDate = zonedTimeToUtc(
+        sundayUtc.getUTCFullYear(),
+        sundayUtc.getUTCMonth(),
+        sundayUtc.getUTCDate(),
+        0, 0, 0,
+        BUSINESS_TIMEZONE
+      );
+
+      const saturdayUtc = new Date(sundayUtc);
+      saturdayUtc.setUTCDate(sundayUtc.getUTCDate() + 6);
+      endDate = zonedTimeToUtc(
+        saturdayUtc.getUTCFullYear(),
+        saturdayUtc.getUTCMonth(),
+        saturdayUtc.getUTCDate(),
+        23, 59, 59,
+        BUSINESS_TIMEZONE
+      );
+    } else {
+      // Mês corrente do 1º ao último dia no fuso do Colorado
+      startDate = zonedTimeToUtc(localNow.year, localNow.month - 1, 1, 0, 0, 0, BUSINESS_TIMEZONE);
+      // Dia 0 do próximo mês devolve o último dia do mês corrente
+      const lastDayOfMonth = new Date(Date.UTC(localNow.year, localNow.month, 0)).getUTCDate();
+      endDate = zonedTimeToUtc(localNow.year, localNow.month - 1, lastDayOfMonth, 23, 59, 59, BUSINESS_TIMEZONE);
+    }
+
+    // Faturamento e Agenda do período
+    // A Agenda é a fonte da verdade da operação (todos os atendimentos agendados para o período)
+    const [allAppointmentsAgg, completedAppointmentsAgg, paidAppointmentsAgg] = await Promise.all([
+      // Todos os agendamentos da agenda no período (sem cancelados)
       prisma.appointment.aggregate({
         where: {
           companyId,
-          date: { gt: now, lte: lastDay },
+          date: { gte: startDate, lte: endDate },
           status: { not: "CANCELLED" },
           billable: true,
         },
         _sum: { price: true },
+        _count: { id: true },
+      }),
+      // Atendimentos já concluídos na agenda neste período
+      prisma.appointment.aggregate({
+        where: {
+          companyId,
+          date: { gte: startDate, lte: endDate },
+          status: "COMPLETED",
+          billable: true,
+        },
+        _sum: { price: true },
+        _count: { id: true },
+      }),
+      // Atendimentos já pagos (direto ou faturados pagos)
+      prisma.appointment.aggregate({
+        where: {
+          companyId,
+          date: { gte: startDate, lte: endDate },
+          status: { not: "CANCELLED" },
+          billable: true,
+          OR: [{ paid: true }, { invoice: { status: "PAID" } }],
+        },
+        _sum: { price: true },
+        _count: { id: true },
       }),
     ]);
 
-    let currentBilled = 0;
-    let paidAmount = 0;
+    // Atendimentos agendados na agenda para este período (soma total de todos os agendamentos do mês/semana)
+    const totalAgenda = Number(allAppointmentsAgg._sum.price || 0);
+    const completedAmount = Number(completedAppointmentsAgg._sum.price || 0);
+    const paidAmount = Number(paidAppointmentsAgg._sum.price || 0);
 
-    for (const row of invoiceStatusTotals) {
-      const val = Number(row._sum.totalAmount || 0);
-      // DRAFT invoices haven't been issued to the client yet and CANCELLED
-      // ones never will be - neither counts toward the billed goal.
-      if (row.status !== "CANCELLED" && row.status !== "DRAFT") {
-        currentBilled += val;
-      }
-      if (row.status === "PAID") {
-        paidAmount += val;
-      }
-    }
+    // O total previsto e acompanhado é o valor real da Agenda no período (sem duplicar faturas)
+    const totalProjected = totalAgenda;
+    const projectedFromAgenda = totalAgenda;
+    const currentBilled = completedAmount;
 
-    for (const row of apptPaidTotals) {
-      const val = Number(row._sum.price || 0);
-      currentBilled += val;
-      if (row.paid) {
-        paidAmount += val;
-      }
-    }
-
-    const remaining = Math.max(0, goal - currentBilled);
-    const progressPercent = Math.min(100, Math.round((currentBilled / goal) * 100));
-
-    const projectedFromAgenda = Number(futureAgg._sum.price || 0);
-
-    const totalProjected = currentBilled + projectedFromAgenda;
-    const projectedProgressPercent = Math.min(100, Math.round((totalProjected / goal) * 100));
+    // O restante é calculado pelo que está agendado e não apenas pelo faturado
+    const remaining = Math.max(0, goal - totalProjected);
+    const progressPercent = goal > 0 ? Math.min(100, Math.round((totalProjected / goal) * 100)) : 0;
+    const billedPercent = totalProjected > 0 ? Math.min(100, Math.round((currentBilled / totalProjected) * 100)) : 0;
 
     return {
-      monthlyGoal: goal,
+      period,
+      targetGoal: goal,
+      monthlyGoal,
       currentBilled,
       paidAmount,
       remaining,
       progressPercent,
+      billedPercent,
       projectedFromAgenda,
       totalProjected,
-      projectedProgressPercent,
-      isGoalReached: currentBilled >= goal,
+      projectedProgressPercent: progressPercent,
+      isGoalReached: totalProjected >= goal,
     };
+  }
+
+  static async getMonthlyGoalProgress(companyId: string) {
+    return this.getGoalProgress(companyId, "monthly");
   }
 }

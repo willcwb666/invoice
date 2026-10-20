@@ -84,7 +84,7 @@ async function main() {
       role: Role.ADMIN,
       status: UserStatus.ACTIVE,
       companyId: company.id,
-      emailVerified: new Date(),
+      emailVerified: true,
     },
   });
   console.log("✓ Usuário Admin configurado:", adminUser.email);

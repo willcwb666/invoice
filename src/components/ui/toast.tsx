@@ -8,9 +8,20 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { CheckCircle2, XCircle, Info, X, Trash2, HelpCircle } from "lucide-react";
+import { CheckCircle2, XCircle, Info, X, Trash2, HelpCircle, AlertTriangle } from "lucide-react";
 
-type ToastVariant = "success" | "error" | "info" | "confirm-delete" | "confirm-action";
+export type ToastVariant =
+  | "success"
+  | "error"
+  | "info"
+  | "warning"
+  | "confirm-delete"
+  | "confirm-action";
+
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
 
 interface ToastItem {
   id: string;
@@ -18,10 +29,16 @@ interface ToastItem {
   message: string;
   duration: number; // ms
   onConfirm?: () => void;
+  action?: ToastAction;
 }
 
 interface ToastContextValue {
-  showToast: (message: string, variant?: "success" | "error" | "info", duration?: number) => void;
+  showToast: (
+    message: string,
+    variant?: ToastVariant,
+    duration?: number,
+    action?: ToastAction
+  ) => void;
   /** Shows a toast with a shrinking countdown bar; if not cancelled before it runs out, calls onConfirm. */
   confirmDelete: (message: string, onConfirm: () => void, duration?: number) => void;
   /** Same countdown-and-cancel pattern as confirmDelete, for non-destructive but consequential actions. */
@@ -44,9 +61,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const showToast = useCallback(
-    (message: string, variant: "success" | "error" | "info" = "info", duration = 4000) => {
+    (
+      message: string,
+      variant: ToastVariant = "info",
+      duration = 4000,
+      action?: ToastAction
+    ) => {
       const id = crypto.randomUUID();
-      setToasts((prev) => [...prev, { id, variant, message, duration }]);
+      setToasts((prev) => [...prev, { id, variant, message, duration, action }]);
     },
     []
   );
@@ -70,7 +92,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast, confirmDelete, confirmAction }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-100 flex flex-col gap-2 w-[calc(100%-2rem)] sm:w-full max-w-sm pointer-events-none">
+      <div className="fixed bottom-4 right-4 z-100 flex flex-col gap-2 w-[calc(100%-2rem)] sm:w-full max-w-sm pointer-events-none font-sans">
         {toasts.map((t) => (
           <div key={t.id} className="pointer-events-auto">
             <ToastCard toast={t} onDismiss={() => remove(t.id)} />
@@ -88,6 +110,7 @@ const VARIANT_STYLES: Record<
   success: { bg: "bg-emerald-50 border-emerald-200 text-emerald-800", bar: "bg-emerald-500", icon: CheckCircle2, iconColor: "text-emerald-600" },
   error: { bg: "bg-rose-50 border-rose-200 text-rose-800", bar: "bg-rose-500", icon: XCircle, iconColor: "text-rose-600" },
   info: { bg: "bg-slate-50 border-slate-200 text-slate-800", bar: "bg-indigo-500", icon: Info, iconColor: "text-indigo-600" },
+  warning: { bg: "bg-amber-50 border-amber-200 text-amber-900", bar: "bg-amber-500", icon: AlertTriangle, iconColor: "text-amber-600" },
   "confirm-delete": { bg: "bg-white border-slate-200 text-slate-900", bar: "bg-rose-500", icon: Trash2, iconColor: "text-rose-600" },
   "confirm-action": { bg: "bg-white border-slate-200 text-slate-900", bar: "bg-indigo-500", icon: HelpCircle, iconColor: "text-indigo-600" },
 };
@@ -145,6 +168,18 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => vo
         <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${iconColor}`} />
         <div className="flex-1 min-w-0">
           <p className="text-xs font-semibold leading-snug">{toast.message}</p>
+          {toast.action && (
+            <button
+              type="button"
+              onClick={() => {
+                toast.action?.onClick();
+                onDismiss();
+              }}
+              className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+            >
+              {toast.action.label}
+            </button>
+          )}
           {CONFIRM_VARIANTS.includes(toast.variant) && (
             <button
               type="button"

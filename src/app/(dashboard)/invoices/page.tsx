@@ -272,7 +272,7 @@ export default function InvoicesListPage() {
             data={filtered}
             currentPage={currentPage}
             pageSize={pageSize}
-            defaultSortKey="invoiceNumber"
+            defaultSortKey="issueDate"
             defaultSortDir="desc"
             keyExtractor={(item) => item.id}
             emptyMessage={

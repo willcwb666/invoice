@@ -19,16 +19,45 @@ import {
   Smartphone,
   X,
   AlertCircle,
+  Sparkles,
+  Clock,
+  Send,
+  Navigation,
+  Repeat,
 } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import { SignatureDisplay } from "@/components/ui/signature-display";
 import { motion, AnimatePresence } from "framer-motion";
 
+function formatRelativeTime(dateString: string | null): string {
+  if (!dateString) return "Nunca sincronizado";
+  const date = new Date(dateString);
+  const diffMs = Date.now() - date.getTime();
+  if (isNaN(diffMs) || diffMs < 0) return "Agora mesmo";
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHours = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSec < 60) return "Agora mesmo";
+  if (diffMin < 60) return `Há ${diffMin} ${diffMin === 1 ? "minuto" : "minutos"}`;
+  if (diffHours < 24) return `Há ${diffHours} ${diffHours === 1 ? "hora" : "horas"}`;
+  if (diffDays === 1) return "Ontem";
+  return `Há ${diffDays} dias`;
+}
+
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<"geral" | "endereco" | "sincronizacao">("geral");
+  const [activeTab, setActiveTab] = useState<
+    "geral" | "endereco" | "sincronizacao" | "recuperacao_agendamento"
+  >("geral");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Test email state
+  const [testEmail, setTestEmail] = useState("");
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<string | null>(null);
 
   // Original profile & current edited profile
   const [initialData, setInitialData] = useState<any>(null);
@@ -45,6 +74,22 @@ export default function SettingsPage() {
     logoUrl: "",
     icloudCalendarUrl: "",
     icloudSyncWindowDays: 60,
+    // Recuperação de Orçamentos Abandonados
+    abandonedRecoveryEnabled: true,
+    abandonedRecoveryMinutes: 30,
+    abandonedRecoveryDiscount: 10,
+    abandonedRecoveryDiscountType: "PERCENTAGE",
+    abandonedRecoverySubject: "Oferta especial para a limpeza da sua casa! ✨",
+    abandonedRecoveryBody:
+      "Olá [cliente]!\n\nVimos que você calculou o orçamento para a limpeza da sua casa no valor de $[valor].\n\nPara ajudar você a fechar conosco hoje, liberamos um desconto exclusivo de [desconto]!\n\nSeu valor especial com desconto fica por apenas $[valor_final].\n\nClique no botão abaixo para garantir sua vaga e agendar seu atendimento.",
+    // Parâmetros de Rota & Agendamento
+    workDayStartHour: "08:00",
+    workDayEndHour: "18:00",
+    workDays: "MON,TUE,WED,THU,FRI",
+    travelBufferMinutes: 10,
+    defaultStandardDurationMinutes: 120,
+    defaultDeepDurationMinutes: 300,
+    recurrenceHorizonMonths: 2,
   });
 
   const [addresses, setAddresses] = useState<any[]>([]);
@@ -124,6 +169,25 @@ export default function SettingsPage() {
             logoUrl: comp.logoUrl || "",
             icloudCalendarUrl: comp.icloudCalendarUrl || "",
             icloudSyncWindowDays: Number(comp.icloudSyncWindowDays) || 60,
+            abandonedRecoveryEnabled: comp.abandonedRecoveryEnabled ?? true,
+            abandonedRecoveryMinutes: Number(comp.abandonedRecoveryMinutes) || 30,
+            abandonedRecoveryDiscount: Number(comp.abandonedRecoveryDiscount) || 10,
+            abandonedRecoveryDiscountType: comp.abandonedRecoveryDiscountType || "PERCENTAGE",
+            abandonedRecoverySubject:
+              comp.abandonedRecoverySubject || "Oferta especial para a limpeza da sua casa! ✨",
+            abandonedRecoveryBody:
+              comp.abandonedRecoveryBody ||
+              "Olá [cliente]!\n\nVimos que você calculou o orçamento para a limpeza da sua casa no valor de $[valor].\n\nPara ajudar você a fechar conosco hoje, liberamos um desconto exclusivo de [desconto]!\n\nSeu valor especial com desconto fica por apenas $[valor_final].\n\nClique no botão abaixo para garantir sua vaga e agendar seu atendimento.",
+            workDayStartHour: comp.workDayStartHour || "08:00",
+            workDayEndHour: comp.workDayEndHour || "18:00",
+            workDays: comp.workDays || "MON,TUE,WED,THU,FRI",
+            travelBufferMinutes:
+              Number.isFinite(Number(comp.travelBufferMinutes)) && Number(comp.travelBufferMinutes) > 0
+                ? Number(comp.travelBufferMinutes)
+                : 10,
+            defaultStandardDurationMinutes: Number(comp.defaultStandardDurationMinutes) || 120,
+            defaultDeepDurationMinutes: Number(comp.defaultDeepDurationMinutes) || 300,
+            recurrenceHorizonMonths: Number(comp.recurrenceHorizonMonths) || 2,
           };
           setFormData(loaded);
           setInitialData(loaded);
@@ -142,6 +206,32 @@ export default function SettingsPage() {
     fetchProfile();
   }, []);
 
+  const handleSendTestRecoveryEmail = async () => {
+    if (!testEmail || !testEmail.includes("@")) {
+      setTestEmailResult("Informe um e-mail válido para testar.");
+      return;
+    }
+    setSendingTestEmail(true);
+    setTestEmailResult(null);
+    try {
+      const res = await fetch("/api/v1/estimates/recovery/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: testEmail }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setTestEmailResult(`✓ E-mail de teste enviado com sucesso para ${testEmail}!`);
+      } else {
+        setTestEmailResult(`Erro: ${json.error || "Falha ao enviar e-mail de teste."}`);
+      }
+    } catch (e: any) {
+      setTestEmailResult(`Erro: ${e.message || "Erro de conexão."}`);
+    } finally {
+      setSendingTestEmail(false);
+    }
+  };
+
   // Check if form has unsaved changes
   const hasUnsavedChanges = useMemo(() => {
     if (!initialData) return false;
@@ -155,7 +245,20 @@ export default function SettingsPage() {
       formData.signatureUrl !== initialData.signatureUrl ||
       formData.logoUrl !== initialData.logoUrl ||
       formData.icloudCalendarUrl !== initialData.icloudCalendarUrl ||
-      Number(formData.icloudSyncWindowDays) !== Number(initialData.icloudSyncWindowDays)
+      Number(formData.icloudSyncWindowDays) !== Number(initialData.icloudSyncWindowDays) ||
+      formData.abandonedRecoveryEnabled !== initialData.abandonedRecoveryEnabled ||
+      Number(formData.abandonedRecoveryMinutes) !== Number(initialData.abandonedRecoveryMinutes) ||
+      Number(formData.abandonedRecoveryDiscount) !== Number(initialData.abandonedRecoveryDiscount) ||
+      formData.abandonedRecoveryDiscountType !== initialData.abandonedRecoveryDiscountType ||
+      formData.abandonedRecoverySubject !== initialData.abandonedRecoverySubject ||
+      formData.abandonedRecoveryBody !== initialData.abandonedRecoveryBody ||
+      formData.workDayStartHour !== initialData.workDayStartHour ||
+      formData.workDayEndHour !== initialData.workDayEndHour ||
+      formData.workDays !== initialData.workDays ||
+      Number(formData.travelBufferMinutes) !== Number(initialData.travelBufferMinutes) ||
+      Number(formData.defaultStandardDurationMinutes) !== Number(initialData.defaultStandardDurationMinutes) ||
+      Number(formData.defaultDeepDurationMinutes) !== Number(initialData.defaultDeepDurationMinutes) ||
+      Number(formData.recurrenceHorizonMonths) !== Number(initialData.recurrenceHorizonMonths)
     );
   }, [formData, initialData]);
 
@@ -362,6 +465,22 @@ export default function SettingsPage() {
           >
             <Calendar className="w-4 h-4" />
             <span>Sincronização Agendas</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("recuperacao_agendamento")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === "recuperacao_agendamento"
+                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            <span>Recuperação de Orçamentos</span>
+            <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black rounded-full uppercase">
+              Novo ✨
+            </span>
           </button>
         </div>
 
@@ -817,8 +936,8 @@ export default function SettingsPage() {
                     )}
 
                     {calendarSyncInfo.lastSyncedAt && !syncStatus && (
-                      <span className="text-[11px] text-slate-500">
-                        Última sincronização: {new Date(calendarSyncInfo.lastSyncedAt).toLocaleString("pt-BR")}
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        Última sincronização: {formatRelativeTime(calendarSyncInfo.lastSyncedAt)} ({new Date(calendarSyncInfo.lastSyncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})
                       </span>
                     )}
                   </div>
@@ -861,6 +980,288 @@ export default function SettingsPage() {
                   <p className="text-[11px] text-emerald-700 font-medium">
                     ✓ Calendário público conectado com sucesso. Novos compromissos salvos no iPhone são importados automaticamente com rotas GPS para os atendimentos.
                   </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Seção: Horizonte de Recorrência da Agenda (Limite Futuro) */}
+            <div className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-4">
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                <div className="p-2.5 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-200/80">
+                  <Repeat className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    Horizonte da Agenda Recorrente (Limite Futuro em Meses)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Controla até quantos meses futuros o sistema gera agendamentos para clientes recorrentes
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Meses de Antecedência para Séries Recorrentes
+                </label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={24}
+                      step={1}
+                      value={formData.recurrenceHorizonMonths}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          recurrenceHorizonMonths: Math.max(1, Math.min(24, Number(e.target.value) || 2)),
+                        })
+                      }
+                      className="w-24 px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 font-bold text-sm focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs text-center"
+                    />
+                    <span className="text-xs font-semibold text-slate-600">
+                      {formData.recurrenceHorizonMonths === 1 ? "mês à frente" : "meses à frente"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[1, 2, 3, 4, 6, 12].map((months) => (
+                      <button
+                        key={months}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, recurrenceHorizonMonths: months })}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          formData.recurrenceHorizonMonths === months
+                            ? "bg-indigo-600 text-white shadow-xs"
+                            : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                        }`}
+                      >
+                        {months} {months === 1 ? "mês" : "meses"} {months === 2 ? "(Padrão)" : ""}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 text-indigo-950 text-xs space-y-2 leading-relaxed">
+                  <div className="font-bold flex items-center gap-1.5 text-indigo-900">
+                    <span>💡 Como funciona a renovação mês a mês (Rolling Window):</span>
+                  </div>
+                  <p className="text-[11px] text-indigo-900/90">
+                    O sistema gera a agenda de clientes recorrentes (semanais, bi-semanais, a cada 3 semanas e mensais) cobrindo os próximos <strong>{formData.recurrenceHorizonMonths} {formData.recurrenceHorizonMonths === 1 ? "mês" : "meses"}</strong>.
+                  </p>
+                  <p className="text-[11px] text-indigo-800">
+                    <strong>Exemplo:</strong> Se configurado para 2 meses e estamos em Outubro, a agenda gera Outubro e Novembro. Assim que iniciar Novembro, o sistema abastece automaticamente Dezembro. Isso mantém o banco de dados enxuto, ágil e seguro sem criar agendamentos eternos.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* TAB 4: AGENDAMENTO INTELIGENTE & RECUPERAÇÃO DE LEADS */}
+        {activeTab === "recuperacao_agendamento" && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-6"
+          >
+            {/* SEÇÃO 1: RECUPERAÇÃO DE ORÇAMENTOS ABANDONADOS */}
+            <div className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200/80">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">
+                      Recuperação de Orçamentos Abandonados (Follow-up com Desconto)
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Dispara e-mail automático quando o cliente ou operador simula um orçamento mas não finaliza
+                    </p>
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={formData.abandonedRecoveryEnabled}
+                    onChange={(e) =>
+                      setFormData({ ...formData, abandonedRecoveryEnabled: e.target.checked })
+                    }
+                    className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-slate-300 accent-amber-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-800">
+                    {formData.abandonedRecoveryEnabled ? "Automação Ativa" : "Desativada"}
+                  </span>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                {/* Tempo de Espera */}
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1.5">
+                    Tempo de Espera para o Envio
+                  </label>
+                  <select
+                    value={formData.abandonedRecoveryMinutes}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        abandonedRecoveryMinutes: Number(e.target.value),
+                      })
+                    }
+                    className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-900 font-semibold focus:outline-none focus:border-amber-500 shadow-2xs cursor-pointer"
+                  >
+                    <option value={15}>15 minutos (Captura quente 🔥)</option>
+                    <option value={30}>30 minutos (Recomendado)</option>
+                    <option value={45}>45 minutos</option>
+                    <option value={60}>1 hora</option>
+                    <option value={120}>2 horas</option>
+                  </select>
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Janela ideal enquanto o cliente ainda está comparando orçamentos.
+                  </span>
+                </div>
+
+                {/* Tipo de Desconto */}
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1.5">
+                    Tipo de Desconto
+                  </label>
+                  <select
+                    value={formData.abandonedRecoveryDiscountType}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        abandonedRecoveryDiscountType: e.target.value as any,
+                      })
+                    }
+                    className="w-full px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-900 font-semibold focus:outline-none focus:border-amber-500 shadow-2xs cursor-pointer"
+                  >
+                    <option value="PERCENTAGE">Porcentagem (% OFF)</option>
+                    <option value="FIXED">Valor Fixo ($ OFF)</option>
+                  </select>
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Formato aplicado no orçamento e no e-mail.
+                  </span>
+                </div>
+
+                {/* Valor do Desconto */}
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1.5">
+                    Valor do Desconto ({formData.abandonedRecoveryDiscountType === "PERCENTAGE" ? "%" : "$"})
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min={0}
+                      max={formData.abandonedRecoveryDiscountType === "PERCENTAGE" ? 100 : 1000}
+                      value={formData.abandonedRecoveryDiscount}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          abandonedRecoveryDiscount: Number(e.target.value),
+                        })
+                      }
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-emerald-50/70 border border-emerald-300 text-emerald-800 font-mono font-bold focus:outline-none focus:border-emerald-500 shadow-2xs"
+                    />
+                    <span className="absolute right-3.5 top-2.5 font-bold text-emerald-700 text-xs">
+                      {formData.abandonedRecoveryDiscountType === "PERCENTAGE" ? "%" : "$"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Template do E-mail */}
+              <div className="space-y-3 pt-2 text-xs">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1.5">
+                    Assunto do E-mail
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.abandonedRecoverySubject}
+                    onChange={(e) =>
+                      setFormData({ ...formData, abandonedRecoverySubject: e.target.value })
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-900 font-medium focus:outline-none focus:border-amber-500 shadow-2xs"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-slate-700 font-semibold">
+                      Mensagem do E-mail
+                    </label>
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                      <span>Tags disponíveis:</span>
+                      <span className="font-mono bg-slate-100 text-slate-700 px-1 py-0.5 rounded font-bold">
+                        [cliente]
+                      </span>
+                      <span className="font-mono bg-slate-100 text-slate-700 px-1 py-0.5 rounded font-bold">
+                        [valor]
+                      </span>
+                      <span className="font-mono bg-slate-100 text-slate-700 px-1 py-0.5 rounded font-bold">
+                        [desconto]
+                      </span>
+                      <span className="font-mono bg-slate-100 text-slate-700 px-1 py-0.5 rounded font-bold">
+                        [valor_final]
+                      </span>
+                    </div>
+                  </div>
+                  <textarea
+                    rows={6}
+                    value={formData.abandonedRecoveryBody}
+                    onChange={(e) =>
+                      setFormData({ ...formData, abandonedRecoveryBody: e.target.value })
+                    }
+                    className="w-full p-3.5 rounded-xl bg-white border border-slate-200 text-slate-900 leading-relaxed font-sans focus:outline-none focus:border-amber-500 shadow-2xs"
+                  />
+                </div>
+
+                {/* Teste de Envio */}
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                  <span className="text-[11px] font-bold text-slate-800 block">
+                    Testar Envio do E-mail de Recuperação:
+                  </span>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="email"
+                      placeholder="Digite seu e-mail para receber um teste..."
+                      value={testEmail}
+                      onChange={(e) => setTestEmail(e.target.value)}
+                      className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendTestRecoveryEmail}
+                      disabled={sendingTestEmail || !testEmail}
+                      className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs transition-colors shrink-0 cursor-pointer"
+                    >
+                      {sendingTestEmail ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Enviando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Enviar E-mail de Teste</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  {testEmailResult && (
+                    <p
+                      className={`text-[11px] font-semibold mt-1 ${
+                        testEmailResult.startsWith("✓") ? "text-emerald-700" : "text-rose-600"
+                      }`}
+                    >
+                      {testEmailResult}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

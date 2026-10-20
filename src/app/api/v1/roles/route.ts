@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/security/auth";
+import { requirePermission } from "@/lib/security/permissions";
 import {
   SYSTEM_SCREENS,
   SYSTEM_ACTIONS,
@@ -9,12 +10,45 @@ import {
 } from "@/lib/security/rbac";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { z } from "zod";
+
+const actionFlagsSchema = z.object({
+  read: z.boolean(),
+  create: z.boolean(),
+  update: z.boolean(),
+  delete: z.boolean(),
+  export: z.boolean(),
+});
+
+const screenPermissionsSchema = z.object({
+  dashboard: actionFlagsSchema,
+  invoices: actionFlagsSchema,
+  estimates: actionFlagsSchema,
+  clients: actionFlagsSchema,
+  appointments: actionFlagsSchema,
+  agenda: actionFlagsSchema,
+  services: actionFlagsSchema,
+  payments: actionFlagsSchema,
+  expenses: actionFlagsSchema,
+  financeiro: actionFlagsSchema.default({ read: false, create: false, update: false, delete: false, export: false }),
+  commissions: actionFlagsSchema.default({ read: false, create: false, update: false, delete: false, export: false }),
+  professionals: actionFlagsSchema.default({ read: false, create: false, update: false, delete: false, export: false }),
+  settings: actionFlagsSchema,
+  users: actionFlagsSchema,
+  reports: actionFlagsSchema.default({ read: false, create: false, update: false, delete: false, export: false }),
+});
+
+const roleMatrixSchema = z.object({
+  ADMIN: screenPermissionsSchema.optional(),
+  FINANCIAL: screenPermissionsSchema,
+  OPERATOR: screenPermissionsSchema,
+  VIEWER: screenPermissionsSchema,
+});
 
 export async function GET(req: NextRequest) {
-  const session = await getSessionUser(req);
-  if (!session) {
-    return NextResponse.json({ error: "Acesso não autorizado." }, { status: 401 });
-  }
+  const check = await requirePermission(req, "users", "read");
+  if (check.response) return check.response;
+  const { session } = check;
 
   const company = session.companyId
     ? await prisma.companyProfile.findUnique({
@@ -54,17 +88,20 @@ export async function PUT(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const newMatrix = body.matrix as RolePermissionsMatrix;
+    const parsed = roleMatrixSchema.safeParse(body?.matrix);
 
-    if (!newMatrix || typeof newMatrix !== "object") {
+    if (!parsed.success) {
       return NextResponse.json(
         { error: "Estrutura de matriz de permissões inválida." },
         { status: 400 }
       );
     }
 
-    // Keep ADMIN fully enabled for security
-    newMatrix.ADMIN = DEFAULT_ROLE_PERMISSIONS.ADMIN;
+    const newMatrix: RolePermissionsMatrix = {
+      ...parsed.data,
+      // Keep ADMIN fully enabled for security
+      ADMIN: DEFAULT_ROLE_PERMISSIONS.ADMIN,
+    };
 
     let company = session.companyId
       ? await prisma.companyProfile.findUnique({ where: { id: session.companyId } })

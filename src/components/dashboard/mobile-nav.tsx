@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import { ROLE_DEFINITIONS } from "@/lib/security/rbac";
+import { StatusDot } from "@/components/ui/status-dot";
 import {
   TrendingUp,
   Calendar,
@@ -21,21 +22,26 @@ import {
   UserCheck,
   Wrench,
   Wallet,
+  Landmark,
+  FileSpreadsheet,
+  Award,
 } from "lucide-react";
 
 const primaryNavItems = [
   { name: "Início", href: "/", icon: TrendingUp },
-  { name: "Agendamentos", href: "/appointments", icon: CalendarCheck },
+  { name: "Agenda", href: "/agenda", icon: Calendar },
   { name: "Faturas", href: "/invoices", icon: FileText },
   { name: "Clientes", href: "/clients", icon: Users },
 ];
 
 const secondaryNavItems = [
-  { name: "Agenda", href: "/agenda", icon: Calendar },
-  { name: "Serviços", href: "/services", icon: Wrench },
-  { name: "Orçamentos", href: "/estimates", icon: Receipt },
+  { name: "Relatórios", href: "/reports", icon: FileSpreadsheet },
+  { name: "Financeiro", href: "/financeiro", icon: Landmark },
   { name: "Pagamentos", href: "/payments", icon: Wallet },
   { name: "Despesas", href: "/expenses", icon: Fuel },
+  { name: "Profissionais", href: "/professionals", icon: Award },
+  { name: "Serviços", href: "/services", icon: Wrench },
+  { name: "Orçamentos", href: "/estimates", icon: Receipt },
   { name: "Usuários & RBAC", href: "/users", icon: UserCheck },
   { name: "Configurações", href: "/settings", icon: Settings },
 ];
@@ -46,13 +52,34 @@ export function MobileNav() {
   const { user } = useCurrentUser();
   const [isOpen, setIsOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [pendingPaymentsCount, setPendingPaymentsCount] = useState(0);
 
-  const displayName = user?.name || "Renata Matos";
-  const roleLabel = user ? ROLE_DEFINITIONS[user.role]?.name || user.role : "Admin";
+  const displayName = user?.name || user?.email?.split("@")[0] || "Usuário";
+  const roleLabel = user?.role
+    ? ROLE_DEFINITIONS[user.role as keyof typeof ROLE_DEFINITIONS]?.name || user.role
+    : "Membro";
 
   // Fecha o menu móvel ao mudar de rota
   useEffect(() => {
     setIsOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadPending() {
+      try {
+        const res = await fetch("/api/v1/dashboard/metrics");
+        if (res.ok) {
+          const json = await res.json();
+          const count = json.data?.pendingPayments?.count || 0;
+          if (active) setPendingPaymentsCount(count);
+        }
+      } catch {}
+    }
+    loadPending();
+    return () => {
+      active = false;
+    };
   }, [pathname]);
 
   const handleLogout = async () => {
@@ -106,18 +133,29 @@ export function MobileNav() {
                   <Link
                     key={item.name}
                     href={item.href}
-                    className={`flex items-center gap-3 p-3 rounded-xl text-xs font-semibold border transition-all ${
+                    className={`flex items-center justify-between p-3 rounded-xl text-xs font-semibold border transition-all ${
                       isActive
                         ? "bg-indigo-50 border-indigo-200 text-indigo-700 shadow-xs"
                         : "bg-slate-50 border-slate-200/80 text-slate-700 hover:bg-slate-100"
                     }`}
                   >
-                    <Icon
-                      className={`w-4 h-4 ${
-                        isActive ? "text-indigo-600" : "text-slate-500"
-                      }`}
-                    />
-                    <span className="truncate">{item.name}</span>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {item.href === "/payments" && pendingPaymentsCount > 0 && (
+                        <StatusDot color="orange" />
+                      )}
+                      <Icon
+                        className={`w-4 h-4 shrink-0 ${
+                          isActive ? "text-indigo-600" : "text-slate-500"
+                        }`}
+                      />
+                      <span className="truncate">{item.name}</span>
+                    </div>
+
+                    {item.href === "/payments" && pendingPaymentsCount > 0 && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                        {pendingPaymentsCount}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

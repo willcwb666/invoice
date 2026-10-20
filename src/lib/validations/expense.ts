@@ -18,6 +18,7 @@ export const createExpenseSchema = z.object({
     .number()
     .positive("Valor da despesa deve ser positivo")
     .max(1000000, "Valor muito alto"),
+  recurrence: z.enum(["ONE_TIME", "WEEKLY", "BI_WEEKLY", "MONTHLY"]).optional().default("ONE_TIME"),
   date: z.string().datetime().optional(),
   notes: z.string().trim().max(500).optional().nullable(),
 });

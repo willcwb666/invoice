@@ -43,13 +43,56 @@ export class ClientService {
   }
 
   /**
-   * Cria um cliente com endereço para rota Maps
+   * Cria um cliente com endereço para rota Maps (com prevenção de duplicidade)
    */
   static async createClient(companyId: string, data: CreateClientInput) {
+    const trimmedName = data.name.trim();
+
+    // Prevenção de duplicidade: busca se já existe cliente com o mesmo nome na mesma empresa
+    const existing = await prisma.client.findFirst({
+      where: {
+        companyId,
+        name: { equals: trimmedName, mode: "insensitive" },
+      },
+    });
+
+    if (existing) {
+      // Se já existe e os novos dados trazem endereço real ou telefone/email faltando, atualiza
+      const hasBetterAddress =
+        data.address &&
+        (!existing.address ||
+          existing.address === "Greeley, CO" ||
+          existing.address.includes("Endereço via Calendário iPhone"));
+
+      const hasNewPhone = data.phone && !existing.phone;
+      const hasNewEmail = data.email && !existing.email;
+
+      if (hasBetterAddress || hasNewPhone || hasNewEmail) {
+        return prisma.client.update({
+          where: { id: existing.id },
+          data: {
+            ...(hasBetterAddress
+              ? {
+                  address: data.address,
+                  city: data.city || existing.city,
+                  state: data.state || existing.state,
+                  zipCode: data.zipCode || existing.zipCode,
+                }
+              : {}),
+            ...(hasNewPhone ? { phone: data.phone } : {}),
+            ...(hasNewEmail ? { email: data.email } : {}),
+            ...(data.notes && !existing.notes ? { notes: data.notes } : {}),
+          },
+        });
+      }
+
+      return existing;
+    }
+
     return prisma.client.create({
       data: {
         companyId,
-        name: data.name,
+        name: trimmedName,
         email: data.email || null,
         phone: data.phone || null,
         address: data.address || "Greeley, CO",

@@ -15,9 +15,9 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-indigo-500 selection:text-white">
+    <div className="flex min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-indigo-500 selection:text-white print:bg-white print:block">
       {/* Background subtle light effects */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10 bg-[#f8fafc]">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10 bg-[#f8fafc] print:hidden">
         <div className="absolute -top-40 left-1/4 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />
         <div className="absolute top-1/3 -right-20 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl" />
       </div>
@@ -26,12 +26,14 @@ export default async function DashboardLayout({
       <Sidebar />
 
       {/* Área Principal de Conteúdo */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden pb-20 md:pb-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden pb-20 md:pb-0 print:pb-0 print:overflow-visible">
         {children}
       </div>
 
       {/* Navegação Móvel Fixa no Rodapé (visível apenas no mobile) */}
-      <MobileNav />
+      <div className="print:hidden">
+        <MobileNav />
+      </div>
     </div>
   );
 }

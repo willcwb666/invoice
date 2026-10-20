@@ -1,15 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { Header } from "@/components/dashboard/header";
+import { useToast } from "@/components/ui/toast";
 import {
-  DollarSign,
-  AlertCircle,
-  Fuel,
-  TrendingUp,
-  Flame,
   Calendar,
   FileText,
   Users,
@@ -20,18 +17,64 @@ import {
   Navigation,
 } from "lucide-react";
 import { DynamicRevenueChart } from "@/components/dashboard/dynamic-revenue-chart";
+import { RevenueGoalChart } from "@/components/dashboard/revenue-goal-chart";
+import { WelcomeBanner } from "@/components/dashboard/welcome-banner";
+import { PeriodMode } from "@/components/dashboard/period-toggle";
+
+function formatUpcomingDateTime(startTimeVal?: string | Date, dateVal?: string | Date): string {
+  const d = new Date(startTimeVal || dateVal || Date.now());
+  const now = new Date();
+
+  // Comparações no fuso do Colorado (America/Denver)
+  const apptDateLocal = d.toLocaleDateString("en-US", { timeZone: "America/Denver" });
+  const todayLocal = now.toLocaleDateString("en-US", { timeZone: "America/Denver" });
+
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowLocal = tomorrow.toLocaleDateString("en-US", { timeZone: "America/Denver" });
+
+  const timeStr = d.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Denver",
+  });
+
+  if (apptDateLocal === todayLocal) {
+    return `Hoje às ${timeStr}`;
+  }
+  if (apptDateLocal === tomorrowLocal) {
+    return `Amanhã às ${timeStr}`;
+  }
+
+  const weekday = d.toLocaleDateString("pt-BR", {
+    weekday: "short",
+    timeZone: "America/Denver",
+  });
+  const dateStr = d.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "America/Denver",
+  });
+
+  return `${weekday}, ${dateStr} às ${timeStr}`;
+}
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { showToast } = useToast();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<PeriodMode>("weekly");
+  const hasShownPendingToast = useRef(false);
 
   const fetchMetrics = async () => {
     setLoading(true);
     try {
+      const timestamp = Date.now();
       const [resMetrics, resAppts, resInvoices] = await Promise.all([
-        fetch("/api/v1/dashboard/metrics"),
-        fetch("/api/v1/appointments"),
-        fetch("/api/v1/invoices"),
+        fetch(`/api/v1/dashboard/metrics?t=${timestamp}`, { cache: "no-store" }),
+        fetch(`/api/v1/appointments?upcoming=true&limit=5&t=${timestamp}`, { cache: "no-store" }),
+        fetch(`/api/v1/invoices?limit=5&t=${timestamp}`, { cache: "no-store" }),
       ]);
 
       const metricsJson = resMetrics.ok ? (await resMetrics.json()).data : null;
@@ -40,8 +83,8 @@ export default function DashboardPage() {
 
       setData({
         metrics: metricsJson,
-        appointments: apptsJson.slice(0, 4),
-        invoices: invoicesJson.slice(0, 5),
+        appointments: apptsJson || [],
+        invoices: invoicesJson,
       });
     } catch (err) {
       console.error("Erro ao buscar dados do dashboard:", err);
@@ -52,9 +95,37 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchMetrics();
+    // Auto-atualização periódica a cada 60s para manter os próximos atendimentos sempre em tempo real
+    const timer = setInterval(() => {
+      fetchMetrics();
+    }, 60000);
+    return () => clearInterval(timer);
   }, []);
 
-  const goal = data?.metrics?.goal;
+  useEffect(() => {
+    const pending = data?.metrics?.pendingPayments;
+    if (pending?.count > 0 && !hasShownPendingToast.current) {
+      hasShownPendingToast.current = true;
+      const amount = Number(
+        pending.totalPending || pending.totalAmount || 0
+      ).toLocaleString("en-US", { minimumFractionDigits: 2 });
+
+      showToast(
+        `Você possui ${pending.count} atendimento(s) concluído(s) com pagamento pendente ($${amount}).`,
+        "warning",
+        8000,
+        {
+          label: "Ver Pagamentos",
+          onClick: () => router.push("/payments"),
+        }
+      );
+    }
+  }, [data?.metrics?.pendingPayments, router, showToast]);
+
+  const activeGoal =
+    period === "weekly"
+      ? data?.metrics?.weeklyGoal
+      : (data?.metrics?.monthlyGoal || data?.metrics?.goal);
   const financial = data?.metrics?.financial;
   const pendingPayments = data?.metrics?.pendingPayments;
 
@@ -65,157 +136,20 @@ export default function DashboardPage() {
         subtitle="Acompanhamento diário da meta de faturamento e agenda"
         onRefresh={fetchMetrics}
         loading={loading}
+        showPeriodToggle={true}
+        period={period}
+        onPeriodChange={setPeriod}
       />
 
       <div className="p-6 max-w-7xl mx-auto space-y-6">
-        {/* Banner de Meta Mensal ($6,000) e Projeção com a Agenda */}
-        {goal && (
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-6 rounded-2xl bg-gradient-to-r from-indigo-50/80 via-white to-emerald-50/70 border border-indigo-100 shadow-sm relative overflow-hidden"
-          >
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-amber-100 text-amber-800 border border-amber-200">
-                    <Flame className="w-4 h-4 text-amber-600" />
-                  </div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-800">
-                    Meta de Faturamento Mensal
-                  </span>
-                </div>
-                <h2 className="text-3xl font-black text-slate-900">
-                  ${goal.currentBilled.toLocaleString("en-US", { minimumFractionDigits: 2 })}{" "}
-                  <span className="text-sm font-semibold text-slate-500">
-                    de ${goal.monthlyGoal.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                  </span>
-                </h2>
-                <p className="text-xs text-slate-600">
-                  {goal.isGoalReached ? (
-                    <span className="text-emerald-700 font-bold">🎉 Meta mensal atingida com sucesso!</span>
-                  ) : (
-                    <span>
-                      Faltam apenas{" "}
-                      <strong className="text-amber-700 font-bold">
-                        ${goal.remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </strong>{" "}
-                      para bater a meta de faturamento.
-                    </span>
-                  )}
-                </p>
-              </div>
+        {/* Seção de Boas-vindas inspirada na referência */}
+        <WelcomeBanner />
 
-              {/* Projeção futura com base na Agenda */}
-              <div className="p-4 rounded-xl bg-white border border-slate-200 text-xs min-w-[280px] shadow-xs">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-slate-600 font-medium">Previsão com a Agenda:</span>
-                  <span className="font-bold text-emerald-700">
-                    ${goal.totalProjected.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${goal.progressPercent}%` }}
-                    transition={{ duration: 1 }}
-                    className="bg-gradient-to-r from-indigo-600 to-emerald-500 h-2.5 rounded-full"
-                  />
-                </div>
-                <div className="flex justify-between text-[11px] text-slate-500 mt-2 font-medium">
-                  <span>Atingido: {goal.progressPercent}%</span>
-                  <span>Previsto: {goal.projectedProgressPercent}%</span>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
+        {/* Gráfico Dinâmico da Meta de Faturamento (Semanal ou Mensal) */}
+        <RevenueGoalChart goal={activeGoal} period={period} />
 
-        {/* Alerta de Pagamentos Pendentes (atendimentos de ontem para trás sem pagamento registrado) */}
-        {pendingPayments?.count > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-5 rounded-2xl bg-amber-50 border border-amber-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-          >
-            <div className="flex items-start sm:items-center gap-3.5">
-              <div className="p-2.5 rounded-xl bg-amber-100 text-amber-700 border border-amber-200 shrink-0">
-                <AlertCircle className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-amber-900 text-sm">
-                  {pendingPayments.count} pagamento{pendingPayments.count > 1 ? "s" : ""} pendente
-                  {pendingPayments.count > 1 ? "s" : ""} —{" "}
-                  <span className="font-mono">
-                    ${pendingPayments.totalPending.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                  </span>
-                </h3>
-                <p className="text-xs text-amber-800/80 mt-0.5">
-                  Atendimentos concluídos até ontem que ainda não foram marcados como pagos.
-                </p>
-              </div>
-            </div>
-            <Link
-              href="/payments"
-              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-sm transition-colors shrink-0 text-center"
-            >
-              Ver Pagamentos
-            </Link>
-          </motion.div>
-        )}
-
-        {/* Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {[
-            {
-              title: "Recebido (Pago)",
-              value: `$${(financial?.totalReceived || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
-              icon: DollarSign,
-              color: "text-emerald-600",
-              bgColor: "bg-emerald-50 border border-emerald-100",
-            },
-            {
-              title: "Pendente / A Receber",
-              value: `$${(financial?.totalPending || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
-              icon: AlertCircle,
-              color: "text-amber-600",
-              bgColor: "bg-amber-50 border border-amber-100",
-            },
-            {
-              title: "Despesas Operacionais",
-              value: `$${(financial?.totalExpenses || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
-              icon: Fuel,
-              color: "text-rose-600",
-              bgColor: "bg-rose-50 border border-rose-100",
-            },
-            {
-              title: "Lucro Líquido Real",
-              value: `$${(financial?.netProfit || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
-              icon: TrendingUp,
-              color: "text-indigo-600",
-              bgColor: "bg-indigo-50 border border-indigo-100",
-            },
-          ].map((item, idx) => (
-            <motion.div
-              key={item.title}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: idx * 0.08 }}
-              className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md transition-all"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{item.title}</span>
-                <div className={`p-2 rounded-xl ${item.bgColor}`}>
-                  <item.icon className={`w-5 h-5 ${item.color}`} />
-                </div>
-              </div>
-              <div className="text-2xl font-black text-slate-900 tracking-tight">{item.value}</div>
-            </motion.div>
-          ))}
-        </div>
-
-        {/* Gráfico Dinâmico Comparativo de Semanas & Meses */}
-        <DynamicRevenueChart />
+        {/* Gráfico Dinâmico Comparativo de Semanas & Meses (Sincronizado com o seletor do header) */}
+        <DynamicRevenueChart period={period} />
 
         {/* Duas Colunas: Próximos Atendimentos & Faturas Recentes */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -237,28 +171,39 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {data?.appointments?.map((appt: any) => (
-                  <div key={appt.id} className="p-3.5 rounded-xl bg-slate-50/70 border border-slate-200/70 flex items-center justify-between hover:bg-slate-100/70 transition-colors">
+                  <div
+                    key={appt.id}
+                    className="p-3.5 rounded-xl bg-slate-50/70 border border-slate-200/70 flex items-center justify-between hover:bg-slate-100/70 transition-colors"
+                  >
                     <div>
-                      <h4 className="font-bold text-slate-900 text-xs">{appt.title} • {appt.client?.name}</h4>
-                      <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-1">
-                        <Clock className="w-3 h-3 text-slate-400" />
-                        <span>{new Date(appt.date).toLocaleDateString("pt-BR")}</span>
+                      <h4 className="font-bold text-slate-900 text-xs">
+                        {appt.client?.name && !appt.title.toLowerCase().includes(appt.client.name.toLowerCase())
+                          ? `${appt.title} • ${appt.client.name}`
+                          : appt.title || appt.client?.name || "Atendimento"}
+                      </h4>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-1 flex-wrap">
+                        <span className="inline-flex items-center gap-1 font-semibold text-indigo-700 bg-indigo-50/80 px-2 py-0.5 rounded-md border border-indigo-100">
+                          <Clock className="w-3 h-3 text-indigo-600" />
+                          <span>{formatUpcomingDateTime(appt.startTime, appt.date)}</span>
+                        </span>
                         {appt.location && (
                           <span className="flex items-center gap-1 text-slate-600">
-                            <MapPin className="w-3 h-3 text-rose-500" />
-                            <span className="truncate max-w-[150px]">{appt.location}</span>
+                            <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
+                            <span className="truncate max-w-[150px] text-[10px]">{appt.location}</span>
                           </span>
                         )}
                       </div>
                     </div>
                     <div className="text-right flex items-center gap-3">
-                      <span className="font-black text-emerald-600 text-sm">${Number(appt.price).toFixed(2)}</span>
+                      <span className="font-black text-emerald-600 text-sm">
+                        ${Number(appt.price).toFixed(2)}
+                      </span>
                       {appt.location && (
                         <a
                           href={`https://maps.apple.com/?daddr=${encodeURIComponent(appt.location)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="p-1.5 rounded-lg bg-white hover:bg-slate-100 text-indigo-600 border border-slate-200 shadow-2xs"
+                          className="p-1.5 rounded-lg bg-white hover:bg-slate-100 text-indigo-600 border border-slate-200 shadow-2xs transition-colors"
                           title="Abrir rota no Maps"
                         >
                           <Navigation className="w-3.5 h-3.5" />
@@ -296,7 +241,7 @@ export default function DashboardPage() {
                   >
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold text-indigo-600">{inv.invoiceNumber}</span>
+                        <span className="text-xs font-bold text-indigo-600">{inv.invoiceNumber}</span>
                         <span className="font-semibold text-slate-900 text-xs">{inv.client?.name}</span>
                       </div>
                       <p className="text-[11px] text-slate-500 mt-1">

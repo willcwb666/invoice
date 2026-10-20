@@ -25,6 +25,7 @@ export class ServiceCatalogService {
         type: data.type,
         basePrice: new Prisma.Decimal(data.basePrice),
         ...(data.defaultDurationMinutes ? { defaultDurationMinutes: data.defaultDurationMinutes } : {}),
+        ...(data.availableInEstimates !== undefined ? { availableInEstimates: data.availableInEstimates } : {}),
       },
     });
   }
@@ -42,6 +43,9 @@ export class ServiceCatalogService {
         ...(data.basePrice !== undefined ? { basePrice: new Prisma.Decimal(data.basePrice) } : {}),
         ...(data.defaultDurationMinutes !== undefined
           ? { defaultDurationMinutes: data.defaultDurationMinutes }
+          : {}),
+        ...(data.availableInEstimates !== undefined
+          ? { availableInEstimates: data.availableInEstimates }
           : {}),
       },
     });

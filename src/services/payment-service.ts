@@ -154,7 +154,7 @@ export class PaymentService {
     }
 
     await prisma.appointment.updateMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, companyId },
       data: {
         paid: true,
         paidAt: opts.paidAt || new Date(),

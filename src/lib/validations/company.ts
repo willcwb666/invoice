@@ -24,6 +24,23 @@ export const updateCompanySchema = z.object({
   // - no point letting the window ask for more than the recurrence expander
   // itself is willing to generate.
   icloudSyncWindowDays: z.coerce.number().int().min(1).max(730).optional(),
+
+  // Recuperação de Orçamentos Abandonados
+  abandonedRecoveryEnabled: z.boolean().optional(),
+  abandonedRecoveryMinutes: z.coerce.number().int().min(5).max(1440).optional(),
+  abandonedRecoveryDiscount: z.coerce.number().min(0).max(1000).optional(),
+  abandonedRecoveryDiscountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
+  abandonedRecoverySubject: z.string().trim().max(300).optional(),
+  abandonedRecoveryBody: z.string().trim().max(5000).optional(),
+
+  // Parâmetros de Rota & Agendamento
+  workDayStartHour: z.string().trim().max(10).optional(),
+  workDayEndHour: z.string().trim().max(10).optional(),
+  workDays: z.string().trim().max(50).optional(),
+  travelBufferMinutes: z.coerce.number().int().min(0).max(120).optional(),
+  defaultStandardDurationMinutes: z.coerce.number().int().min(30).max(480).optional(),
+  defaultDeepDurationMinutes: z.coerce.number().int().min(60).max(720).optional(),
+  recurrenceHorizonMonths: z.coerce.number().int().min(1).max(24).optional(),
 });
 export type UpdateCompanyInput = z.infer<typeof updateCompanySchema>;
 

@@ -6,6 +6,7 @@ export const createServiceSchema = z.object({
   type: z.enum(["STANDARD", "EXTRA"]).default("STANDARD"),
   basePrice: z.number().positive("Preço deve ser maior que zero").max(100000, "Valor muito alto"),
   defaultDurationMinutes: z.number().int().positive("Duração deve ser maior que zero").max(1440).optional(),
+  availableInEstimates: z.boolean().default(true).optional(),
 });
 
 export const updateServiceSchema = createServiceSchema.partial();

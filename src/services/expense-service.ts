@@ -6,11 +6,28 @@ export class ExpenseService {
   /**
    * Lista despesas cadastradas
    */
-  static async listExpenses(companyId: string, category?: string) {
+  static async listExpenses(
+    companyId: string,
+    options?: {
+      category?: string;
+      startDate?: Date;
+      endDate?: Date;
+    }
+  ) {
+    const { category, startDate, endDate } = options || {};
+    const dateFilter =
+      startDate || endDate
+        ? {
+            ...(startDate ? { gte: startDate } : {}),
+            ...(endDate ? { lte: endDate } : {}),
+          }
+        : undefined;
+
     return prisma.expense.findMany({
       where: {
         companyId,
-        ...(category ? { category: category as any } : {}),
+        ...(category && category !== "ALL" ? { category: category as any } : {}),
+        ...(dateFilter ? { date: dateFilter } : {}),
       },
       orderBy: { date: "desc" },
     });
@@ -27,6 +44,7 @@ export class ExpenseService {
         description: data.description,
         amount: new Prisma.Decimal(data.amount),
         date: data.date ? new Date(data.date) : new Date(),
+        recurrence: data.recurrence || "ONE_TIME",
         notes: data.notes || null,
       },
     });
@@ -86,7 +104,7 @@ export class ExpenseService {
     for (const row of invoiceStatusTotals) {
       const total = Number(row._sum.totalAmount || 0);
       const paid = Number(row._sum.paidAmount || 0);
-      if (row.status !== "CANCELLED") {
+      if (row.status !== "CANCELLED" && row.status !== "DRAFT") {
         totalBilled += total;
       }
       if (row.status === "PAID") {

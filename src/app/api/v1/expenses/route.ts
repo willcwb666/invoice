@@ -23,7 +23,43 @@ export async function GET(req: NextRequest) {
   try {
     const companyId = await getTargetCompanyId(session.companyId);
     const category = req.nextUrl.searchParams.get("category") || undefined;
-    const expenses = await ExpenseService.listExpenses(companyId, category);
+    const period = req.nextUrl.searchParams.get("period");
+    const monthParam = req.nextUrl.searchParams.get("month");
+    const yearParam = req.nextUrl.searchParams.get("year");
+    const startDateParam = req.nextUrl.searchParams.get("startDate");
+    const endDateParam = req.nextUrl.searchParams.get("endDate");
+
+    let startDate: Date | undefined;
+    let endDate: Date | undefined;
+
+    if (startDateParam && endDateParam) {
+      startDate = new Date(startDateParam);
+      endDate = new Date(endDateParam);
+    } else if (monthParam && yearParam) {
+      const year = parseInt(yearParam, 10);
+      const month = parseInt(monthParam, 10);
+      startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0));
+      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      endDate = new Date(Date.UTC(year, month - 1, lastDay, 23, 59, 59));
+    } else if (period === "last_month") {
+      const now = new Date();
+      const prevMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
+      const prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+      startDate = new Date(Date.UTC(prevYear, prevMonth, 1, 0, 0, 0));
+      const lastDay = new Date(Date.UTC(prevYear, prevMonth + 1, 0)).getUTCDate();
+      endDate = new Date(Date.UTC(prevYear, prevMonth, lastDay, 23, 59, 59));
+    } else if (period === "month" || period === "current_month") {
+      const now = new Date();
+      startDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1, 0, 0, 0));
+      const lastDay = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0)).getUTCDate();
+      endDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), lastDay, 23, 59, 59));
+    }
+
+    const expenses = await ExpenseService.listExpenses(companyId, {
+      category,
+      startDate,
+      endDate,
+    });
     return NextResponse.json({ data: expenses });
   } catch {
     return NextResponse.json({ error: "Erro ao buscar despesas." }, { status: 500 });

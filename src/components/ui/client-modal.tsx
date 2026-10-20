@@ -18,9 +18,16 @@ interface ClientModalProps {
   onClose: () => void;
   onSuccess?: (createdClient: any) => void;
   zIndex?: string;
+  initialQuery?: string;
 }
 
-export function ClientModal({ isOpen, onClose, onSuccess, zIndex = "z-50" }: ClientModalProps) {
+export function ClientModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  zIndex = "z-50",
+  initialQuery = "",
+}: ClientModalProps) {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -35,6 +42,31 @@ export function ClientModal({ isOpen, onClose, onSuccess, zIndex = "z-50" }: Cli
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      if (initialQuery && initialQuery.trim()) {
+        const query = initialQuery.trim();
+        const isLikelyAddress =
+          /^\d+/.test(query) ||
+          /\b(st|street|ave|avenue|dr|drive|rd|road|blvd|lane|ct|court|way|pl)\b/i.test(query);
+        setFormData({
+          name: isLikelyAddress ? "" : query,
+          email: "",
+          phone: "",
+          address: isLikelyAddress ? query : "",
+          city: "Greeley",
+          state: "CO",
+          zipCode: "80634",
+          billingType: "PER_JOB",
+          notes: "",
+        });
+      } else {
+        resetForm();
+      }
+      setError(null);
+    }
+  }, [isOpen, initialQuery]);
 
   const resetForm = () => {
     setFormData({

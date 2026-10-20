@@ -18,8 +18,13 @@ interface PeriodData {
   prevRevenue?: number;
 }
 
-export function DynamicRevenueChart() {
-  const [period, setPeriod] = useState<"weekly" | "monthly">("monthly");
+interface DynamicRevenueChartProps {
+  period?: "weekly" | "monthly";
+}
+
+export function DynamicRevenueChart({
+  period = "weekly",
+}: DynamicRevenueChartProps = {}) {
   const [activeItem, setActiveItem] = useState<PeriodData | null>(null);
   const [series, setSeries] = useState<{ weekly: PeriodData[]; monthly: PeriodData[] }>({
     weekly: [],
@@ -101,40 +106,14 @@ export function DynamicRevenueChart() {
           </div>
           <p className="text-xs text-slate-500">
             {period === "weekly"
-              ? "Comparativo entre as semanas do mês vigente"
-              : "Evolução do faturamento e despesas ao longo dos últimos meses"}
+              ? "Comparativo entre as semanas do calendário real do mês (sincronizado com a agenda operacional)"
+              : "Evolução do faturamento e despesas ao longo dos últimos meses (sincronizado com a agenda operacional)"}
           </p>
         </div>
 
-        {/* Period Selector Toggle */}
-        <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200/80 shadow-2xs self-start sm:self-auto">
-          <button
-            onClick={() => {
-              setPeriod("weekly");
-              setActiveItem(null);
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              period === "weekly"
-                ? "bg-white text-indigo-700 shadow-xs font-bold"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            Semanas
-          </button>
-          <button
-            onClick={() => {
-              setPeriod("monthly");
-              setActiveItem(null);
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              period === "monthly"
-                ? "bg-white text-indigo-700 shadow-xs font-bold"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            Meses
-          </button>
-        </div>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 text-slate-600 text-xs font-bold border border-slate-200/80 self-start sm:self-auto">
+          {period === "weekly" ? "Base: Semanal" : "Base: Mensal"}
+        </span>
       </div>
 
       {/* Summary KPI Pills */}
@@ -144,7 +123,7 @@ export function DynamicRevenueChart() {
             <span className="text-[11px] font-medium text-indigo-700 uppercase tracking-wider block">
               Faturamento no Período
             </span>
-            <span className="text-lg font-black text-indigo-950 font-mono">
+            <span className="text-lg font-black text-indigo-950">
               ${totalRevenue.toLocaleString("en-US", { minimumFractionDigits: 2 })}
             </span>
           </div>
@@ -156,7 +135,7 @@ export function DynamicRevenueChart() {
             <span className="text-[11px] font-medium text-rose-700 uppercase tracking-wider block">
               Despesas Operacionais
             </span>
-            <span className="text-lg font-black text-rose-950 font-mono">
+            <span className="text-lg font-black text-rose-950">
               ${totalExpenses.toLocaleString("en-US", { minimumFractionDigits: 2 })}
             </span>
           </div>
@@ -168,7 +147,7 @@ export function DynamicRevenueChart() {
             <span className="text-[11px] font-medium text-emerald-700 uppercase tracking-wider block">
               Lucro Líquido Real
             </span>
-            <span className="text-lg font-black text-emerald-950 font-mono">
+            <span className="text-lg font-black text-emerald-950">
               ${totalProfit.toLocaleString("en-US", { minimumFractionDigits: 2 })}
             </span>
           </div>
@@ -184,7 +163,7 @@ export function DynamicRevenueChart() {
           </div>
         ) : dataset.length === 0 ? (
           <div className="h-56 w-full flex items-center justify-center text-xs text-slate-400 text-center px-6">
-            Ainda não há faturas ou despesas suficientes neste período para gerar o comparativo.
+            Ainda não há dados suficientes neste período para gerar o comparativo.
           </div>
         ) : (
         <div className="h-56 w-full flex items-end justify-between gap-3 sm:gap-6 px-2 pb-2">
@@ -194,6 +173,7 @@ export function DynamicRevenueChart() {
               ? Math.round((item.prevRevenue / maxVal) * 100)
               : 0;
             const isHovered = activeItem?.label === item.label;
+            const isCurrentWeek = Boolean(item.subLabel?.includes("(Atual)"));
 
             return (
               <div
@@ -210,29 +190,30 @@ export function DynamicRevenueChart() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 5, scale: 0.95 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute bottom-full mb-3 z-30 bg-slate-900 text-white rounded-xl px-3 py-2 text-xs shadow-xl min-w-[160px] pointer-events-none"
+                      className="absolute bottom-full mb-3 z-30 bg-slate-900 text-white rounded-xl px-3 py-2 text-xs shadow-xl min-w-[170px] pointer-events-none"
                     >
-                      <div className="font-bold text-[11px] text-indigo-300 pb-1 border-b border-slate-700">
-                        {item.subLabel || item.label}
+                      <div className="font-bold text-[11px] text-indigo-300 pb-1 border-b border-slate-700 flex items-center justify-between gap-2">
+                        <span>{item.label}</span>
+                        <span className="text-[10px] text-slate-400 font-normal">{item.subLabel}</span>
                       </div>
-                      <div className="mt-1.5 space-y-1 text-[10px] font-mono">
+                      <div className="mt-1.5 space-y-1 text-[10px]">
                         <div className="flex justify-between">
-                          <span className="text-slate-400">Faturamento:</span>
-                          <span className="font-bold text-indigo-300">
+                          <span className="text-indigo-300">Faturamento Vigente:</span>
+                          <span className="font-bold text-white">
                             ${item.revenue.toFixed(2)}
                           </span>
                         </div>
-                        {item.prevRevenue && (
+                        {item.prevRevenue !== undefined && (
                           <div className="flex justify-between">
-                            <span className="text-slate-400">Anterior:</span>
+                            <span className="text-slate-400">Mês Anterior:</span>
                             <span className="text-slate-300">
                               ${item.prevRevenue.toFixed(2)}
                             </span>
                           </div>
                         )}
                         <div className="flex justify-between">
-                          <span className="text-slate-400">Despesas:</span>
-                          <span className="text-rose-300">
+                          <span className="text-rose-300">Despesas:</span>
+                          <span className="text-rose-200">
                             -${item.expenses.toFixed(2)}
                           </span>
                         </div>
@@ -247,23 +228,25 @@ export function DynamicRevenueChart() {
 
                 {/* Bars Container */}
                 <div className="w-full flex items-end justify-center gap-1 sm:gap-2 h-full pb-1">
-                  {/* Previous Period Bar (Ghost bar) */}
+                  {/* Previous Period Bar (Gray Ghost bar) */}
                   {prevHeight > 0 && (
                     <motion.div
                       initial={{ height: 0 }}
                       animate={{ height: `${prevHeight}%` }}
                       transition={{ duration: 0.6, delay: idx * 0.06 }}
                       className="w-2.5 sm:w-4 rounded-t-md bg-slate-200 group-hover:bg-slate-300 transition-colors"
-                      title="Período anterior"
+                      title="Período anterior comparativo"
                     />
                   )}
 
-                  {/* Current Period Main Bar */}
+                  {/* Current Period Main Bar (Blue/Indigo) */}
                   <motion.div
                     initial={{ height: 0 }}
                     animate={{ height: `${revenueHeight}%` }}
                     transition={{ duration: 0.7, delay: idx * 0.08 }}
                     className={`w-4 sm:w-8 rounded-t-lg bg-gradient-to-t from-indigo-600 to-indigo-500 transition-all shadow-xs ${
+                      isCurrentWeek ? "ring-2 ring-indigo-400/80 shadow-md" : ""
+                    } ${
                       isHovered
                         ? "from-indigo-500 to-indigo-400 shadow-md ring-2 ring-indigo-300"
                         : ""
@@ -275,13 +258,17 @@ export function DynamicRevenueChart() {
                 <div className="pt-2 text-center">
                   <span
                     className={`text-[11px] font-bold block transition-colors ${
-                      isHovered ? "text-indigo-600 font-black" : "text-slate-600"
+                      isHovered || isCurrentWeek ? "text-indigo-600 font-black" : "text-slate-600"
                     }`}
                   >
                     {item.label}
                   </span>
                   {item.subLabel && period === "weekly" && (
-                    <span className="text-[9px] text-slate-400 block font-medium">
+                    <span
+                      className={`text-[9px] block font-medium ${
+                        isCurrentWeek ? "text-indigo-600 font-bold" : "text-slate-400"
+                      }`}
+                    >
                       {item.subLabel}
                     </span>
                   )}
@@ -294,13 +281,17 @@ export function DynamicRevenueChart() {
 
         {/* Legend */}
         <div className="flex flex-wrap items-center justify-center gap-5 pt-4 text-xs text-slate-500 border-t border-slate-100 mt-2">
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-sm bg-gradient-to-t from-indigo-600 to-indigo-500" />
-            <span className="font-medium text-slate-700">Faturamento Vigente</span>
+          <div className="flex items-center gap-2">
+            <div className="w-3.5 h-3.5 rounded-sm bg-gradient-to-t from-indigo-600 to-indigo-500 shadow-xs" />
+            <span className="font-bold text-slate-800">
+              Barra Azul: {period === "weekly" ? "Faturamento Vigente (Mês Atual)" : "Faturamento Vigente"}
+            </span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-sm bg-slate-200" />
-            <span className="font-medium text-slate-600">Período Anterior</span>
+          <div className="flex items-center gap-2">
+            <div className="w-3.5 h-3.5 rounded-sm bg-slate-200 border border-slate-300" />
+            <span className="font-medium text-slate-600">
+              Barra Cinza: {period === "weekly" ? "Comparativo (Mês Anterior)" : "Mês Imediatamente Anterior"}
+            </span>
           </div>
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-emerald-600" />

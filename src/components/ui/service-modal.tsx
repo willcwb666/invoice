@@ -12,6 +12,7 @@ export interface ServiceRecord {
   type: "STANDARD" | "EXTRA";
   basePrice: number | string;
   defaultDurationMinutes: number;
+  availableInEstimates?: boolean;
 }
 
 interface ServiceModalProps {
@@ -27,6 +28,7 @@ const EMPTY_FORM = {
   type: "STANDARD" as "STANDARD" | "EXTRA",
   basePrice: "",
   defaultDurationMinutes: "120",
+  availableInEstimates: true,
 };
 
 export function ServiceModal({ isOpen, onClose, onSuccess, service }: ServiceModalProps) {
@@ -46,6 +48,7 @@ export function ServiceModal({ isOpen, onClose, onSuccess, service }: ServiceMod
               type: service.type,
               basePrice: String(service.basePrice),
               defaultDurationMinutes: String(service.defaultDurationMinutes),
+              availableInEstimates: service.availableInEstimates ?? true,
             }
           : EMPTY_FORM
       );
@@ -75,6 +78,7 @@ export function ServiceModal({ isOpen, onClose, onSuccess, service }: ServiceMod
         type: formData.type,
         basePrice,
         defaultDurationMinutes: Number(formData.defaultDurationMinutes) || undefined,
+        availableInEstimates: formData.availableInEstimates,
       };
 
       const res = await fetch(
@@ -238,6 +242,28 @@ export function ServiceModal({ isOpen, onClose, onSuccess, service }: ServiceMod
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Disponibilidade em Orçamentos */}
+              <div className="pt-2">
+                <label className="flex items-start gap-3 p-3.5 rounded-2xl bg-amber-50/60 border border-amber-200/80 cursor-pointer hover:bg-amber-50 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={formData.availableInEstimates}
+                    onChange={(e) =>
+                      setFormData({ ...formData, availableInEstimates: e.target.checked })
+                    }
+                    className="mt-0.5 w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-amber-300 cursor-pointer accent-amber-600"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-900 block text-xs">
+                      Disponível no Calculador de Orçamentos
+                    </span>
+                    <span className="text-[11px] text-slate-500 block leading-relaxed">
+                      Ative para disponibilizar este serviço como opção de escolha ou extra no Wizard de Orçamentos.
+                    </span>
+                  </div>
+                </label>
               </div>
 
               {/* Actions */}

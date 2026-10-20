@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { BUSINESS_TIMEZONE, zonedPartsFromUtc, zonedTimeToUtc } from "@/lib/calendar/timezone";
 
 export interface RevenuePeriod {
   label: string;
@@ -19,142 +20,149 @@ const MONTH_NAMES = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
-// Fixed day-of-month buckets, matching a typical 4-week billing cadence.
-const WEEK_BUCKETS: Array<{ startDay: number; endDay: number | null; label: string }> = [
-  { startDay: 1, endDay: 7, label: "01 a 07" },
-  { startDay: 8, endDay: 14, label: "08 a 14" },
-  { startDay: 15, endDay: 21, label: "15 a 21" },
-  { startDay: 22, endDay: null, label: "22 a fim" }, // null = last day of month
-];
-
+/**
+ * Calcula receita operacional e despesas para um intervalo de datas.
+ * A Agenda Operacional (Appointment) é a fonte da verdade de faturamento da empresa.
+ * As Invoices são instrumentos de cobrança dos atendimentos e NÃO devem ser somadas
+ * por cima dos atendimentos para evitar qualquer duplicidade contábil.
+ */
 async function sumRevenueAndExpenses(
   companyId: string,
   start: Date,
   end: Date
 ): Promise<{ revenue: number; expenses: number }> {
-  const [invoices, directAppointments, expenses] = await Promise.all([
-    prisma.invoice.findMany({
-      where: {
-        companyId,
-        issueDate: { gte: start, lte: end },
-        // DRAFT invoices haven't been issued to the client yet and CANCELLED
-        // ones never will be - neither counts as real billed revenue.
-        status: { notIn: ["DRAFT", "CANCELLED"] },
-      },
-      select: { totalAmount: true },
-    }),
-    // A maioria dos clientes nunca recebe uma Invoice - eles pagam direto
-    // pela limpeza (ver PaymentService). invoiced=false evita somar de novo
-    // um atendimento que já virou item de uma fatura (contado acima).
-    prisma.appointment.findMany({
+  const [appointmentsAgg, expensesAgg] = await Promise.all([
+    prisma.appointment.aggregate({
       where: {
         companyId,
         date: { gte: start, lte: end },
         billable: true,
-        status: "COMPLETED",
-        invoiced: false,
+        status: { not: "CANCELLED" },
       },
-      select: { price: true },
+      _sum: { price: true },
     }),
-    prisma.expense.findMany({
-      where: { companyId, date: { gte: start, lte: end } },
-      select: { amount: true },
+    prisma.expense.aggregate({
+      where: {
+        companyId,
+        date: { gte: start, lte: end },
+      },
+      _sum: { amount: true },
     }),
   ]);
 
-  const revenue =
-    invoices.reduce((acc, inv) => acc + Number(inv.totalAmount), 0) +
-    directAppointments.reduce((acc, appt) => acc + Number(appt.price), 0);
-  const expenseTotal = expenses.reduce((acc, exp) => acc + Number(exp.amount), 0);
+  const revenue = Number(appointmentsAgg._sum.price || 0);
+  const expenseTotal = Number(expensesAgg._sum.amount || 0);
 
   return { revenue, expenses: expenseTotal };
 }
 
 export class RevenueChartService {
   /**
-   * Weekly breakdown of the current month (fixed 1-7/8-14/15-21/22-end
-   * buckets), each with prevRevenue = the same day-range in the prior month.
+   * Decomposição semanal do mês vigente dividida em semanas de calendário reais (Domingo a Sábado),
+   * garantindo paridade de 100% com o faturamento da agenda e a meta semanal do dashboard.
+   * Converte para o fuso horário de operação (America/Denver / Mountain Time).
    */
   static async getWeeklySeries(companyId: string): Promise<RevenuePeriod[]> {
     const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
-    const prevMonthDate = new Date(year, month - 1, 1);
-    const lastDayOfPrevMonth = new Date(
-      prevMonthDate.getFullYear(),
-      prevMonthDate.getMonth() + 1,
-      0
-    ).getDate();
+    const localNow = zonedPartsFromUtc(now, BUSINESS_TIMEZONE);
+    const year = localNow.year;
+    const month = localNow.month - 1; // 0-indexed
+    const lastDayOfMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 
-    // Buckets are independent of each other - compute every range up front
-    // and fire all the current+previous lookups together, instead of
-    // awaiting one bucket's pair before starting the next bucket's.
-    const applicableBuckets = WEEK_BUCKETS.filter((b) => b.startDay <= lastDayOfMonth);
+    const prevMonth = month === 0 ? 11 : month - 1;
+    const prevYear = month === 0 ? year - 1 : year;
+    const lastDayOfPrevMonth = new Date(Date.UTC(prevYear, prevMonth + 1, 0)).getUTCDate();
+
+    // Constrói semanas do calendário real (Domingo a Sábado) para o mês vigente
+    const weeks: Array<{
+      weekNumber: number;
+      startDay: number;
+      endDay: number;
+      isCurrent: boolean;
+    }> = [];
+
+    let currentDay = 1;
+    let weekIndex = 1;
+
+    while (currentDay <= lastDayOfMonth) {
+      const curDate = new Date(Date.UTC(year, month, currentDay));
+      const dayOfWeek = curDate.getUTCDay(); // 0 = Domingo, 6 = Sábado
+      const daysUntilSat = 6 - dayOfWeek;
+      const endDay = Math.min(currentDay + daysUntilSat, lastDayOfMonth);
+      const isCurrent = localNow.day >= currentDay && localNow.day <= endDay;
+
+      weeks.push({
+        weekNumber: weekIndex,
+        startDay: currentDay,
+        endDay,
+        isCurrent,
+      });
+
+      currentDay = endDay + 1;
+      weekIndex++;
+    }
 
     const results = await Promise.all(
-      applicableBuckets.map(async (bucket) => {
-        const endDay = bucket.endDay ?? lastDayOfMonth;
-        const start = new Date(year, month, bucket.startDay, 0, 0, 0);
-        const end = new Date(year, month, Math.min(endDay, lastDayOfMonth), 23, 59, 59);
+      weeks.map(async (w) => {
+        const start = zonedTimeToUtc(year, month, w.startDay, 0, 0, 0, BUSINESS_TIMEZONE);
+        const end = zonedTimeToUtc(year, month, w.endDay, 23, 59, 59, BUSINESS_TIMEZONE);
 
-        const prevEndDay = bucket.endDay ?? lastDayOfPrevMonth;
-        const prevStart = new Date(
-          prevMonthDate.getFullYear(),
-          prevMonthDate.getMonth(),
-          bucket.startDay,
-          0, 0, 0
-        );
-        const prevEnd = new Date(
-          prevMonthDate.getFullYear(),
-          prevMonthDate.getMonth(),
-          Math.min(prevEndDay, lastDayOfPrevMonth),
-          23, 59, 59
-        );
+        // Comparativo com o período correspondente de dias no mês anterior
+        const prevStartDay = Math.min(w.startDay, lastDayOfPrevMonth);
+        const prevEndDay = Math.min(w.endDay, lastDayOfPrevMonth);
+        const prevStart = zonedTimeToUtc(prevYear, prevMonth, prevStartDay, 0, 0, 0, BUSINESS_TIMEZONE);
+        const prevEnd = zonedTimeToUtc(prevYear, prevMonth, prevEndDay, 23, 59, 59, BUSINESS_TIMEZONE);
 
         const [current, previous] = await Promise.all([
           sumRevenueAndExpenses(companyId, start, end),
-          bucket.startDay <= lastDayOfPrevMonth
-            ? sumRevenueAndExpenses(companyId, prevStart, prevEnd)
-            : Promise.resolve(null),
+          sumRevenueAndExpenses(companyId, prevStart, prevEnd),
         ]);
 
-        return { bucket, current, previous };
+        return { w, current, previous };
       })
     );
 
-    return results.map(({ bucket, current, previous }, idx) => ({
-      label: `Semana ${idx + 1}`,
-      subLabel: bucket.label,
-      revenue: current.revenue,
-      expenses: current.expenses,
-      profit: current.revenue - current.expenses,
-      prevRevenue: previous?.revenue,
-    }));
+    return results.map(({ w, current, previous }) => {
+      const sDay = String(w.startDay).padStart(2, "0");
+      const eDay = String(w.endDay).padStart(2, "0");
+      const label = `Semana ${w.weekNumber}`;
+      const subLabel = w.isCurrent ? `${sDay} a ${eDay} (Atual)` : `${sDay} a ${eDay}`;
+
+      return {
+        label,
+        subLabel,
+        revenue: current.revenue,
+        expenses: current.expenses,
+        profit: current.revenue - current.expenses,
+        prevRevenue: previous?.revenue,
+      };
+    });
   }
 
   /**
-   * Monthly breakdown of the last N months (default 6), each with
-   * prevRevenue = the immediately preceding month's revenue.
+   * Decomposição mensal dos últimos N meses (padrão 6), cada um com
+   * prevRevenue = receita do mês imediatamente anterior.
+   * Totalmente alinhado à fonte da verdade operacional (Appointments).
    */
   static async getMonthlySeries(companyId: string, months = 6): Promise<RevenuePeriod[]> {
     const now = new Date();
-    // Fetch one extra month so the oldest displayed month has a real prevRevenue.
+    const localNow = zonedPartsFromUtc(now, BUSINESS_TIMEZONE);
     const totalMonths = months + 1;
 
-    // Each month's range is independent of every other's, so there's no
-    // reason to await them one at a time - that just serializes N round
-    // trips to the database for no benefit.
     const monthRanges = Array.from({ length: totalMonths }, (_, idx) => {
       const i = totalMonths - 1 - idx;
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const year = d.getFullYear();
-      const month = d.getMonth();
+      let targetMonth = localNow.month - 1 - i;
+      let targetYear = localNow.year;
+      while (targetMonth < 0) {
+        targetMonth += 12;
+        targetYear -= 1;
+      }
+      const lastDayOfTargetMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
       return {
-        year,
-        month,
-        start: new Date(year, month, 1, 0, 0, 0),
-        end: new Date(year, month + 1, 0, 23, 59, 59),
+        year: targetYear,
+        month: targetMonth,
+        start: zonedTimeToUtc(targetYear, targetMonth, 1, 0, 0, 0, BUSINESS_TIMEZONE),
+        end: zonedTimeToUtc(targetYear, targetMonth, lastDayOfTargetMonth, 23, 59, 59, BUSINESS_TIMEZONE),
       };
     });
 

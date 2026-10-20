@@ -120,6 +120,24 @@ export default function ServicesPage() {
       sortValue: (s) => s.defaultDurationMinutes,
     },
     {
+      key: "availableInEstimates",
+      header: "Em Orçamentos",
+      sortable: true,
+      className: "text-center",
+      render: (s) => (
+        <span
+          className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+            s.availableInEstimates !== false
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+              : "bg-slate-100 text-slate-500 border-slate-200"
+          }`}
+        >
+          {s.availableInEstimates !== false ? "Ativo" : "Inativo"}
+        </span>
+      ),
+      sortValue: (s) => (s.availableInEstimates !== false ? 1 : 0),
+    },
+    {
       key: "actions",
       header: "Ações",
       sortable: false,

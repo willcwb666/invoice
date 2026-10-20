@@ -29,7 +29,9 @@ export async function GET(req: NextRequest) {
       ? (orderByParam as (typeof allowedOrderBy)[number])
       : "invoiceNumber";
     const orderDir = req.nextUrl.searchParams.get("orderDir") === "asc" ? "asc" : "desc";
-    const invoices = await InvoiceService.listInvoices(companyId, statusParam, orderBy, orderDir);
+    const limitParam = req.nextUrl.searchParams.get("limit");
+    const limit = limitParam ? Math.max(1, parseInt(limitParam, 10)) : undefined;
+    const invoices = await InvoiceService.listInvoices(companyId, statusParam, orderBy, orderDir, limit);
 
     return NextResponse.json(
       { data: invoices },

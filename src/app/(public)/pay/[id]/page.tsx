@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, use } from "react";
-import { Printer, CheckCircle2, Phone, Mail, FileText } from "lucide-react";
+import React, { useState, useEffect, useCallback, use } from "react";
+import { Printer, CheckCircle2, Phone, Mail, FileText, AlertCircle, RefreshCw } from "lucide-react";
 
 export default function PublicInvoicePayPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -9,20 +9,36 @@ export default function PublicInvoicePayPage({ params }: { params: Promise<{ id:
 
   const [invoice, setInvoice] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // 404 real ("link errado") não tem por que ter botão de tentar de novo;
+  // rede/500 sim, pois é provavelmente passageiro.
+  const [canRetry, setCanRetry] = useState(false);
+
+  const loadInvoice = useCallback(async () => {
+    if (!invoiceId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await fetch(`/api/v1/public/invoices/${invoiceId}`);
+      const json = await r.json().catch(() => null);
+      if (!r.ok) {
+        setCanRetry(r.status !== 404);
+        setError(json?.error || "Não foi possível carregar a fatura.");
+        return;
+      }
+      setInvoice(json?.data || null);
+    } catch {
+      // fetch() rejeitou de verdade (rede/DNS) — sempre vale tentar de novo
+      setCanRetry(true);
+      setError("Não foi possível conectar ao servidor. Verifique sua internet.");
+    } finally {
+      setLoading(false);
+    }
+  }, [invoiceId]);
 
   useEffect(() => {
-    if (!invoiceId) return;
-    fetch(`/api/v1/public/invoices/${invoiceId}`)
-      .then((r) => {
-        if (!r.ok) return null;
-        return r.json();
-      })
-      .then((json) => {
-        setInvoice(json?.data || null);
-      })
-      .catch(() => setInvoice(null))
-      .finally(() => setLoading(false));
-  }, [invoiceId]);
+    loadInvoice();
+  }, [loadInvoice]);
 
   if (loading) {
     return (
@@ -32,11 +48,27 @@ export default function PublicInvoicePayPage({ params }: { params: Promise<{ id:
     );
   }
 
-  if (!invoice) {
+  if (error || !invoice) {
     return (
-      <div className="p-12 text-center bg-white rounded-2xl shadow-md space-y-2">
-        <h2 className="text-xl font-bold text-slate-800">Invoice not found</h2>
-        <p className="text-xs text-slate-500">Please check the link provided by the sender.</p>
+      <div className="p-12 text-center bg-white rounded-2xl shadow-md space-y-3 max-w-md mx-auto">
+        <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+          <AlertCircle className="w-5 h-5" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-800">
+          {canRetry ? "Não foi possível carregar a fatura" : "Invoice not found"}
+        </h2>
+        <p className="text-xs text-slate-500">
+          {error || "Please check the link provided by the sender."}
+        </p>
+        {canRetry && (
+          <button
+            onClick={loadInvoice}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Tentar novamente</span>
+          </button>
+        )}
       </div>
     );
   }

@@ -1363,7 +1363,20 @@ async function syncICloudCalendarForCompanyUnlocked(
     }));
     const matchedServiceIds = matchedServices.map((s) => s.id).sort();
 
-    const safeSummary = (event.summary || "Atendimento").slice(0, 255);
+    // O calendário do iPhone escreve preço e cliente juntos no título livre
+    // (ex: "$100 Cliente 1") porque não tem campos próprios para isso. Usar
+    // esse texto crú como Appointment.title faria "$100 Cliente 1" aparecer
+    // em toda a tela/relatório que mostra o título — quando agendamentos
+    // criados dentro do app sempre usam o título pra descrever o SERVIÇO
+    // (ex: "Standard Cleaning"), nunca o cliente (isso já vem de `client`).
+    // Deriva o título do mesmo jeito: nome do(s) serviço(s) detectado(s), ou
+    // a nota da tarefa genérica (ex: "Banheiro") quando não é um cliente real.
+    const derivedTitle = extracted.isGenericTask
+      ? extracted.serviceNotes || "Atendimento Avulso"
+      : matchedServices.length > 0
+      ? matchedServices.map((s) => s.name).join(" + ")
+      : "Atendimento";
+    const safeSummary = derivedTitle.slice(0, 255);
     const safeLocation = event.location ? event.location.slice(0, 500) : null;
     const safeNotes = event.description ? event.description.slice(0, 5000) : null;
     const safeUid = event.uid.slice(0, 255);

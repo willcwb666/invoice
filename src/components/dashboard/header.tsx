@@ -170,6 +170,7 @@ export function Header({
             onClick={onRefresh}
             className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 shadow-xs transition-colors cursor-pointer"
             title="Recarregar dados"
+            aria-label="Recarregar dados"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-indigo-600" : ""}`} />
           </button>
@@ -185,6 +186,7 @@ export function Header({
             onClick={() => setIsMenuOpen((prev) => !prev)}
             aria-expanded={isMenuOpen}
             aria-haspopup="true"
+            aria-label={`Menu do perfil de ${displayName}`}
             className="flex items-center gap-1.5 p-1 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             title="Menu do Perfil"
           >

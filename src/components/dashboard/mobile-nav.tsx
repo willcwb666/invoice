@@ -108,6 +108,9 @@ export function MobileNav() {
           onClick={() => setIsOpen(false)}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mais funcionalidades"
             className="absolute bottom-16 left-0 right-0 bg-white border-t border-slate-200 rounded-t-2xl p-5 space-y-4 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
@@ -118,6 +121,7 @@ export function MobileNav() {
               </div>
               <button
                 onClick={() => setIsOpen(false)}
+                aria-label="Fechar menu"
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -133,6 +137,7 @@ export function MobileNav() {
                   <Link
                     key={item.name}
                     href={item.href}
+                    aria-current={isActive ? "page" : undefined}
                     className={`flex items-center justify-between p-3 rounded-xl text-xs font-semibold border transition-all ${
                       isActive
                         ? "bg-indigo-50 border-indigo-200 text-indigo-700 shadow-xs"
@@ -181,7 +186,10 @@ export function MobileNav() {
       )}
 
       {/* Barra Inferior Fixa */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 border-t border-slate-200 backdrop-blur-xl md:hidden print:hidden px-3 py-2 shadow-lg">
+      <nav
+        aria-label="Navegação principal"
+        className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 border-t border-slate-200 backdrop-blur-xl md:hidden print:hidden px-3 py-2 shadow-lg"
+      >
         <div className="flex items-center justify-around">
           {primaryNavItems.map((item) => {
             const isActive =
@@ -192,6 +200,7 @@ export function MobileNav() {
               <Link
                 key={item.name}
                 href={item.href}
+                aria-current={isActive ? "page" : undefined}
                 className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
                   isActive
                     ? "text-indigo-600 font-bold"
@@ -207,6 +216,9 @@ export function MobileNav() {
           {/* Botão Mais */}
           <button
             onClick={() => setIsOpen(!isOpen)}
+            aria-expanded={isOpen}
+            aria-haspopup="dialog"
+            aria-label="Mais opções de navegação"
             className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
               isOpen || isMoreActive
                 ? "text-indigo-600 font-bold"

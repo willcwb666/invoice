@@ -107,6 +107,7 @@ export function Sidebar() {
       <Link
         key={item.name}
         href={item.href}
+        aria-current={isActive ? "page" : undefined}
         className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
           isActive
             ? "bg-indigo-50 text-indigo-700 shadow-xs border border-indigo-100/60"
@@ -143,7 +144,7 @@ export function Sidebar() {
         </div>
 
         {/* Navigation - Categorias separadas por linha divisória */}
-        <nav className="p-4 space-y-3">
+        <nav aria-label="Navegação principal" className="p-4 space-y-3">
           {/* CATEGORIA 1: Operação (Dashboard & Agenda) */}
           <div className="space-y-1">
             <span className="px-3.5 text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">
@@ -207,6 +208,8 @@ export function Sidebar() {
                   }}
                   className="p-1 -mr-1 rounded-lg hover:bg-slate-200/60 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
                   title={isFinancialOpen ? "Recolher menu" : "Expandir menu"}
+                  aria-expanded={isFinancialOpen}
+                  aria-label={isFinancialOpen ? "Recolher menu Financeiro" : "Expandir menu Financeiro"}
                 >
                   {isFinancialOpen ? (
                     <ChevronDown className="w-3.5 h-3.5" />
@@ -220,6 +223,7 @@ export function Sidebar() {
                 <div className="mt-1 ml-4 pl-3 border-l-2 border-indigo-100 space-y-1 py-1">
                   <Link
                     href="/financeiro"
+                    aria-current={pathname === "/financeiro" ? "page" : undefined}
                     className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
                       pathname === "/financeiro"
                         ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100/80"
@@ -238,6 +242,7 @@ export function Sidebar() {
 
                   <Link
                     href="/payments"
+                    aria-current={pathname.startsWith("/payments") ? "page" : undefined}
                     className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
                       pathname.startsWith("/payments")
                         ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100/80"
@@ -268,6 +273,7 @@ export function Sidebar() {
 
                   <Link
                     href="/expenses"
+                    aria-current={pathname.startsWith("/expenses") ? "page" : undefined}
                     className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
                       pathname.startsWith("/expenses")
                         ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100/80"
@@ -286,6 +292,7 @@ export function Sidebar() {
 
                   <Link
                     href="/commissions"
+                    aria-current={pathname.startsWith("/commissions") ? "page" : undefined}
                     className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
                       pathname.startsWith("/commissions")
                         ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100/80"
@@ -307,9 +314,12 @@ export function Sidebar() {
 
             {/* Menu Dropdown: Gestão (Profissionais, Serviços, Usuários & RBAC) */}
             <div>
-              <div
+              <button
+                type="button"
                 onClick={() => setIsGestaoOpen((prev) => !prev)}
-                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer select-none ${
+                aria-expanded={isGestaoOpen}
+                aria-label={isGestaoOpen ? "Recolher menu Gestão" : "Expandir menu Gestão"}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer select-none ${
                   isGestaoActive
                     ? "text-indigo-700 bg-indigo-50/60 border border-indigo-100/60"
                     : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
@@ -324,27 +334,18 @@ export function Sidebar() {
                   <span className="truncate font-bold">Gestão</span>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsGestaoOpen((prev) => !prev);
-                  }}
-                  className="p-1 -mr-1 rounded-lg hover:bg-slate-200/60 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                  title={isGestaoOpen ? "Recolher menu Gestão" : "Expandir menu Gestão"}
-                >
-                  {isGestaoOpen ? (
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  ) : (
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  )}
-                </button>
-              </div>
+                {isGestaoOpen ? (
+                  <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+                ) : (
+                  <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                )}
+              </button>
 
               {isGestaoOpen && (
                 <div className="mt-1 ml-4 pl-3 border-l-2 border-indigo-100 space-y-1 py-1">
                   <Link
                     href="/professionals"
+                    aria-current={pathname.startsWith("/professionals") ? "page" : undefined}
                     className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
                       pathname.startsWith("/professionals")
                         ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100/80"
@@ -365,6 +366,7 @@ export function Sidebar() {
 
                   <Link
                     href="/services"
+                    aria-current={pathname.startsWith("/services") ? "page" : undefined}
                     className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
                       pathname.startsWith("/services")
                         ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100/80"
@@ -385,6 +387,7 @@ export function Sidebar() {
 
                   <Link
                     href="/users"
+                    aria-current={pathname.startsWith("/users") ? "page" : undefined}
                     className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
                       pathname.startsWith("/users")
                         ? "bg-indigo-50 text-indigo-700 font-bold border border-indigo-100/80"

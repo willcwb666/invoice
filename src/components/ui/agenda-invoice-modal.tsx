@@ -92,20 +92,6 @@ function resolveToSystemClientId(appt: any, systemClients: any[]): string | null
     .join(" ")
     .toLowerCase();
 
-  // Regras diretas para clientes recorrentes do sistema (ex: Holland Law Office / Donna)
-  if (
-    hay.includes("holland") ||
-    hay.includes("escritório") ||
-    hay.includes("escritorio") ||
-    hay.includes("donna") ||
-    hay.includes("mcwhinney")
-  ) {
-    const hollandClient = systemClients.find((sc) =>
-      sc.name.toLowerCase().includes("holland")
-    );
-    if (hollandClient) return hollandClient.id;
-  }
-
   // Match exato por substring do nome
   const rawName = (appt.client?.name || "").trim().toLowerCase();
   if (rawName) {
@@ -214,7 +200,10 @@ export function AgendaInvoiceModal({
   );
 
   const toggleAppointment = (appt: any) => {
-    if (appt.invoiced) return;
+    // Backend só aceita faturar atendimentos com status COMPLETED (ver
+    // InvoiceService.createInvoice) - deixar selecionar um agendamento
+    // futuro/ainda não realizado aqui só pra falhar depois no envio.
+    if (appt.invoiced || appt.status !== "COMPLETED") return;
     setSelectedJobIds((prev) => {
       const exists = prev.includes(appt.id);
       const next = exists ? prev.filter((id) => id !== appt.id) : [...prev, appt.id];
@@ -235,7 +224,7 @@ export function AgendaInvoiceModal({
   const selectAllAvailableInMonth = () => {
     const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
     const availableInMonth = appointments.filter((a) => {
-      if (a.status === "CANCELLED" || a.billable === false || a.invoiced) return false;
+      if (a.status !== "COMPLETED" || a.billable === false || a.invoiced) return false;
       if (clientFilterId !== "ALL") {
         const directMatch =
           a.clientId === clientFilterId || a.client?.id === clientFilterId;
@@ -457,16 +446,23 @@ export function AgendaInvoiceModal({
                     {dayJobs.map((job) => {
                       const isSelected = selectedJobIds.includes(job.id);
                       const isAlreadyInvoiced = Boolean(job.invoiced);
+                      // Só atendimento com status COMPLETED pode ser faturado
+                      // (mesma regra do backend) - um agendamento futuro/ainda
+                      // não realizado não é "faturável" só por não ter sido
+                      // faturado ainda.
+                      const isNotCompletedYet = !isAlreadyInvoiced && job.status !== "COMPLETED";
+                      const isDisabled = isAlreadyInvoiced || isNotCompletedYet;
                       const priceNum = Number(job.price) || 0;
 
                       return (
                         <button
                           key={job.id}
                           type="button"
-                          disabled={isAlreadyInvoiced}
+                          disabled={isDisabled}
                           onClick={() => toggleAppointment(job)}
+                          title={isNotCompletedYet ? "Ainda não realizado - não pode ser faturado" : undefined}
                           className={`w-full text-left p-1.5 rounded-lg border text-[10px] transition-all flex items-start gap-1.5 ${
-                            isAlreadyInvoiced
+                            isDisabled
                               ? "bg-slate-100 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed"
                               : isSelected
                               ? "bg-emerald-600 border-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/30 cursor-pointer"
@@ -475,7 +471,7 @@ export function AgendaInvoiceModal({
                         >
                           <div
                             className={`mt-0.5 w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border ${
-                              isAlreadyInvoiced
+                              isDisabled
                                 ? "border-slate-300 bg-slate-200"
                                 : isSelected
                                 ? "border-white bg-white text-emerald-700"
@@ -494,7 +490,7 @@ export function AgendaInvoiceModal({
                                 className={`font-black shrink-0 ${
                                   isSelected
                                     ? "text-white"
-                                    : isAlreadyInvoiced
+                                    : isDisabled
                                     ? "text-slate-400"
                                     : "text-emerald-600"
                                 }`}
@@ -508,7 +504,11 @@ export function AgendaInvoiceModal({
                               }`}
                             >
                               {formatTimeDenver(job.startTime)} ·{" "}
-                              {isAlreadyInvoiced ? "Já Faturado" : job.title}
+                              {isAlreadyInvoiced
+                                ? "Já Faturado"
+                                : isNotCompletedYet
+                                ? "Ainda não realizado"
+                                : job.title}
                             </div>
                           </div>
                         </button>

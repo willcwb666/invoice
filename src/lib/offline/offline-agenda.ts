@@ -21,7 +21,10 @@ export interface QueuedSyncItem {
   action: "CREATE" | "UPDATE" | "DELETE";
   payload: any;
   createdAt: string;
+  attempts?: number; // Nº de tentativas de sync que já falharam com erro do servidor (5xx)
 }
+
+const MAX_SERVER_ERROR_ATTEMPTS = 5;
 
 // ---------------------------------------------------------------------------
 // 1. Armazenamento Local de Agendamentos e Clientes
@@ -134,6 +137,22 @@ export function removeOfflineSyncItem(id: string): void {
   }
 }
 
+function incrementOfflineSyncAttempts(id: string): number {
+  const queue = getOfflineSyncQueue();
+  let attempts = 0;
+  const updated = queue.map((item) => {
+    if (item.id !== id) return item;
+    attempts = (item.attempts || 0) + 1;
+    return { ...item, attempts };
+  });
+  try {
+    localStorage.setItem(STORAGE_KEYS.SYNC_QUEUE, JSON.stringify(updated));
+  } catch (e) {
+    console.error("Erro ao atualizar fila offline:", e);
+  }
+  return attempts;
+}
+
 export function clearOfflineSyncQueue(): void {
   try {
     localStorage.removeItem(STORAGE_KEYS.SYNC_QUEUE);
@@ -147,16 +166,18 @@ export function clearOfflineSyncQueue(): void {
 export async function processOfflineSyncQueue(): Promise<{
   successCount: number;
   failedCount: number;
+  rejectedCount: number;
 }> {
   if (typeof window === "undefined" || !navigator.onLine) {
-    return { successCount: 0, failedCount: 0 };
+    return { successCount: 0, failedCount: 0, rejectedCount: 0 };
   }
 
   const queue = getOfflineSyncQueue();
-  if (queue.length === 0) return { successCount: 0, failedCount: 0 };
+  if (queue.length === 0) return { successCount: 0, failedCount: 0, rejectedCount: 0 };
 
   let successCount = 0;
   let failedCount = 0;
+  let rejectedCount = 0;
 
   for (const item of queue) {
     try {
@@ -177,8 +198,22 @@ export async function processOfflineSyncQueue(): Promise<{
       if (res.ok) {
         removeOfflineSyncItem(item.id);
         successCount++;
+      } else if (res.status >= 400 && res.status < 500) {
+        // Erro do cliente (validação, referência inválida, etc.) nunca vai
+        // ter sucesso em uma nova tentativa — manter na fila só a mantém
+        // presa aqui para sempre. Descarta e reporta como rejeitado.
+        removeOfflineSyncItem(item.id);
+        rejectedCount++;
       } else {
-        failedCount++;
+        // Erro do servidor (5xx) pode ser transitório — tenta de novo até
+        // um limite, depois desiste e reporta como rejeitado.
+        const attempts = incrementOfflineSyncAttempts(item.id);
+        if (attempts >= MAX_SERVER_ERROR_ATTEMPTS) {
+          removeOfflineSyncItem(item.id);
+          rejectedCount++;
+        } else {
+          failedCount++;
+        }
       }
     } catch {
       failedCount++;
@@ -187,5 +222,5 @@ export async function processOfflineSyncQueue(): Promise<{
     }
   }
 
-  return { successCount, failedCount };
+  return { successCount, failedCount, rejectedCount };
 }

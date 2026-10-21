@@ -30,14 +30,58 @@ const MAX_SERVER_ERROR_ATTEMPTS = 5;
 // 1. Armazenamento Local de Agendamentos e Clientes
 // ---------------------------------------------------------------------------
 
-export function saveCachedAppointments(appointments: any[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(appointments));
-    localStorage.setItem(STORAGE_KEYS.LAST_CACHED_AT, new Date().toISOString());
-  } catch (err) {
-    console.warn("Falha ao salvar agendamentos no cache local:", err);
+// Janela de retenção do cache offline: contas antigas acumulam milhares de
+// agendamentos históricos, e sobrescrever a lista inteira a cada atualização
+// cresce sem limite até esgotar a cota do localStorage num aparelho com pouco
+// espaço. Mantém só o que é relevante para trabalho em campo: passado recente
+// + futuro próximo.
+const CACHE_PAST_DAYS = 14;
+const CACHE_FUTURE_DAYS = 90;
+const CACHE_HARD_CAP = 500;
+
+function withinCacheWindow(appt: any): boolean {
+  const raw = appt?.date || appt?.startTime;
+  if (!raw) return true; // sem data identificável — mantém por segurança
+  const d = new Date(raw).getTime();
+  if (Number.isNaN(d)) return true;
+  const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
+  return d >= now - CACHE_PAST_DAYS * DAY && d <= now + CACHE_FUTURE_DAYS * DAY;
+}
+
+/**
+ * Tenta gravar no localStorage; se a cota for excedida, reduz o array pela
+ * metade e tenta de novo (até esgotar as tentativas) em vez de perder a
+ * escrita em silêncio. Retorna se a gravação (completa ou reduzida) deu certo.
+ */
+function writeArraySafely(key: string, items: any[]): boolean {
+  let data = items;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+      return true;
+    } catch (err) {
+      const isQuotaError =
+        err instanceof DOMException &&
+        (err.name === "QuotaExceededError" || err.code === 22);
+      if (!isQuotaError || data.length <= 1) {
+        console.warn(`Falha ao salvar "${key}" no cache local:`, err);
+        return false;
+      }
+      data = data.slice(0, Math.ceil(data.length / 2));
+    }
   }
+  return false;
+}
+
+export function saveCachedAppointments(appointments: any[]): boolean {
+  if (typeof window === "undefined") return false;
+  const bounded = appointments.filter(withinCacheWindow).slice(0, CACHE_HARD_CAP);
+  const ok = writeArraySafely(STORAGE_KEYS.APPOINTMENTS, bounded);
+  try {
+    localStorage.setItem(STORAGE_KEYS.LAST_CACHED_AT, new Date().toISOString());
+  } catch {}
+  return ok;
 }
 
 export function getCachedAppointments(): any[] {
@@ -51,13 +95,9 @@ export function getCachedAppointments(): any[] {
   }
 }
 
-export function saveCachedClients(clients: any[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
-  } catch (err) {
-    console.warn("Falha ao salvar clientes no cache local:", err);
-  }
+export function saveCachedClients(clients: any[]): boolean {
+  if (typeof window === "undefined") return false;
+  return writeArraySafely(STORAGE_KEYS.CLIENTS, clients);
 }
 
 export function getCachedClients(): any[] {
@@ -163,21 +203,29 @@ export function clearOfflineSyncQueue(): void {
 // 3. Executor da Sincronização com o Backend
 // ---------------------------------------------------------------------------
 
+export interface DiscardedSyncItem {
+  title: string;
+  reason: string;
+}
+
 export async function processOfflineSyncQueue(): Promise<{
   successCount: number;
   failedCount: number;
   rejectedCount: number;
+  discarded: DiscardedSyncItem[];
 }> {
   if (typeof window === "undefined" || !navigator.onLine) {
-    return { successCount: 0, failedCount: 0, rejectedCount: 0 };
+    return { successCount: 0, failedCount: 0, rejectedCount: 0, discarded: [] };
   }
 
   const queue = getOfflineSyncQueue();
-  if (queue.length === 0) return { successCount: 0, failedCount: 0, rejectedCount: 0 };
+  if (queue.length === 0) return { successCount: 0, failedCount: 0, rejectedCount: 0, discarded: [] };
 
   let successCount = 0;
   let failedCount = 0;
   let rejectedCount = 0;
+  const discarded: DiscardedSyncItem[] = [];
+  const itemTitle = (item: QueuedSyncItem) => item.payload?.title || "Agendamento sem título";
 
   for (const item of queue) {
     try {
@@ -202,8 +250,10 @@ export async function processOfflineSyncQueue(): Promise<{
         // Erro do cliente (validação, referência inválida, etc.) nunca vai
         // ter sucesso em uma nova tentativa — manter na fila só a mantém
         // presa aqui para sempre. Descarta e reporta como rejeitado.
+        const json = await res.json().catch(() => null);
         removeOfflineSyncItem(item.id);
         rejectedCount++;
+        discarded.push({ title: itemTitle(item), reason: json?.error || `Rejeitado pelo servidor (HTTP ${res.status})` });
       } else {
         // Erro do servidor (5xx) pode ser transitório — tenta de novo até
         // um limite, depois desiste e reporta como rejeitado.
@@ -211,6 +261,10 @@ export async function processOfflineSyncQueue(): Promise<{
         if (attempts >= MAX_SERVER_ERROR_ATTEMPTS) {
           removeOfflineSyncItem(item.id);
           rejectedCount++;
+          discarded.push({
+            title: itemTitle(item),
+            reason: `Erro persistente do servidor após ${attempts} tentativas (HTTP ${res.status})`,
+          });
         } else {
           failedCount++;
         }
@@ -222,5 +276,5 @@ export async function processOfflineSyncQueue(): Promise<{
     }
   }
 
-  return { successCount, failedCount, rejectedCount };
+  return { successCount, failedCount, rejectedCount, discarded };
 }

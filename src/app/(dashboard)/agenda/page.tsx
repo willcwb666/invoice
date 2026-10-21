@@ -38,6 +38,7 @@ import {
   getCachedAppointments,
 } from "@/lib/offline/offline-agenda";
 import { useOfflineStatus } from "@/lib/offline/use-offline-status";
+import { useToast } from "@/components/ui/toast";
 import { motion, AnimatePresence } from "framer-motion";
 
 type ViewMode = "month" | "week" | "today";
@@ -160,6 +161,7 @@ function formatRelativeTime(dateString: string | null): string {
 
 export default function AgendaPage() {
   const { isOffline, pendingSyncCount, isSyncing, triggerSync } = useOfflineStatus();
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<ActiveTab>("calendar");
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -271,7 +273,14 @@ export default function AgendaPage() {
         const json = await res.json();
         const list = json.data || [];
         setAppointments(list);
-        saveCachedAppointments(list);
+        const cachedOk = saveCachedAppointments(list);
+        if (!cachedOk) {
+          showToast(
+            "Não foi possível salvar os agendamentos para uso offline neste aparelho (pouco espaço de armazenamento). O modo offline pode ficar com dados desatualizados.",
+            "warning",
+            8000
+          );
+        }
       } else {
         const cached = getCachedAppointments();
         if (cached.length > 0) setAppointments(cached);

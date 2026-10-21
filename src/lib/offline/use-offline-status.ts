@@ -24,12 +24,16 @@ export function useOfflineStatus() {
     try {
       const res = await processOfflineSyncQueue();
       refreshQueue();
-      if (res.rejectedCount > 0) {
+      if (res.discarded.length > 0) {
+        const detail = res.discarded
+          .map((d) => `"${d.title}" (${d.reason})`)
+          .join("; ");
         showToast(
-          res.rejectedCount === 1
-            ? "1 agendamento criado offline não pôde ser sincronizado e foi descartado."
-            : `${res.rejectedCount} agendamentos criados offline não puderam ser sincronizados e foram descartados.`,
-          "error"
+          res.discarded.length === 1
+            ? `1 agendamento não pôde ser sincronizado e foi descartado: ${detail}`
+            : `${res.discarded.length} agendamentos não puderam ser sincronizados e foram descartados: ${detail}`,
+          "error",
+          8000
         );
       }
       return res;

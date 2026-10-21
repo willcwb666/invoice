@@ -1674,6 +1674,7 @@ export async function ensureICloudCalendarSynced(
   }
 
   activeSyncPromise = (async () => {
+    let companyIdForErrorReport: string | undefined;
     try {
       console.log("[iCloud Auto-Sync] Passo 1: Localizando perfil da empresa...");
       let company = await prisma.companyProfile.findFirst();
@@ -1682,6 +1683,7 @@ export async function ensureICloudCalendarSynced(
         return null;
       }
 
+      companyIdForErrorReport = company.id;
       console.log("[iCloud Auto-Sync] Passo 2: Empresa localizada:", company.id, company.name);
 
       // Only seed/overwrite from ICLOUD_CALENDAR_URL when it's actually
@@ -1710,32 +1712,20 @@ export async function ensureICloudCalendarSynced(
       return result;
     } catch (err: unknown) {
       const errMessage = err instanceof Error ? err.message : String(err);
-      const errStack = err instanceof Error ? err.stack : undefined;
-      try {
-        const fs = await import("fs");
-        const path = await import("path");
-        // Written OUTSIDE public/ — this file contains the calendar secret URL
-        // and real client/appointment data, and must never be served statically.
-        const statusDir = path.join(process.cwd(), ".data");
-        if (!fs.existsSync(statusDir)) {
-          fs.mkdirSync(statusDir, { recursive: true });
-        }
-        const statusFile = path.join(statusDir, "icloud-sync-status.json");
-        fs.writeFileSync(
-          statusFile,
-          JSON.stringify(
-            {
-              timestamp: new Date().toISOString(),
-              status: "ERROR",
-              error: errMessage,
-              stack: errStack,
-            },
-            null,
-            2
-          )
-        );
-      } catch {}
       console.error("[iCloud Auto-Sync] Erro durante a sincronização:", errMessage);
+      // Antes isso só era escrito em .data/icloud-sync-status.json — um
+      // arquivo que não sobrevive no filesystem read-only da Vercel, deixando
+      // a falha completamente invisível em produção. Usa o sistema de
+      // notificações (sininho) que já funciona lá, em vez de um arquivo local.
+      if (companyIdForErrorReport) {
+        const { NotificationService } = await import("@/services/notification-service");
+        await NotificationService.create({
+          companyId: companyIdForErrorReport,
+          title: "Falha na sincronização com o iCloud",
+          message: `A sincronização automática do calendário falhou: ${errMessage}`,
+          type: "URGENT",
+        });
+      }
       return null;
     } finally {
       activeSyncPromise = null;

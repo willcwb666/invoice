@@ -68,10 +68,17 @@ function LoginForm() {
     setGoogleLoading(true);
     try {
       const destination = from.startsWith("/") && from !== "/login" ? from : "/";
-      await authClient.signIn.social({
+      const { error } = await authClient.signIn.social({
         provider: "google",
         callbackURL: destination,
       });
+      // authClient (better-fetch) resolve com { error } em vez de lançar —
+      // sem este check, qualquer falha do servidor deixa o botão girando
+      // para sempre sem feedback (sucesso navega para o Google antes de chegar aqui).
+      if (error) {
+        showToast(error.message || "Não foi possível iniciar autenticação com o Google.", "error");
+        setGoogleLoading(false);
+      }
     } catch (err: unknown) {
       showToast(
         err instanceof Error ? err.message : "Não foi possível iniciar autenticação com o Google via Better Auth.",

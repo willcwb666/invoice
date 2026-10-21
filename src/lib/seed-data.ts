@@ -3,6 +3,7 @@ import { getOrCreateSignatureFile } from "@/lib/pdf-signature";
 import { ensureAdminUser } from "@/lib/security/auth";
 import { DEFAULT_ICLOUD_URL } from "@/lib/calendar/icloud";
 import { SEED_CLIENTS, SEED_INVOICES } from "@/lib/seed-fixtures";
+import { DEFAULT_COMPANY_SETTINGS } from "@/lib/company-defaults";
 
 // ensureExampleInvoicesSeeded is called defensively from many places (server
 // boot, dashboard layout, invoice listing, appointments, agenda sync,
@@ -40,17 +41,15 @@ async function performSeed(): Promise<void> {
     if (!company) {
       company = await prisma.companyProfile.create({
         data: {
-          name: "Renata Matos de Oliveira",
-          email: "renatamatoz@gmail.com",
-          phone: "9704129406",
-          monthlyRevenueGoal: 6000.0,
+          name: DEFAULT_COMPANY_SETTINGS.name,
+          email: DEFAULT_COMPANY_SETTINGS.email,
+          phone: DEFAULT_COMPANY_SETTINGS.phone,
+          monthlyRevenueGoal: DEFAULT_COMPANY_SETTINGS.monthlyRevenueGoal,
           signatureUrl: signaturePath,
           bookingSlug: "renata",
           icloudCalendarUrl: DEFAULT_ICLOUD_URL,
-          paymentMethods:
-            "Zelle: 9704129406\nVenmo: @RenataMatoz\nCheck payable to: Renata Matos de Oliveira",
-          terms:
-            "Payment is due within 7 days of invoice date. Late payments are subject to a 1.5% monthly finance charge.",
+          paymentMethods: DEFAULT_COMPANY_SETTINGS.paymentMethods,
+          terms: DEFAULT_COMPANY_SETTINGS.terms,
           addresses: {
             create: [
               {

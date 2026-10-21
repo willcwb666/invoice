@@ -28,6 +28,7 @@ import {
 import { Tooltip } from "@/components/ui/tooltip";
 import { SignatureDisplay } from "@/components/ui/signature-display";
 import { useToast } from "@/components/ui/toast";
+import { DEFAULT_COMPANY_SETTINGS } from "@/lib/company-defaults";
 import { motion, AnimatePresence } from "framer-motion";
 
 function formatRelativeTime(dateString: string | null): string {
@@ -63,36 +64,7 @@ export default function SettingsPage() {
 
   // Original profile & current edited profile
   const [initialData, setInitialData] = useState<any>(null);
-  const [formData, setFormData] = useState({
-    name: "Renata Matos de Oliveira",
-    email: "renatamatoz@gmail.com",
-    phone: "9704129406",
-    monthlyRevenueGoal: 6000,
-    paymentMethods:
-      "Zelle: 9704129406\nVenmo: @RenataMatoz\nCheck payable to: Renata Matos de Oliveira",
-    terms:
-      "Payment is due within 7 days of invoice date. Late payments are subject to a 1.5% monthly finance charge.",
-    signatureUrl: "/signatures/renata-signature.svg",
-    logoUrl: "",
-    icloudCalendarUrl: "",
-    icloudSyncWindowDays: 60,
-    // Recuperação de Orçamentos Abandonados
-    abandonedRecoveryEnabled: true,
-    abandonedRecoveryMinutes: 30,
-    abandonedRecoveryDiscount: 10,
-    abandonedRecoveryDiscountType: "PERCENTAGE",
-    abandonedRecoverySubject: "Oferta especial para a limpeza da sua casa! ✨",
-    abandonedRecoveryBody:
-      "Olá [cliente]!\n\nVimos que você calculou o orçamento para a limpeza da sua casa no valor de $[valor].\n\nPara ajudar você a fechar conosco hoje, liberamos um desconto exclusivo de [desconto]!\n\nSeu valor especial com desconto fica por apenas $[valor_final].\n\nClique no botão abaixo para garantir sua vaga e agendar seu atendimento.",
-    // Parâmetros de Rota & Agendamento
-    workDayStartHour: "08:00",
-    workDayEndHour: "18:00",
-    workDays: "MON,TUE,WED,THU,FRI",
-    travelBufferMinutes: 10,
-    defaultStandardDurationMinutes: 120,
-    defaultDeepDurationMinutes: 300,
-    recurrenceHorizonMonths: 2,
-  });
+  const [formData, setFormData] = useState({ ...DEFAULT_COMPANY_SETTINGS });
 
   const [addresses, setAddresses] = useState<any[]>([]);
 
@@ -156,40 +128,34 @@ export default function SettingsPage() {
         const json = await res.json();
         const comp = json.data;
         if (comp) {
+          const D = DEFAULT_COMPANY_SETTINGS;
           const loaded = {
-            name: comp.name || "Renata Matos de Oliveira",
-            email: comp.email || "renatamatoz@gmail.com",
-            phone: comp.phone || "9704129406",
-            monthlyRevenueGoal: Number(comp.monthlyRevenueGoal) || 6000,
-            paymentMethods:
-              comp.paymentMethods ||
-              "Zelle: 9704129406\nVenmo: @RenataMatoz\nCheck payable to: Renata Matos de Oliveira",
-            terms:
-              comp.terms ||
-              "Payment is due within 7 days of invoice date. Late payments are subject to a 1.5% monthly finance charge.",
-            signatureUrl: comp.signatureUrl || "/signatures/renata-signature.svg",
-            logoUrl: comp.logoUrl || "",
-            icloudCalendarUrl: comp.icloudCalendarUrl || "",
-            icloudSyncWindowDays: Number(comp.icloudSyncWindowDays) || 60,
-            abandonedRecoveryEnabled: comp.abandonedRecoveryEnabled ?? true,
-            abandonedRecoveryMinutes: Number(comp.abandonedRecoveryMinutes) || 30,
-            abandonedRecoveryDiscount: Number(comp.abandonedRecoveryDiscount) || 10,
-            abandonedRecoveryDiscountType: comp.abandonedRecoveryDiscountType || "PERCENTAGE",
-            abandonedRecoverySubject:
-              comp.abandonedRecoverySubject || "Oferta especial para a limpeza da sua casa! ✨",
-            abandonedRecoveryBody:
-              comp.abandonedRecoveryBody ||
-              "Olá [cliente]!\n\nVimos que você calculou o orçamento para a limpeza da sua casa no valor de $[valor].\n\nPara ajudar você a fechar conosco hoje, liberamos um desconto exclusivo de [desconto]!\n\nSeu valor especial com desconto fica por apenas $[valor_final].\n\nClique no botão abaixo para garantir sua vaga e agendar seu atendimento.",
-            workDayStartHour: comp.workDayStartHour || "08:00",
-            workDayEndHour: comp.workDayEndHour || "18:00",
-            workDays: comp.workDays || "MON,TUE,WED,THU,FRI",
+            name: comp.name || D.name,
+            email: comp.email || D.email,
+            phone: comp.phone || D.phone,
+            monthlyRevenueGoal: Number(comp.monthlyRevenueGoal) || D.monthlyRevenueGoal,
+            paymentMethods: comp.paymentMethods || D.paymentMethods,
+            terms: comp.terms || D.terms,
+            signatureUrl: comp.signatureUrl || D.signatureUrl,
+            logoUrl: comp.logoUrl || D.logoUrl,
+            icloudCalendarUrl: comp.icloudCalendarUrl || D.icloudCalendarUrl,
+            icloudSyncWindowDays: Number(comp.icloudSyncWindowDays) || D.icloudSyncWindowDays,
+            abandonedRecoveryEnabled: comp.abandonedRecoveryEnabled ?? D.abandonedRecoveryEnabled,
+            abandonedRecoveryMinutes: Number(comp.abandonedRecoveryMinutes) || D.abandonedRecoveryMinutes,
+            abandonedRecoveryDiscount: Number(comp.abandonedRecoveryDiscount) || D.abandonedRecoveryDiscount,
+            abandonedRecoveryDiscountType: comp.abandonedRecoveryDiscountType || D.abandonedRecoveryDiscountType,
+            abandonedRecoverySubject: comp.abandonedRecoverySubject || D.abandonedRecoverySubject,
+            abandonedRecoveryBody: comp.abandonedRecoveryBody || D.abandonedRecoveryBody,
+            workDayStartHour: comp.workDayStartHour || D.workDayStartHour,
+            workDayEndHour: comp.workDayEndHour || D.workDayEndHour,
+            workDays: comp.workDays || D.workDays,
             travelBufferMinutes:
               Number.isFinite(Number(comp.travelBufferMinutes)) && Number(comp.travelBufferMinutes) > 0
                 ? Number(comp.travelBufferMinutes)
-                : 10,
-            defaultStandardDurationMinutes: Number(comp.defaultStandardDurationMinutes) || 120,
-            defaultDeepDurationMinutes: Number(comp.defaultDeepDurationMinutes) || 300,
-            recurrenceHorizonMonths: Number(comp.recurrenceHorizonMonths) || 2,
+                : D.travelBufferMinutes,
+            defaultStandardDurationMinutes: Number(comp.defaultStandardDurationMinutes) || D.defaultStandardDurationMinutes,
+            defaultDeepDurationMinutes: Number(comp.defaultDeepDurationMinutes) || D.defaultDeepDurationMinutes,
+            recurrenceHorizonMonths: Number(comp.recurrenceHorizonMonths) || D.recurrenceHorizonMonths,
           };
           setFormData(loaded);
           setInitialData(loaded);

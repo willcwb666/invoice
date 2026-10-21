@@ -37,7 +37,9 @@ async function sumRevenueAndExpenses(
         companyId,
         date: { gte: start, lte: end },
         billable: true,
-        status: { not: "CANCELLED" },
+        // "Faturamento" é receita realizada - só atendimentos já concluídos,
+        // não o valor de agendamentos futuros ainda nem realizados.
+        status: "COMPLETED",
       },
       _sum: { price: true },
     }),

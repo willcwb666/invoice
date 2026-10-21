@@ -102,13 +102,14 @@ export async function GET(req: NextRequest) {
           include: { client: { select: { id: true, name: true, billingType: true } } },
           orderBy: { issueDate: "desc" },
         }),
-        // Atendimentos da agenda no período
+        // Atendimentos da agenda no período - receita REALIZADA, não inclui
+        // agendamentos futuros/ainda não concluídos (ver financial-service.ts).
         prisma.appointment.findMany({
           where: {
             companyId: company.id,
             date: { gte: startDate, lte: endDate },
             billable: true,
-            status: { not: "CANCELLED" },
+            status: "COMPLETED",
             ...(clientId !== "ALL" ? { clientId } : {}),
             ...(status === "PAID"
               ? { paid: true }

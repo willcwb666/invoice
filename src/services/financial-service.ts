@@ -266,6 +266,16 @@ export class FinancialService {
     ]);
 
     // 2. Cálculos do Período Atual
+    // "Faturamento", "Pendente/A Receber", DRE e Top Clientes são receita
+    // REALIZADA - só contam atendimentos já concluídos (status COMPLETED).
+    // Um agendamento futuro ainda não é faturamento só porque está marcado
+    // billable=true; isso é o que "Total Previsto na Agenda" (agendaTotal,
+    // abaixo) já representa corretamente. Sem esse filtro, "Faturamento
+    // Bruto Total" e "Total Previsto na Agenda" acabavam mostrando
+    // exatamente o mesmo número (agendamentos futuros inflando a receita
+    // "realizada" antes do serviço ser prestado).
+    const completedAppointments = appointments.filter((a) => a.status === "COMPLETED");
+
     let grossRevenue = 0;
     let revenueFromInvoices = 0;
     let revenueDirect = 0;
@@ -277,7 +287,7 @@ export class FinancialService {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
 
-    for (const appt of appointments) {
+    for (const appt of completedAppointments) {
       const price = Number(appt.price || 0);
       grossRevenue += price;
 
@@ -317,16 +327,19 @@ export class FinancialService {
 
     const netProfit = totalReceived - totalExpenses;
     const profitMargin = totalReceived > 0 ? (netProfit / totalReceived) * 100 : 0;
-    const cleaningsCount = appointments.length;
+    const cleaningsCount = completedAppointments.length;
     const averageTicket = cleaningsCount > 0 ? grossRevenue / cleaningsCount : 0;
-    const totalAgenda = grossRevenue;
-    const totalAgendaCount = cleaningsCount;
+    // Previsto na Agenda é o valor de TODOS os agendamentos do período
+    // (concluídos + ainda agendados) - propositalmente inclui trabalho
+    // futuro, diferente de grossRevenue acima (só realizado).
+    const totalAgenda = appointments.reduce((acc, a) => acc + Number(a.price || 0), 0);
+    const totalAgendaCount = appointments.length;
 
     // 3. Cálculos do Período Anterior
     let prevGrossRevenue = 0;
     let prevTotalReceived = 0;
 
-    for (const appt of prevAppointments) {
+    for (const appt of prevAppointments.filter((a) => a.status === "COMPLETED")) {
       const price = Number(appt.price || 0);
       prevGrossRevenue += price;
       const isPaid = Boolean(appt.paid || appt.invoice?.status === "PAID");
@@ -380,7 +393,7 @@ export class FinancialService {
       { id: string; name: string; billingType: string; totalPaid: number; totalPending: number; count: number }
     > = {};
 
-    for (const appt of appointments) {
+    for (const appt of completedAppointments) {
       const c = appt.client;
       if (!c) continue;
       if (!clientAgg[c.id]) {
@@ -541,7 +554,7 @@ export class FinancialService {
               companyId,
               date: { gte: start, lte: end },
               billable: true,
-              status: { not: "CANCELLED" },
+              status: "COMPLETED",
             },
             _sum: { price: true },
           }),

@@ -95,6 +95,18 @@ model CompanyProfile {
   // Dias passados nunca são reprocessados (a agenda não é mexida de hoje pra trás).
   icloudSyncWindowDays Int            @default(60)
   lastICloudSyncAt   DateTime?
+  // DB-row lock claimed atomically at sync start, cleared at sync end (see
+  // claimIcloudSyncLock in lib/calendar/icloud.ts). Needed because every
+  // in-memory lock in this file (companySyncLocks Map, activeSyncPromise,
+  // lastSyncTimestamp) only protects against concurrency *within one
+  // serverless instance* - Vercel can run instrumentation.ts's auto-sync on
+  // a cold start at the same moment a user clicks "Sincronizar Agora" on a
+  // different instance, and neither instance's in-memory state knows about
+  // the other. That caused real unique-constraint failures
+  // (appointments_companyId_externalEventId_key) when both instances' sync
+  // runs raced the same calendar event's findUnique-then-upsert. A stale
+  // lock (crash mid-sync) self-clears after icloudSyncLockStaleMinutes.
+  icloudSyncLockedAt DateTime?
   // Admin-editable override of DEFAULT_ROLE_PERMISSIONS (see lib/security/rbac.ts).
   // Null means "use the defaults". Stored here (a singleton row) rather than
   // in an in-memory variable, which does not survive a server restart/redeploy

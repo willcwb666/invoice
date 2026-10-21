@@ -947,7 +947,50 @@ export function parseIcsEvents(icsContent: string): ParsedIcsEvent[] {
 // it — a permanent duplicate appointment. Every caller must go through the
 // exported syncICloudCalendarForCompany below, never the internal
 // implementation directly.
+//
+// This Map only protects against two calls landing in the SAME process -
+// it does nothing across Vercel serverless instances, which don't share
+// memory. In production this file has two entry points that can legitimately
+// fire at the same moment on two different instances: instrumentation.ts's
+// cold-start auto-sync, and a user clicking "Sincronizar Agora" (or the
+// 5-minute auto-sync in ensureICloudCalendarSynced below, whose own
+// in-memory activeSyncPromise/lastSyncTimestamp have the identical gap).
+// Confirmed in production runtime logs: two events failed with "Unique
+// constraint failed on the constraint: appointments_companyId_externalEventId_key"
+// from prisma.appointment.upsert() - exactly the scenario this comment
+// already described, just happening across instances instead of within one.
+// claimIcloudSyncLock/releaseIcloudSyncLock below add the actual
+// cross-instance guarantee via a DB row (CompanyProfile.icloudSyncLockedAt);
+// this Map stays as a cheap same-instance fast path on top of it.
 const companySyncLocks = new Map<string, Promise<SyncICloudResult>>();
+
+// How long a claimed sync lock is honored before being considered stale
+// (e.g. the instance holding it crashed or was recycled mid-sync) and
+// reclaimable by the next caller.
+const SYNC_LOCK_STALE_MINUTES = 10;
+
+async function claimIcloudSyncLock(companyId: string): Promise<boolean> {
+  const staleThreshold = new Date(Date.now() - SYNC_LOCK_STALE_MINUTES * 60 * 1000);
+  const result = await prisma.companyProfile.updateMany({
+    where: {
+      id: companyId,
+      OR: [{ icloudSyncLockedAt: null }, { icloudSyncLockedAt: { lt: staleThreshold } }],
+    },
+    data: { icloudSyncLockedAt: new Date() },
+  });
+  return result.count === 1;
+}
+
+async function releaseIcloudSyncLock(companyId: string): Promise<void> {
+  try {
+    await prisma.companyProfile.update({
+      where: { id: companyId },
+      data: { icloudSyncLockedAt: null },
+    });
+  } catch (err) {
+    console.warn("Não foi possível liberar o lock de sincronização do iCloud:", err);
+  }
+}
 
 /**
  * Executa a sincronização completa do calendário do iCloud para uma empresa:
@@ -984,7 +1027,28 @@ export function syncICloudCalendarForCompany(
   const inFlight = companySyncLocks.get(companyId);
   if (inFlight) return inFlight;
 
-  const promise = syncICloudCalendarForCompanyUnlocked(companyId, rawUrl).finally(() => {
+  const promise = (async (): Promise<SyncICloudResult> => {
+    const acquired = await claimIcloudSyncLock(companyId);
+    if (!acquired) {
+      // Another instance holds the DB lock right now - rather than fail or
+      // block, report a no-op. The caller that IS holding the lock will
+      // finish the real sync shortly; this just avoids a second racing run.
+      return {
+        success: true,
+        message: "Sincronização já em andamento (em outra instância) — pulado.",
+        totalFound: 0,
+        created: 0,
+        updated: 0,
+        canceled: 0,
+        normalizedUrl: validateICloudCalendarUrl(rawUrl).normalizedUrl || rawUrl,
+      };
+    }
+    try {
+      return await syncICloudCalendarForCompanyUnlocked(companyId, rawUrl);
+    } finally {
+      await releaseIcloudSyncLock(companyId);
+    }
+  })().finally(() => {
     companySyncLocks.delete(companyId);
   });
   companySyncLocks.set(companyId, promise);

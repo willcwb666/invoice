@@ -162,6 +162,7 @@ export default function CommissionsPage() {
       }
     } catch (e) {
       console.error("Erro ao carregar dados de comissões:", e);
+      showToast("Erro ao carregar dados de comissões.", "error");
     } finally {
       setLoading(false);
     }

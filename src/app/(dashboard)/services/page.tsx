@@ -27,7 +27,8 @@ export default function ServicesPage() {
         setServices(json.data || []);
       }
     } catch (e) {
-      console.error(e);
+      console.error("Erro ao carregar serviços:", e);
+      showToast("Erro ao carregar serviços.", "error");
     } finally {
       setLoading(false);
     }

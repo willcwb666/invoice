@@ -117,6 +117,7 @@ export default function ProfessionalsPage() {
       }
     } catch (e) {
       console.error("Erro ao carregar profissionais:", e);
+      showToast("Erro ao carregar profissionais.", "error");
     } finally {
       setLoading(false);
     }

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Header } from "@/components/dashboard/header";
+import { useToast } from "@/components/ui/toast";
 import {
   DollarSign,
   TrendingUp,
@@ -158,6 +159,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; bar: string }>
 };
 
 export default function FinancialDashboardPage() {
+  const { showToast } = useToast();
   const [period, setPeriod] = useState<FinancialPeriod>("month");
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -184,6 +186,7 @@ export default function FinancialDashboardPage() {
       }
     } catch (err) {
       console.error("Erro ao carregar dados financeiros:", err);
+      showToast("Erro ao carregar dados financeiros.", "error");
     } finally {
       setLoading(false);
     }

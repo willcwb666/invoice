@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { Header } from "@/components/dashboard/header";
+import { useToast } from "@/components/ui/toast";
 import {
   FileSpreadsheet,
   Printer,
@@ -38,6 +39,7 @@ interface ClientOption {
 }
 
 export default function ReportsPage() {
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<ReportType>("financial");
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("current_month");
 
@@ -74,8 +76,9 @@ export default function ReportsPage() {
         const json = await cRes.json();
         setClients(json.data || []);
       }
-    } catch {
-      // silent
+    } catch (err) {
+      console.error("Erro ao carregar filtros do relatório:", err);
+      showToast("Erro ao carregar filtros (profissionais/clientes).", "error");
     }
   };
 
@@ -129,6 +132,7 @@ export default function ReportsPage() {
       }
     } catch (err) {
       console.error("Erro ao carregar relatório:", err);
+      showToast("Erro ao carregar relatório.", "error");
     } finally {
       setLoading(false);
     }

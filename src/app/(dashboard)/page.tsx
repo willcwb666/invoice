@@ -66,6 +66,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<PeriodMode>("weekly");
   const hasShownPendingToast = useRef(false);
+  const isInitialDashboardLoad = useRef(true);
 
   const fetchMetrics = async () => {
     setLoading(true);
@@ -88,8 +89,15 @@ export default function DashboardPage() {
       });
     } catch (err) {
       console.error("Erro ao buscar dados do dashboard:", err);
+      // Só mostra toast na carga inicial — chamadas automáticas de atualização
+      // (polling a cada 60s) ficam silenciosas no console para não martelar
+      // toast repetido numa rede instável.
+      if (isInitialDashboardLoad.current) {
+        showToast("Erro ao carregar dashboard.", "error");
+      }
     } finally {
       setLoading(false);
+      isInitialDashboardLoad.current = false;
     }
   };
 

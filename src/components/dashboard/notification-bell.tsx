@@ -12,6 +12,7 @@ import {
   Clock,
   ExternalLink,
 } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
 
 interface NotificationItem {
   id: string;
@@ -24,11 +25,13 @@ interface NotificationItem {
 }
 
 export function NotificationBell() {
+  const { showToast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isInitialNotificationsLoad = useRef(true);
 
   const fetchNotifications = async () => {
     try {
@@ -39,10 +42,16 @@ export function NotificationBell() {
         setNotifications(json.data?.items || []);
         setUnreadCount(json.data?.unreadCount || 0);
       }
-    } catch {
-      // silent
+    } catch (err) {
+      console.error("Erro ao carregar notificações:", err);
+      // Só mostra toast na carga inicial — o polling automático a cada 60s
+      // fica silencioso no console para não martelar toast repetido.
+      if (isInitialNotificationsLoad.current) {
+        showToast("Erro ao carregar notificações.", "error");
+      }
     } finally {
       setLoading(false);
+      isInitialNotificationsLoad.current = false;
     }
   };
 
@@ -83,8 +92,9 @@ export function NotificationBell() {
       });
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       setUnreadCount(0);
-    } catch {
-      // silent
+    } catch (err) {
+      console.error("Erro ao marcar notificações como lidas:", err);
+      showToast("Erro ao marcar notificações como lidas.", "error");
     }
   };
 
@@ -99,8 +109,9 @@ export function NotificationBell() {
         prev.map((n) => (n.id === id ? { ...n, read: true } : n))
       );
       setUnreadCount((c) => Math.max(0, c - 1));
-    } catch {
-      // silent
+    } catch (err) {
+      console.error("Erro ao marcar notificação como lida:", err);
+      showToast("Erro ao marcar notificação como lida.", "error");
     }
   };
 

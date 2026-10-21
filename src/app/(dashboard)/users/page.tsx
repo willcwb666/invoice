@@ -106,6 +106,7 @@ export default function UsersPage() {
       }
     } catch (e) {
       console.error("Erro ao buscar usuários:", e);
+      showToast("Erro ao carregar usuários.", "error");
     } finally {
       setLoading(false);
     }
@@ -122,6 +123,7 @@ export default function UsersPage() {
       }
     } catch (e) {
       console.error("Erro ao carregar matriz de permissões:", e);
+      showToast("Erro ao carregar matriz de permissões.", "error");
     }
   };
 

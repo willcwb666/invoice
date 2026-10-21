@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import { SignatureDisplay } from "@/components/ui/signature-display";
+import { useToast } from "@/components/ui/toast";
 import { motion, AnimatePresence } from "framer-motion";
 
 function formatRelativeTime(dateString: string | null): string {
@@ -47,6 +48,7 @@ function formatRelativeTime(dateString: string | null): string {
 }
 
 export default function SettingsPage() {
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<
     "geral" | "endereco" | "sincronizacao" | "recuperacao_agendamento"
   >("geral");
@@ -197,6 +199,7 @@ export default function SettingsPage() {
       await fetchSyncStatus();
     } catch (e) {
       console.error("Erro ao carregar dados da empresa:", e);
+      showToast("Erro ao carregar configurações.", "error");
     } finally {
       setLoading(false);
     }

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { Header } from "@/components/dashboard/header";
+import { useToast } from "@/components/ui/toast";
 import {
   Fuel,
   Wrench,
@@ -92,6 +93,7 @@ const RECURRENCE_MAP: Record<
 };
 
 export default function ExpensesPage() {
+  const { showToast } = useToast();
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -168,6 +170,7 @@ export default function ExpensesPage() {
       }
     } catch (e) {
       console.error("Erro ao carregar despesas:", e);
+      showToast("Erro ao carregar despesas.", "error");
     } finally {
       setLoading(false);
     }

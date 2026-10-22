@@ -86,6 +86,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (!session.companyId) {
+      return NextResponse.json(
+        { error: "Sua própria conta não está vinculada a uma empresa." },
+        { status: 400 }
+      );
+    }
+
     const { user, isFirstUser } = await registerUser({
       email: parsed.data.email,
       name: parsed.data.name,
@@ -93,6 +100,7 @@ export async function POST(req: NextRequest) {
       password: parsed.data.password,
       role: parsed.data.role,
       status: parsed.data.status,
+      companyId: session.companyId,
     });
 
     // Register audit log

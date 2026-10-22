@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
-import { registerUser } from "@/lib/security/auth";
+import {
+  registerUser,
+  createSessionToken,
+  getSessionCookieOptions,
+} from "@/lib/security/auth";
 import { z } from "zod";
 
 const registerSchema = z.object({
@@ -43,18 +47,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { user, isFirstUser } = await registerUser({
+    // No companyId passed - this is always "someone creating their own
+    // company," never "joining whichever one exists" (see registerUser).
+    const { user } = await registerUser({
       email: parsed.data.email,
       password: parsed.data.password,
       name: parsed.data.name,
       phone: parsed.data.phone,
     });
 
-    const isActivated = user.status === "ACTIVE";
+    // Log the new PENDING_ONBOARDING user straight in, same mechanism
+    // /api/v1/auth/login uses, so they land on /onboarding immediately
+    // instead of being told to go log in separately.
+    const token = await createSessionToken({
+      sub: user.id,
+      email: user.email,
+      name: user.name || "Usuário",
+      role: user.role,
+      companyId: user.companyId || undefined,
+    });
+    const cookieOptions = getSessionCookieOptions(false);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      isFirstUser,
       user: {
         id: user.id,
         email: user.email,
@@ -62,10 +77,10 @@ export async function POST(req: NextRequest) {
         role: user.role,
         status: user.status,
       },
-      message: isActivated
-        ? "Conta criada com sucesso! Você já pode efetuar o login."
-        : "Cadastro realizado com sucesso! Sua conta está pendente de aprovação pela administradora (Renata). Entre em contato para liberação do acesso.",
+      message: "Cadastro realizado! Vamos configurar sua empresa.",
     });
+    response.cookies.set({ ...cookieOptions, value: token });
+    return response;
   } catch (error: unknown) {
     return NextResponse.json(
       { error: (error instanceof Error ? error.message : undefined) || "Erro ao processar o cadastro." },

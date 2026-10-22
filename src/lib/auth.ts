@@ -45,7 +45,7 @@ export const auth = betterAuth({
       },
       status: {
         type: "string",
-        defaultValue: "PENDING_APPROVAL",
+        defaultValue: "PENDING_ONBOARDING",
         required: false,
         input: false,
       },

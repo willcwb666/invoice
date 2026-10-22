@@ -9,6 +9,8 @@ export interface SessionPayload {
   role: string; // Role (ADMIN, OPERATOR, FINANCIAL, VIEWER)
   name: string; // User Name
   companyId?: string;
+  status?: string; // UserStatus - only populated where the caller needs it
+  isSuperAdmin?: boolean;
   exp: number; // Expiration epoch in seconds
   iat: number; // Issued epoch in seconds
 }

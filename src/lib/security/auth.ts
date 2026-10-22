@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth as betterAuth } from "@/lib/auth";
+import { DEFAULT_COMPANY_SETTINGS } from "@/lib/company-defaults";
 import {
   SessionPayload,
   SESSION_COOKIE_NAME,
@@ -40,10 +41,17 @@ export async function ensureAdminUser() {
   try {
     let company = await prisma.companyProfile.findFirst();
     if (!company) {
+      // CompanyProfile.name/email/phone/paymentMethods have no schema-level
+      // default (Task 1) - this bootstrap path still needs to supply all
+      // four explicitly, same values seed-data.ts uses for the same
+      // "Renata's own company" row, via the DEFAULT_COMPANY_SETTINGS
+      // constant Task 2 kept for exactly this single-admin bootstrap use.
       company = await prisma.companyProfile.create({
         data: {
           name: DEFAULT_ADMIN_NAME,
           email: DEFAULT_ADMIN_EMAIL,
+          phone: DEFAULT_COMPANY_SETTINGS.phone,
+          paymentMethods: DEFAULT_COMPANY_SETTINGS.paymentMethods,
         },
       });
     }
@@ -109,25 +117,21 @@ export async function registerUser({
   phone,
   role,
   status,
+  companyId,
 }: {
   email: string;
   password?: string;
   name?: string;
   phone?: string;
   role?: "ADMIN" | "FINANCIAL" | "OPERATOR" | "VIEWER";
-  status?: "PENDING_APPROVAL" | "ACTIVE" | "SUSPENDED";
+  status?: "PENDING_ONBOARDING" | "PENDING_APPROVAL" | "ACTIVE" | "SUSPENDED";
+  // Caller's own company (admin-created teammate, see POST /api/v1/users).
+  // Omitted entirely for public self-registration - that path creates a
+  // user with no company at all, pending the /onboarding wizard, never
+  // "whichever company happens to exist first."
+  companyId?: string;
 }) {
   const normalizedEmail = email.trim().toLowerCase();
-
-  let company = await prisma.companyProfile.findFirst();
-  if (!company) {
-    company = await prisma.companyProfile.create({
-      data: {
-        name: DEFAULT_ADMIN_NAME,
-        email: DEFAULT_ADMIN_EMAIL,
-      },
-    });
-  }
 
   const existing = await prisma.user.findUnique({
     where: { email: normalizedEmail },
@@ -139,11 +143,14 @@ export async function registerUser({
   const totalUsers = await prisma.user.count();
   const isFirstUser = totalUsers === 0;
 
-  // Self-registration is never auto-elevated: role/status only come from an
-  // authenticated ADMIN caller (see POST /api/v1/users); otherwise this is
-  // always a pending, unprivileged account.
-  const assignedRole = role || "OPERATOR";
-  const assignedStatus = status || "PENDING_APPROVAL";
+  // Public self-registration (no companyId passed) is never auto-elevated
+  // and never joins an existing company - it always starts a brand-new
+  // company via /onboarding. Only an authenticated ADMIN caller (passing
+  // companyId) may set role/status explicitly, to add a teammate directly.
+  const assignedRole = companyId ? role || "OPERATOR" : "OPERATOR";
+  const assignedStatus = companyId
+    ? status || "ACTIVE"
+    : "PENDING_ONBOARDING";
 
   // Admin-created users (POST /api/v1/users) may omit a password; the UI
   // documents this default and instructs the new user to change it on
@@ -157,7 +164,7 @@ export async function registerUser({
       phone: phone?.trim() || null,
       role: assignedRole,
       status: assignedStatus,
-      companyId: company.id,
+      companyId: companyId || null,
       passwordHash,
       verificationToken: null,
       emailVerified: false,
@@ -188,6 +195,7 @@ export async function authenticateCredentials(
     name: string;
     role: string;
     companyId?: string | null;
+    status: string;
   };
 }> {
   const normalizedEmail = emailInput.trim().toLowerCase();
@@ -212,7 +220,7 @@ export async function authenticateCredentials(
       };
     }
 
-    if (user.status !== "ACTIVE") {
+    if (user.status !== "ACTIVE" && user.status !== "PENDING_ONBOARDING") {
       return {
         success: false,
         error:
@@ -276,6 +284,7 @@ export async function authenticateCredentials(
         name: user.name || "Usuário",
         role: user.role,
         companyId: user.companyId,
+        status: user.status,
       },
     };
   } catch (error) {

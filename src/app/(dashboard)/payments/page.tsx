@@ -14,7 +14,23 @@ import {
   Calendar,
   X,
   RotateCcw,
+  CheckSquare,
+  Square,
+  Loader2,
 } from "lucide-react";
+
+function formatApptDateTime(dateVal: string | Date, startTimeVal?: string | Date): string {
+  const d = new Date(startTimeVal || dateVal);
+  if (isNaN(d.getTime())) return "-";
+  const dateStr = d.toLocaleDateString("pt-BR", { timeZone: "America/Denver" });
+  const timeStr = d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "America/Denver",
+  });
+  return `${dateStr} - ${timeStr}`;
+}
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState<any[]>([]);
@@ -25,9 +41,10 @@ export default function PaymentsPage() {
   const [statusFilter, setStatusFilter] = useState<"unpaid" | "paid" | "all">("unpaid");
   const [clientFilter, setClientFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
-  const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
+  const [viewMode, setViewMode] = useState<"grouped" | "flat">("flat");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [processing, setProcessing] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -90,14 +107,14 @@ export default function PaymentsPage() {
   const sortedPayments = useMemo(() => {
     const list = [...clientFiltered];
     list.sort((a, b) => {
-      const timeA = new Date(a.date).getTime();
-      const timeB = new Date(b.date).getTime();
+      const timeA = new Date(a.startTime || a.date).getTime();
+      const timeB = new Date(b.startTime || b.date).getTime();
       if (timeA !== timeB) {
         return sortOrder === "desc" ? timeB - timeA : timeA - timeB;
       }
-      const startA = a.startTime || "";
-      const startB = b.startTime || "";
-      return sortOrder === "desc" ? startB.localeCompare(startA) : startA.localeCompare(startB);
+      return sortOrder === "desc"
+        ? String(b.startTime || "").localeCompare(String(a.startTime || ""))
+        : String(a.startTime || "").localeCompare(String(b.startTime || ""));
     });
     return list;
   }, [clientFiltered, sortOrder]);
@@ -132,8 +149,17 @@ export default function PaymentsPage() {
 
   const isOverdue = (appt: any) => !appt.paid && new Date(appt.date) < startOfToday;
 
-  const paymentTextColor = (appt: any) =>
-    appt.paid ? "text-emerald-600" : isOverdue(appt) ? "text-rose-600" : "text-amber-600";
+  const paymentTextColor = (appt: any) => {
+    if (appt.paid) return "text-emerald-600";
+    if (isOverdue(appt)) return "text-rose-600";
+    return "text-amber-600";
+  };
+
+  const statusDotColor = (appt: any) => {
+    if (appt.paid) return "bg-emerald-500 shadow-xs shadow-emerald-500/50";
+    if (isOverdue(appt)) return "bg-rose-500 shadow-xs shadow-rose-500/50";
+    return "bg-amber-500 shadow-xs shadow-amber-500/50";
+  };
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -161,35 +187,35 @@ export default function PaymentsPage() {
     }
   };
 
-  const markPaid = async (id: string) => {
-    setProcessing(true);
+  const toggleCompleted = async (id: string) => {
+    setProcessingId(id);
     try {
       await fetch(`/api/v1/payments/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "mark_paid" }),
+        body: JSON.stringify({ action: "toggle_completed" }),
       });
       await fetchPayments();
     } finally {
-      setProcessing(false);
+      setProcessingId(null);
     }
   };
 
-  const markUnpaid = async (id: string) => {
-    setProcessing(true);
+  const togglePaid = async (id: string, currentPaid: boolean) => {
+    setProcessingId(id);
     try {
       await fetch(`/api/v1/payments/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "mark_unpaid" }),
+        body: JSON.stringify({ action: currentPaid ? "mark_unpaid" : "mark_paid" }),
       });
       await fetchPayments();
     } finally {
-      setProcessing(false);
+      setProcessingId(null);
     }
   };
 
-  const executeBulkAction = async (action: "PAID" | "UNPAID") => {
+  const executeBulkAction = async (action: "PAID" | "UNPAID" | "COMPLETE" | "UNCOMPLETE") => {
     if (selectedIds.length === 0) return;
     setProcessing(true);
     try {
@@ -227,7 +253,116 @@ export default function PaymentsPage() {
     [selectedAppointments]
   );
 
+  const selectedIncompleteCount = useMemo(
+    () => selectedAppointments.filter((p) => p.status !== "COMPLETED").length,
+    [selectedAppointments]
+  );
+
+  const selectedCompleteCount = useMemo(
+    () => selectedAppointments.filter((p) => p.status === "COMPLETED").length,
+    [selectedAppointments]
+  );
+
   const totalPaginationCount = viewMode === "grouped" ? grouped.length : sortedPayments.length;
+
+  const renderSingleLineRow = (appt: any) => {
+    const isBusy = processingId === appt.id;
+    const isCompleted = appt.status === "COMPLETED";
+    const serviceName = appt.services?.[0]?.service?.name || appt.title || "Standard cleaning";
+
+    return (
+      <div
+        key={appt.id}
+        className="flex items-center gap-4 px-4 sm:px-5 py-3 hover:bg-slate-50/70 transition-colors border-b border-slate-100 last:border-b-0 min-w-[780px] text-xs font-normal"
+      >
+        {/* Selection Checkbox */}
+        <div className="w-5 shrink-0 flex items-center justify-center">
+          <input
+            type="checkbox"
+            checked={selectedIds.includes(appt.id)}
+            onChange={() => toggleSelect(appt.id)}
+            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+          />
+        </div>
+
+        {/* 1. Data - Hora Início */}
+        <div className="w-44 shrink-0 font-mono text-slate-700 font-semibold text-[11px] truncate">
+          {formatApptDateTime(appt.date, appt.startTime)}
+        </div>
+
+        {/* 2. Nome Cliente */}
+        <div className="w-40 shrink-0 font-bold text-slate-900 truncate" title={appt.client?.name}>
+          {appt.client?.name || "Sem cliente"}
+        </div>
+
+        {/* 3. Serviço */}
+        <div className="flex-1 min-w-[170px] text-slate-600 font-medium truncate" title={serviceName}>
+          {serviceName}
+        </div>
+
+        {/* 4. Bolinha Status + Total */}
+        <div className="w-36 shrink-0 flex items-center gap-2">
+          <span
+            className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusDotColor(appt)}`}
+            title={
+              appt.paid ? "Status: Pago" : isOverdue(appt) ? "Status: Atrasado" : "Status: Pendente"
+            }
+          />
+          <span className={`font-mono font-bold text-xs ${paymentTextColor(appt)}`}>
+            Total: ${Number(appt.price).toFixed(2)}
+          </span>
+        </div>
+
+        {/* 5. Flag para setar como Concluído */}
+        <div className="w-32 shrink-0 flex items-center">
+          <button
+            type="button"
+            onClick={() => toggleCompleted(appt.id)}
+            disabled={isBusy}
+            title={isCompleted ? "Clique para desmarcar conclusão" : "Clique para marcar como concluído"}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all cursor-pointer disabled:opacity-50 ${
+              isCompleted
+                ? "bg-indigo-50/80 border-indigo-200 text-indigo-700 shadow-2xs"
+                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            {isBusy ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+            ) : isCompleted ? (
+              <CheckSquare className="w-3.5 h-3.5 text-indigo-600" />
+            ) : (
+              <Square className="w-3.5 h-3.5 text-slate-400" />
+            )}
+            <span>Concluído</span>
+          </button>
+        </div>
+
+        {/* 6. Flag para setar como Pago */}
+        <div className="w-28 shrink-0 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={() => togglePaid(appt.id, appt.paid)}
+            disabled={isBusy}
+            title={appt.paid ? "Clique para reverter para pendente" : "Clique para marcar como pago"}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer disabled:opacity-50 ${
+              appt.paid
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs"
+                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            {isBusy ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+            ) : appt.paid ? (
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            ) : (
+              <Circle className="w-3.5 h-3.5 text-slate-400" />
+            )}
+            <span>Pago</span>
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="bg-[#f8fafc] min-h-screen">
@@ -238,7 +373,7 @@ export default function PaymentsPage() {
         loading={loading}
       />
 
-      <div className="p-3.5 sm:p-6 max-w-6xl mx-auto space-y-4 sm:space-y-6">
+      <div className="p-3.5 sm:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
         {/* Summary cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
@@ -329,21 +464,6 @@ export default function PaymentsPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setViewMode("grouped");
-                  setCurrentPage(1);
-                }}
-                title="Agrupar por cliente"
-                className={`p-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                  viewMode === "grouped"
-                    ? "bg-white text-indigo-600 shadow-2xs font-bold"
-                    : "text-slate-500 hover:text-slate-900"
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
                   setViewMode("flat");
                   setCurrentPage(1);
                 }}
@@ -355,6 +475,21 @@ export default function PaymentsPage() {
                 }`}
               >
                 <Calendar className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode("grouped");
+                  setCurrentPage(1);
+                }}
+                title="Agrupar por cliente"
+                className={`p-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                  viewMode === "grouped"
+                    ? "bg-white text-indigo-600 shadow-2xs font-bold"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -374,26 +509,48 @@ export default function PaymentsPage() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Marcar Concluído em Lote */}
+              <button
+                type="button"
+                onClick={() => executeBulkAction("COMPLETE")}
+                disabled={processing}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-sm disabled:opacity-50 cursor-pointer transition-colors"
+              >
+                <CheckSquare className="w-3.5 h-3.5" />
+                Marcar Concluído {selectedIncompleteCount > 0 ? `(${selectedIncompleteCount})` : ""}
+              </button>
+
               {/* Marcar como Pago em Lote */}
               <button
                 type="button"
                 onClick={() => executeBulkAction("PAID")}
                 disabled={processing}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm disabled:opacity-50 cursor-pointer transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm disabled:opacity-50 cursor-pointer transition-colors"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 Marcar Pago {selectedUnpaidCount > 0 ? `(${selectedUnpaidCount})` : ""}
               </button>
 
-              {/* Marcar como Pendente em Lote (Reverter) */}
+              {/* Marcar como Pendente em Lote (Reverter Pagamento) */}
               <button
                 type="button"
                 onClick={() => executeBulkAction("UNPAID")}
                 disabled={processing}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold shadow-sm disabled:opacity-50 cursor-pointer transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold shadow-sm disabled:opacity-50 cursor-pointer transition-colors"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 Marcar Pendente {selectedPaidCount > 0 ? `(${selectedPaidCount})` : ""}
+              </button>
+
+              {/* Desmarcar Conclusão em Lote */}
+              <button
+                type="button"
+                onClick={() => executeBulkAction("UNCOMPLETE")}
+                disabled={processing}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-indigo-800/80 hover:bg-indigo-800 text-indigo-200 text-xs font-medium cursor-pointer transition-colors"
+              >
+                <Square className="w-3.5 h-3.5" />
+                <span>Desmarcar Concluído {selectedCompleteCount > 0 ? `(${selectedCompleteCount})` : ""}</span>
               </button>
 
               {/* Limpar seleção */}
@@ -468,66 +625,20 @@ export default function PaymentsPage() {
                     </div>
                   </div>
 
-                  <div className="divide-y divide-slate-100">
-                    {items.map((appt) => (
-                      <div
-                        key={appt.id}
-                        className="px-4 sm:px-5 py-3 flex items-center justify-between gap-3 text-xs hover:bg-slate-50/50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.includes(appt.id)}
-                            onChange={() => toggleSelect(appt.id)}
-                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 shrink-0 cursor-pointer"
-                          />
-                          <div className="min-w-0">
-                            <p className="font-semibold text-slate-900 truncate">{appt.title}</p>
-                            <p className="text-slate-500 font-mono text-[11px] flex items-center gap-1.5 flex-wrap">
-                              <span>{new Date(appt.date).toLocaleDateString("pt-BR")}</span>
-                              {appt.startTime && (
-                                <span className="text-slate-400">• {appt.startTime}</span>
-                              )}
-                              {isOverdue(appt) && (
-                                <span className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[9px] font-bold uppercase">
-                                  Atrasado
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 shrink-0">
-                          <span className={`font-mono font-bold ${paymentTextColor(appt)}`}>
-                            ${Number(appt.price).toFixed(2)}
-                          </span>
-
-                          {appt.paid ? (
-                            <button
-                              type="button"
-                              onClick={() => markUnpaid(appt.id)}
-                              disabled={processing}
-                              title="Clique para reverter para pendente"
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[11px] hover:bg-emerald-100 disabled:opacity-50 cursor-pointer transition-colors"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline">Pago</span>
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => markPaid(appt.id)}
-                              disabled={processing}
-                              title="Clique para marcar como pago"
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white text-slate-600 border border-slate-200 font-bold text-[11px] hover:bg-slate-100 disabled:opacity-50 cursor-pointer transition-colors"
-                            >
-                              <Circle className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline">Marcar Pago</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                  {/* Single Line Header & Items */}
+                  <div className="overflow-x-auto">
+                    <div className="flex items-center gap-4 px-4 sm:px-5 py-2.5 bg-slate-50/40 border-b border-slate-100 text-[11px] font-bold text-slate-500 uppercase tracking-wider min-w-[780px]">
+                      <div className="w-5 shrink-0" />
+                      <div className="w-44 shrink-0">Data - Hora Início</div>
+                      <div className="w-40 shrink-0">Cliente</div>
+                      <div className="flex-1 min-w-[170px]">Serviço</div>
+                      <div className="w-36 shrink-0">Status & Total</div>
+                      <div className="w-32 shrink-0">Concluído</div>
+                      <div className="w-28 shrink-0 text-right">Pago</div>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {items.map((appt) => renderSingleLineRow(appt))}
+                    </div>
                   </div>
                 </div>
               );
@@ -536,89 +647,33 @@ export default function PaymentsPage() {
         ) : (
           /* ================= FLAT LIST VIEW BY DATE ================= */
           <div className="rounded-2xl bg-white border border-slate-200/80 shadow-xs overflow-hidden">
-            <div className="px-4 sm:px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-2 bg-slate-50/70 text-xs font-semibold text-slate-600">
-              <div className="flex items-center gap-2.5">
-                <input
-                  type="checkbox"
-                  checked={
-                    paginatedFlat.length > 0 &&
-                    paginatedFlat.every((item) => selectedIds.includes(item.id))
-                  }
-                  onChange={selectAllVisible}
-                  title="Selecionar todos nesta página"
-                  className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                />
-                <span>Atendimento / Cliente</span>
-              </div>
-              <div className="flex items-center gap-6">
-                <span>Data</span>
-                <span>Valor / Status</span>
-              </div>
-            </div>
-
-            <div className="divide-y divide-slate-100">
-              {paginatedFlat.map((appt) => (
-                <div
-                  key={appt.id}
-                  className="px-4 sm:px-5 py-3.5 flex items-center justify-between gap-3 text-xs hover:bg-slate-50/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(appt.id)}
-                      onChange={() => toggleSelect(appt.id)}
-                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 shrink-0 cursor-pointer"
-                    />
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-900 truncate">{appt.title}</p>
-                      <p className="text-slate-500 text-[11px] truncate">
-                        {appt.client?.name || "Sem cliente"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4 sm:gap-6 shrink-0">
-                    <div className="text-right">
-                      <p className="font-mono text-slate-800 text-[11px]">
-                        {new Date(appt.date).toLocaleDateString("pt-BR")}
-                      </p>
-                      {isOverdue(appt) && (
-                        <span className="px-1.5 py-0.2 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[9px] font-bold uppercase inline-block">
-                          Atrasado
-                        </span>
-                      )}
-                    </div>
-
-                    <span className={`font-mono font-bold text-sm ${paymentTextColor(appt)}`}>
-                      ${Number(appt.price).toFixed(2)}
-                    </span>
-
-                    {appt.paid ? (
-                      <button
-                        type="button"
-                        onClick={() => markUnpaid(appt.id)}
-                        disabled={processing}
-                        title="Clique para reverter para pendente"
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[11px] hover:bg-emerald-100 disabled:opacity-50 cursor-pointer transition-colors"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Pago</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => markPaid(appt.id)}
-                        disabled={processing}
-                        title="Clique para marcar como pago"
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white text-slate-600 border border-slate-200 font-bold text-[11px] hover:bg-slate-100 disabled:opacity-50 cursor-pointer transition-colors"
-                      >
-                        <Circle className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Pendente</span>
-                      </button>
-                    )}
-                  </div>
+            {/* Header */}
+            <div className="overflow-x-auto">
+              <div className="flex items-center gap-4 px-4 sm:px-5 py-3 bg-slate-50/70 border-b border-slate-100 text-[11px] font-bold text-slate-500 uppercase tracking-wider min-w-[780px]">
+                <div className="w-5 shrink-0 flex items-center justify-center">
+                  <input
+                    type="checkbox"
+                    checked={
+                      paginatedFlat.length > 0 &&
+                      paginatedFlat.every((item) => selectedIds.includes(item.id))
+                    }
+                    onChange={selectAllVisible}
+                    title="Selecionar todos nesta página"
+                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
                 </div>
-              ))}
+                <div className="w-44 shrink-0">Data - Hora Início</div>
+                <div className="w-40 shrink-0">Cliente</div>
+                <div className="flex-1 min-w-[170px]">Serviço</div>
+                <div className="w-36 shrink-0">Status & Total</div>
+                <div className="w-32 shrink-0">Concluído</div>
+                <div className="w-28 shrink-0 text-right">Pago</div>
+              </div>
+
+              {/* Rows */}
+              <div className="divide-y divide-slate-100">
+                {paginatedFlat.map((appt) => renderSingleLineRow(appt))}
+              </div>
             </div>
           </div>
         )}

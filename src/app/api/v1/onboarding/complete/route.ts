@@ -23,17 +23,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const currentUser = await prisma.user.findUnique({
-      where: { id: pending.id },
-      select: { companyId: true },
-    });
-    if (currentUser?.companyId) {
-      return NextResponse.json(
-        { error: "O cadastro desta conta já foi concluído." },
-        { status: 400 }
-      );
-    }
-
     const { companyName, companyPhone, city, state, userPhone } = parsed.data;
 
     await prisma.$transaction(async (tx) => {
@@ -63,8 +52,8 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      await tx.user.update({
-        where: { id: pending.id },
+      const updateResult = await tx.user.updateMany({
+        where: { id: pending.id, companyId: null },
         data: {
           companyId: company.id,
           role: "ADMIN",
@@ -72,10 +61,23 @@ export async function POST(req: NextRequest) {
           ...(userPhone ? { phone: userPhone } : {}),
         },
       });
+
+      if (updateResult.count === 0) {
+        // Another concurrent request already completed onboarding for this
+        // user first - throwing here rolls back this entire transaction,
+        // including the company we just created above, so no orphan row survives.
+        throw new Error("ONBOARDING_ALREADY_COMPLETED");
+      }
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof Error && error.message === "ONBOARDING_ALREADY_COMPLETED") {
+      return NextResponse.json(
+        { error: "O cadastro desta conta já foi concluído." },
+        { status: 400 }
+      );
+    }
     console.error("Erro ao concluir onboarding:", error);
     return NextResponse.json(
       { error: "Não foi possível concluir o cadastro da empresa." },

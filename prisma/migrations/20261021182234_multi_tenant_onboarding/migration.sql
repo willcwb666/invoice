@@ -2,16 +2,10 @@
 ALTER TYPE "UserStatus" ADD VALUE 'PENDING_ONBOARDING';
 
 -- AlterTable
-ALTER TABLE "company_profiles" DROP DEFAULT FOR "name";
-
--- AlterTable
-ALTER TABLE "company_profiles" DROP DEFAULT FOR "email";
-
--- AlterTable
-ALTER TABLE "company_profiles" DROP DEFAULT FOR "phone";
-
--- AlterTable
-ALTER TABLE "company_profiles" DROP DEFAULT FOR "paymentMethods";
+ALTER TABLE "company_profiles" ALTER COLUMN "name" DROP DEFAULT,
+ALTER COLUMN "email" DROP DEFAULT,
+ALTER COLUMN "phone" DROP DEFAULT,
+ALTER COLUMN "paymentMethods" DROP DEFAULT;
 
 -- AlterTable
 ALTER TABLE "users" ADD COLUMN "isSuperAdmin" BOOLEAN NOT NULL DEFAULT false;

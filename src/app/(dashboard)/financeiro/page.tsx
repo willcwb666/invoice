@@ -254,7 +254,7 @@ export default function FinancialDashboardPage() {
     <div className="flex-1 flex flex-col min-w-0">
       <Header />
 
-      <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6">
+      <main className="p-3.5 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-4 sm:space-y-6">
         {/* Top Control Bar */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200/90 shadow-xs">
           <div>

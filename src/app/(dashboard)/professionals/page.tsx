@@ -274,7 +274,7 @@ export default function ProfessionalsPage() {
         }
       />
 
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="p-3.5 sm:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
         {/* Info Banner */}
         <div className="p-5 rounded-3xl bg-white border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
           <div className="flex items-start sm:items-center gap-3.5">

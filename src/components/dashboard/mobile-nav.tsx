@@ -111,7 +111,7 @@ export function MobileNav() {
             role="dialog"
             aria-modal="true"
             aria-label="Mais funcionalidades"
-            className="absolute bottom-16 left-0 right-0 bg-white border-t border-slate-200 rounded-t-2xl p-5 space-y-4 shadow-2xl"
+            className="absolute bottom-16 left-0 right-0 bg-white border-t border-slate-200 rounded-t-2xl p-5 space-y-4 shadow-2xl max-h-[82vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">

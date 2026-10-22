@@ -724,7 +724,7 @@ export default function AgendaPage() {
         }
       />
 
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="p-3.5 sm:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
         {/* Banner de Modo Offline & Sincronização Local */}
         {(isOffline || pendingSyncCount > 0) && (
           <div className="p-4 rounded-3xl bg-amber-50 border border-amber-200 text-amber-950 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -980,7 +980,7 @@ export default function AgendaPage() {
 
             {/* VISÃO 1: MÊS (GRADE MENSAL COMPLETA) */}
             {viewMode === "month" && (
-              <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+              <div className="bg-white rounded-3xl border border-slate-200/80 p-3.5 sm:p-6 shadow-xs space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-base text-slate-900 capitalize">
                     {monthCursor.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
@@ -1009,116 +1009,120 @@ export default function AgendaPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-7 gap-1.5">
-                  {WEEKDAY_LABELS.map((label) => (
-                    <div
-                      key={label}
-                      className="text-center text-[10px] font-bold uppercase text-slate-400 pb-1"
-                    >
-                      {label}
-                    </div>
-                  ))}
+                <div className="overflow-x-auto -mx-2 sm:mx-0 pb-2 scrollbar-thin">
+                  <div className="min-w-[620px] sm:min-w-0">
+                    <div className="grid grid-cols-7 gap-1.5">
+                      {WEEKDAY_LABELS.map((label) => (
+                        <div
+                          key={label}
+                          className="text-center text-[10px] font-bold uppercase text-slate-400 pb-1"
+                        >
+                          {label}
+                        </div>
+                      ))}
 
-                  {monthDays.map((day) => {
-                    const key = dateKey(day);
-                    const dayAppts = appointmentsByDate[key] || [];
-                    const isCurrentMonth = day.getMonth() === monthCursor.getMonth();
-                    const isToday = key === todayKey;
-                    const isExpanded = expandedDays.has(key);
-                    const displayedAppts = isExpanded ? dayAppts : dayAppts.slice(0, 3);
+                      {monthDays.map((day) => {
+                        const key = dateKey(day);
+                        const dayAppts = appointmentsByDate[key] || [];
+                        const isCurrentMonth = day.getMonth() === monthCursor.getMonth();
+                        const isToday = key === todayKey;
+                        const isExpanded = expandedDays.has(key);
+                        const displayedAppts = isExpanded ? dayAppts : dayAppts.slice(0, 3);
 
-                    return (
-                      <div
-                        key={key}
-                        onClick={() => openNewAppointmentOnDate(key)}
-                        title="Clique em uma área em branco para criar um novo agendamento neste dia"
-                        className={`group min-h-[110px] rounded-2xl p-2 border flex flex-col gap-1 transition-all cursor-pointer ${
-                          isExpanded
-                            ? "bg-white border-indigo-300 ring-2 ring-indigo-400/20 shadow-md z-10"
-                            : isToday
-                            ? "bg-indigo-50/70 border-indigo-300 ring-2 ring-indigo-500/20 shadow-xs"
-                            : isCurrentMonth
-                            ? "bg-white border-slate-200/80 hover:border-indigo-300 hover:bg-indigo-50/15"
-                            : "bg-slate-50/40 border-slate-100 opacity-60 hover:opacity-90"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between text-xs font-semibold">
-                          <span
-                            className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black ${
-                              isToday
-                                ? "bg-indigo-600 text-white"
+                        return (
+                          <div
+                            key={key}
+                            onClick={() => openNewAppointmentOnDate(key)}
+                            title="Clique em uma área em branco para criar um novo agendamento neste dia"
+                            className={`group min-h-[110px] rounded-2xl p-2 border flex flex-col gap-1 transition-all cursor-pointer ${
+                              isExpanded
+                                ? "bg-white border-indigo-300 ring-2 ring-indigo-400/20 shadow-md z-10"
+                                : isToday
+                                ? "bg-indigo-50/70 border-indigo-300 ring-2 ring-indigo-500/20 shadow-xs"
                                 : isCurrentMonth
-                                ? "text-slate-800"
-                                : "text-slate-400"
+                                ? "bg-white border-slate-200/80 hover:border-indigo-300 hover:bg-indigo-50/15"
+                                : "bg-slate-50/40 border-slate-100 opacity-60 hover:opacity-90"
                             }`}
                           >
-                            {day.getDate()}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            {dayAppts.length > 0 && (
-                              <span className="text-[9px] font-bold text-slate-400">
-                                {dayAppts.length}
+                            <div className="flex items-center justify-between text-xs font-semibold">
+                              <span
+                                className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black ${
+                                  isToday
+                                    ? "bg-indigo-600 text-white"
+                                    : isCurrentMonth
+                                    ? "text-slate-800"
+                                    : "text-slate-400"
+                                }`}
+                              >
+                                {day.getDate()}
                               </span>
-                            )}
-                            <span className="opacity-0 group-hover:opacity-100 transition-opacity w-4 h-4 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-black">
-                              +
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className={`flex-1 flex flex-col gap-1 overflow-y-auto scrollbar-none ${
-                          isExpanded ? "max-h-[260px]" : "max-h-[120px]"
-                        }`}>
-                          {displayedAppts.map((appt) => (
-                            <button
-                              key={appt.id}
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openEditModal(appt);
-                              }}
-                              className={`text-left px-1.5 py-1 rounded-lg text-[10px] font-medium truncate flex items-center justify-between gap-1 border transition-colors cursor-pointer ${
-                                appt.status === "COMPLETED"
-                                  ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
-                                  : appt.status === "CANCELLED"
-                                  ? "bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100 line-through opacity-75"
-                                  : "bg-indigo-50 text-indigo-900 border-indigo-200 hover:bg-indigo-100"
-                              }`}
-                            >
-                              <span className="truncate flex-1 flex items-center gap-1">
-                                {(appt.seriesId || (appt.recurrenceRule && appt.recurrenceRule !== "NONE")) && (
-                                  <Repeat className="w-2.5 h-2.5 text-purple-600 shrink-0" />
+                              <div className="flex items-center gap-1">
+                                {dayAppts.length > 0 && (
+                                  <span className="text-[9px] font-bold text-slate-400">
+                                    {dayAppts.length}
+                                  </span>
                                 )}
-                                <span className="truncate">{appt.client?.name || appt.title}</span>
-                              </span>
-                              <span className={`font-mono font-bold shrink-0 text-[9px] ${PAYMENT_TEXT_COLOR[getPaymentColor(appt)]}`}>
-                                ${Number(appt.price).toFixed(0)}
-                              </span>
-                            </button>
-                          ))}
-                          {dayAppts.length > 3 && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleExpandDay(key);
-                              }}
-                              className="text-[9px] text-indigo-600 hover:text-indigo-800 font-bold px-1.5 py-0.5 text-left transition-colors cursor-pointer rounded hover:bg-indigo-50/80 w-fit flex items-center gap-0.5 mt-0.5"
-                            >
-                              {isExpanded ? "Ver menos ↑" : `+${dayAppts.length - 3} mais (ver todos)`}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                                <span className="opacity-0 group-hover:opacity-100 transition-opacity w-4 h-4 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-black">
+                                  +
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className={`flex-1 flex flex-col gap-1 overflow-y-auto scrollbar-none ${
+                              isExpanded ? "max-h-[260px]" : "max-h-[120px]"
+                            }`}>
+                              {displayedAppts.map((appt) => (
+                                <button
+                                  key={appt.id}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEditModal(appt);
+                                  }}
+                                  className={`text-left px-1.5 py-1 rounded-lg text-[10px] font-medium truncate flex items-center justify-between gap-1 border transition-colors cursor-pointer ${
+                                    appt.status === "COMPLETED"
+                                      ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+                                      : appt.status === "CANCELLED"
+                                      ? "bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100 line-through opacity-75"
+                                      : "bg-indigo-50 text-indigo-900 border-indigo-200 hover:bg-indigo-100"
+                                  }`}
+                                >
+                                  <span className="truncate flex-1 flex items-center gap-1">
+                                    {(appt.seriesId || (appt.recurrenceRule && appt.recurrenceRule !== "NONE")) && (
+                                      <Repeat className="w-2.5 h-2.5 text-purple-600 shrink-0" />
+                                    )}
+                                    <span className="truncate">{appt.client?.name || appt.title}</span>
+                                  </span>
+                                  <span className={`font-mono font-bold shrink-0 text-[9px] ${PAYMENT_TEXT_COLOR[getPaymentColor(appt)]}`}>
+                                    ${Number(appt.price).toFixed(0)}
+                                  </span>
+                                </button>
+                              ))}
+                              {dayAppts.length > 3 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleExpandDay(key);
+                                  }}
+                                  className="text-[9px] text-indigo-600 hover:text-indigo-800 font-bold px-1.5 py-0.5 text-left transition-colors cursor-pointer rounded hover:bg-indigo-50/80 w-fit flex items-center gap-0.5 mt-0.5"
+                                >
+                                  {isExpanded ? "Ver menos ↑" : `+${dayAppts.length - 3} mais (ver todos)`}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
 
             {/* VISÃO 2: SEMANA (GRADE DE 7 COLUNAS) */}
             {viewMode === "week" && (
-              <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+              <div className="bg-white rounded-3xl border border-slate-200/80 p-3.5 sm:p-6 shadow-xs space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-bold text-base text-slate-900">

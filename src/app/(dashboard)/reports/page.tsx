@@ -257,7 +257,7 @@ export default function ReportsPage() {
         loading={loading}
       />
 
-      <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full flex-1">
+      <div className="p-3.5 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-7xl mx-auto w-full flex-1">
         {/* Cabeçalho de Impressão (Visível apenas na impressão) */}
         <div className="hidden print:block mb-8 border-b-2 border-slate-900 pb-4">
           <div className="flex items-center justify-between">

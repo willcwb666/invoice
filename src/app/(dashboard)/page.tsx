@@ -149,7 +149,7 @@ export default function DashboardPage() {
         onPeriodChange={setPeriod}
       />
 
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="p-3.5 sm:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
         {/* Seção de Boas-vindas inspirada na referência */}
         <WelcomeBanner />
 
@@ -160,9 +160,9 @@ export default function DashboardPage() {
         <DynamicRevenueChart period={period} />
 
         {/* Duas Colunas: Próximos Atendimentos & Faturas Recentes */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {/* Próximos Atendimentos da Agenda */}
-          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-4">
+          <div className="p-4 sm:p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-indigo-600" />
@@ -225,7 +225,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Faturas Recentes */}
-          <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-4">
+          <div className="p-4 sm:p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-emerald-600" />

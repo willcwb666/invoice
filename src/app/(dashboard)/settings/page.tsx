@@ -414,7 +414,7 @@ export default function SettingsPage() {
         }
       />
 
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <div className="p-3.5 sm:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-6">
         {/* Navigation Tabs - com rolagem horizontal para celular */}
         <div className="w-full overflow-x-auto no-scrollbar pb-1">
           <div className="flex items-center gap-2 p-1.5 bg-white rounded-2xl border border-slate-200/80 shadow-xs min-w-max">

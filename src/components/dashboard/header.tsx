@@ -150,13 +150,13 @@ export function Header({
   };
 
   return (
-    <header className="border-b border-slate-200/80 backdrop-blur-md sticky top-0 z-30 bg-white/80 px-6 py-4 flex items-center justify-between shadow-xs print:hidden">
-      <div>
-        <h2 className="font-bold text-base text-slate-900 tracking-tight">{title}</h2>
-        <p className="text-xs text-slate-500">{subtitle}</p>
+    <header className="border-b border-slate-200/80 backdrop-blur-md sticky top-0 z-30 bg-white/80 px-3.5 sm:px-6 py-3 sm:py-4 flex items-center justify-between shadow-xs print:hidden">
+      <div className="min-w-0 pr-2">
+        <h2 className="font-bold text-base text-slate-900 tracking-tight truncate">{title}</h2>
+        <p className="text-xs text-slate-500 truncate">{subtitle}</p>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
         {actionSlot}
 
         {/* Toggle Semanal / Mensal animado (lado a lado com o recarregar dados) */}

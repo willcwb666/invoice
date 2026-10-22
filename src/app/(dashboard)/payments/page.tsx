@@ -238,7 +238,7 @@ export default function PaymentsPage() {
         loading={loading}
       />
 
-      <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
+      <div className="p-3.5 sm:p-6 max-w-6xl mx-auto space-y-4 sm:space-y-6">
         {/* Summary cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs">

@@ -228,7 +228,7 @@ export default function ClientsListPage() {
         loading={loading}
       />
 
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="p-3.5 sm:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
         {/* Actions Bar */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3 flex-1 max-w-md">

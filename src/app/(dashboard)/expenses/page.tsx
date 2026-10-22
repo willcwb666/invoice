@@ -353,7 +353,7 @@ export default function ExpensesPage() {
         loading={loading}
       />
 
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <div className="p-3.5 sm:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
         {/* Seletor de Mês e Período */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs">
           <div className="flex items-center gap-2.5">

@@ -6,7 +6,10 @@ export async function register() {
       const { ensureICloudCalendarSynced } = await import("@/lib/calendar/icloud");
       await ensureExampleInvoicesSeeded();
       const res = await ensureICloudCalendarSynced(true);
-      console.log("[Instrumentation] iCloud auto-sync result:", res?.message || res);
+      console.log(
+        "[Instrumentation] iCloud auto-sync result:",
+        res ? `${res.length} empresa(s) sincronizada(s)` : res
+      );
     } catch (err) {
       const errMessage = err instanceof Error ? err.message : String(err);
       console.error("[Instrumentation] Error initializing iCloud sync:", err);

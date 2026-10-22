@@ -1658,16 +1658,26 @@ async function syncICloudCalendarForCompanyUnlocked(
   };
 }
 
-let activeSyncPromise: Promise<SyncICloudResult | null> | null = null;
+let activeSyncPromise: Promise<SyncICloudResult[] | null> | null = null;
 let lastSyncTimestamp = 0;
 
 /**
- * Garante que o calendário do iCloud seja sincronizado automaticamente para a empresa
- * respeitando um intervalo mínimo de 5 minutos entre chamadas para proteger contra rate limit.
+ * Garante que o calendário do iCloud seja sincronizado automaticamente para
+ * TODAS as empresas que têm sync configurado, respeitando um intervalo
+ * mínimo de 5 minutos entre chamadas (para o lote inteiro, não por empresa)
+ * para proteger contra rate limit. Chamado sem sessão/request (boot do
+ * servidor via instrumentation.ts), então não há como escopar isso a "a
+ * empresa do chamador" — precisa necessariamente iterar por todas.
+ *
+ * `activeSyncPromise`/`lastSyncTimestamp` continuam globais de propósito:
+ * governam este job de boot como um todo (uma rodada por vez, para o lote),
+ * não por empresa — o lock por empresa de verdade já existe em
+ * claimIcloudSyncLock/releaseIcloudSyncLock e em companySyncLocks dentro de
+ * syncICloudCalendarForCompany, chamado aqui uma vez por empresa.
  */
 export async function ensureICloudCalendarSynced(
   force = false
-): Promise<SyncICloudResult | null> {
+): Promise<SyncICloudResult[] | null> {
   if (
     process.env.NEXT_PHASE === "phase-production-build" ||
     process.env.npm_lifecycle_event === "build" ||
@@ -1687,59 +1697,93 @@ export async function ensureICloudCalendarSynced(
   }
 
   activeSyncPromise = (async () => {
-    let companyIdForErrorReport: string | undefined;
     try {
-      console.log("[iCloud Auto-Sync] Passo 1: Localizando perfil da empresa...");
-      let company = await prisma.companyProfile.findFirst();
-      if (!company) {
-        console.log("[iCloud Auto-Sync] Nenhum perfil encontrado ainda.");
+      console.log("[iCloud Auto-Sync] Passo 1: Localizando empresas com sync configurado...");
+      // ICLOUD_CALENDAR_URL (DEFAULT_ICLOUD_URL) é um único valor global por
+      // deploy — não carrega identidade de empresa nenhuma, então não há
+      // como saber "a qual empresa esse env var pertence" quando há mais de
+      // uma. Por isso ele só é usado como seed único para a PRIMEIRA empresa
+      // (por ordem de criação) que ainda não tem icloudCalendarUrl próprio —
+      // preserva o comportamento original de bootstrap single-tenant (a
+      // única empresa que esse env var podia significar antes de haver
+      // multi-tenant) sem jamais sobrescrever uma URL que outra empresa já
+      // configurou para si, e sem "adivinhar" para qual de várias empresas
+      // sem URL configurada o valor era destinado.
+      const companies = await prisma.companyProfile.findMany({
+        where: {
+          OR: [
+            { icloudCalendarUrl: { not: null } },
+            ...(DEFAULT_ICLOUD_URL ? [{ icloudCalendarUrl: null }] : []),
+          ],
+        },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, name: true, icloudCalendarUrl: true },
+      });
+
+      if (companies.length === 0) {
+        console.log("[iCloud Auto-Sync] Nenhuma empresa com sync configurado ainda.");
         return null;
       }
 
-      companyIdForErrorReport = company.id;
-      console.log("[iCloud Auto-Sync] Passo 2: Empresa localizada:", company.id, company.name);
+      let appliedDefaultUrlOnce = false;
+      const results: SyncICloudResult[] = [];
 
-      // Only seed/overwrite from ICLOUD_CALENDAR_URL when it's actually
-      // configured — an unset env var must never blank out a URL the user
-      // already saved via the sync UI.
-      if (DEFAULT_ICLOUD_URL && company.icloudCalendarUrl !== DEFAULT_ICLOUD_URL) {
-        console.log("[iCloud Auto-Sync] Atualizando URL a partir de ICLOUD_CALENDAR_URL.");
-        company = await prisma.companyProfile.update({
-          where: { id: company.id },
-          data: { icloudCalendarUrl: DEFAULT_ICLOUD_URL },
-        });
+      for (const company of companies) {
+        let urlToSync = company.icloudCalendarUrl;
+
+        if (!urlToSync) {
+          // Só chega aqui se DEFAULT_ICLOUD_URL está configurado (ver filtro
+          // acima) - aplica no máximo uma vez, à primeira empresa sem URL
+          // própria, pelas razões explicadas acima.
+          if (appliedDefaultUrlOnce) continue;
+          appliedDefaultUrlOnce = true;
+          console.log(
+            `[iCloud Auto-Sync] Atribuindo ICLOUD_CALENDAR_URL (bootstrap legado) à empresa ${company.id} (${company.name}).`
+          );
+          await prisma.companyProfile.update({
+            where: { id: company.id },
+            data: { icloudCalendarUrl: DEFAULT_ICLOUD_URL },
+          });
+          urlToSync = DEFAULT_ICLOUD_URL;
+        }
+
+        if (!urlToSync) continue;
+
+        console.log(
+          `[iCloud Auto-Sync] Sincronizando empresa ${company.id} (${company.name})...`
+        );
+        try {
+          const result = await syncICloudCalendarForCompany(company.id, urlToSync);
+          results.push(result);
+          console.log(
+            `[iCloud Auto-Sync] Empresa ${company.id}: concluído! ${result.totalFound} eventos encontrados, ${result.created} novos, ${result.updated} atualizados.`
+          );
+        } catch (err: unknown) {
+          // Isolado por empresa - uma falha (URL inválida, iCloud fora do
+          // ar) não pode impedir a sincronização das demais empresas do lote.
+          const errMessage = err instanceof Error ? err.message : String(err);
+          console.error(
+            `[iCloud Auto-Sync] Erro ao sincronizar empresa ${company.id}:`,
+            errMessage
+          );
+          // Antes isso só era escrito em .data/icloud-sync-status.json — um
+          // arquivo que não sobrevive no filesystem read-only da Vercel, deixando
+          // a falha completamente invisível em produção. Usa o sistema de
+          // notificações (sininho) que já funciona lá, em vez de um arquivo local.
+          try {
+            const { NotificationService } = await import("@/services/notification-service");
+            await NotificationService.create({
+              companyId: company.id,
+              title: "Falha na sincronização com o iCloud",
+              message: `A sincronização automática do calendário falhou: ${errMessage}`,
+              type: "URGENT",
+            });
+          } catch {}
+        }
       }
 
-      const urlToSync = company.icloudCalendarUrl || DEFAULT_ICLOUD_URL;
-      if (!urlToSync) {
-        console.log("[iCloud Auto-Sync] Nenhuma URL de calendário configurada. Pulando sincronização.");
-        return null;
-      }
-
-      console.log("[iCloud Auto-Sync] Passo 3: Executando sincronização do feed iCloud...");
-      const result = await syncICloudCalendarForCompany(company.id, urlToSync);
       lastSyncTimestamp = Date.now();
-      console.log(
-        `[iCloud Auto-Sync] Passo 4: Concluído com sucesso! ${result.totalFound} eventos encontrados, ${result.created} novos, ${result.updated} atualizados.`
-      );
-      return result;
-    } catch (err: unknown) {
-      const errMessage = err instanceof Error ? err.message : String(err);
-      console.error("[iCloud Auto-Sync] Erro durante a sincronização:", errMessage);
-      // Antes isso só era escrito em .data/icloud-sync-status.json — um
-      // arquivo que não sobrevive no filesystem read-only da Vercel, deixando
-      // a falha completamente invisível em produção. Usa o sistema de
-      // notificações (sininho) que já funciona lá, em vez de um arquivo local.
-      if (companyIdForErrorReport) {
-        const { NotificationService } = await import("@/services/notification-service");
-        await NotificationService.create({
-          companyId: companyIdForErrorReport,
-          title: "Falha na sincronização com o iCloud",
-          message: `A sincronização automática do calendário falhou: ${errMessage}`,
-          type: "URGENT",
-        });
-      }
-      return null;
+      return results;
     } finally {
       activeSyncPromise = null;
     }

@@ -394,13 +394,18 @@ export async function getPendingOnboardingUser(
   const payload = await verifySessionToken(token);
   if (!payload) return null;
 
-  const dbUser = await prisma.user.findUnique({
-    where: { id: payload.sub },
-    select: { status: true, email: true, name: true },
-  });
-  if (!dbUser || dbUser.status !== "PENDING_ONBOARDING") return null;
+  try {
+    const dbUser = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { status: true, email: true, name: true },
+    });
+    if (!dbUser || dbUser.status !== "PENDING_ONBOARDING") return null;
 
-  return { id: payload.sub, email: dbUser.email, name: dbUser.name };
+    return { id: payload.sub, email: dbUser.email, name: dbUser.name };
+  } catch (err) {
+    console.error("Erro ao verificar status de onboarding pendente do usuário no banco:", err);
+    return null;
+  }
 }
 
 /**

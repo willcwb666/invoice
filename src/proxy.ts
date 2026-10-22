@@ -79,26 +79,35 @@ export async function proxy(req: NextRequest) {
       // PENDING_ONBOARDING self-registration (see Task 3) is routed to
       // /onboarding at the page level too, not just rejected later when an
       // API call 401s.
-      const dbUser = await prisma.user.findUnique({
-        where: { id: legacyPayload.sub },
-        select: { status: true },
-      });
-      if (dbUser?.status === "PENDING_ONBOARDING") {
-        pendingOnboardingStatus = "PENDING_ONBOARDING";
-      } else if (dbUser?.status === "ACTIVE") {
-        session = legacyPayload;
+      try {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: legacyPayload.sub },
+          select: { status: true },
+        });
+        if (dbUser?.status === "PENDING_ONBOARDING") {
+          pendingOnboardingStatus = "PENDING_ONBOARDING";
+        } else if (dbUser?.status === "ACTIVE") {
+          session = legacyPayload;
+        }
+        // Any other status (PENDING_APPROVAL, SUSPENDED) leaves both
+        // `session` and `pendingOnboardingStatus` unset, i.e. "no session" -
+        // same outcome getSessionUser already produces for API routes.
+      } catch (err) {
+        // Same fail-closed behavior as getSessionUser's equivalent lookup:
+        // on a DB error, leave both `session` and `pendingOnboardingStatus`
+        // unset and fall through to the unauthenticated handling below,
+        // rather than trusting the unverified JWT payload.
+        console.error("Erro ao verificar status de sessão do usuário no banco:", err);
       }
-      // Any other status (PENDING_APPROVAL, SUSPENDED) leaves both
-      // `session` and `pendingOnboardingStatus` unset, i.e. "no session" -
-      // same outcome getSessionUser already produces for API routes.
     }
   }
 
   // A PENDING_ONBOARDING user (either auth mechanism) can only reach the
-  // onboarding wizard itself and its API, no matter what else they request.
+  // onboarding wizard itself, its API, and the auth endpoints (so they can
+  // still log out / abandon onboarding) - no matter what else they request.
   if (pendingOnboardingStatus) {
     const isOnboardingPath =
-      pathname === "/onboarding" || pathname.startsWith("/api/v1/onboarding/");
+      pathname === "/onboarding" || pathname.startsWith("/api/v1/onboarding/") || isAuthApi;
     if (!isOnboardingPath) {
       return NextResponse.redirect(new URL("/onboarding", req.url));
     }

@@ -91,4 +91,20 @@ describe("PaymentService Completion & Flexible Payment Toggles", () => {
     expect(queryArg?.include?.services).toBeDefined();
     expect(list.length).toBe(1);
   });
+
+  it("restricts listPayments to today and past dates, excluding future appointments", async () => {
+    const findManySpy = vi.spyOn(prisma.appointment, "findMany").mockResolvedValueOnce([]);
+
+    await PaymentService.listPayments("comp-1");
+    expect(findManySpy).toHaveBeenCalled();
+    const queryArg = findManySpy.mock.calls[0][0];
+
+    // Date filter must have lte bounded to today
+    expect(queryArg?.where?.date?.lte).toBeDefined();
+    const lteDate = queryArg.where.date.lte as Date;
+    const now = new Date();
+    // lte should be later than now (end of today) but not next week
+    expect(lteDate.getTime()).toBeGreaterThan(now.getTime() - 86400000);
+    expect(lteDate.getTime()).toBeLessThan(now.getTime() + 86400000 * 2);
+  });
 });

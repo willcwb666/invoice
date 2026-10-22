@@ -23,6 +23,24 @@ export class PaymentService {
   static async listPayments(companyId: string, filters: PaymentFilters = {}) {
     const { status = "all", clientId, from, to } = filters;
 
+    // Restringe os pagamentos estritamente a atendimentos de hoje para trás (fuso de Denver)
+    const now = new Date();
+    const denverFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Denver",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+    });
+    const parts = denverFormatter.formatToParts(now);
+    const getVal = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+    const year = getVal("year");
+    const month = getVal("month");
+    const day = getVal("day");
+
+    // Fim do dia no fuso de Denver em UTC (+7h cobre MDT UTC-6 e MST UTC-7)
+    const endOfToday = new Date(Date.UTC(year, month - 1, day, 23 + 7, 59, 59, 999));
+    const effectiveTo = to && to < endOfToday ? to : endOfToday;
+
     return prisma.appointment.findMany({
       where: {
         companyId,
@@ -32,14 +50,10 @@ export class PaymentService {
         ...(clientId ? { clientId } : {}),
         ...(status === "paid" ? { paid: true } : {}),
         ...(status === "unpaid" ? { paid: false } : {}),
-        ...(from || to
-          ? {
-              date: {
-                ...(from ? { gte: from } : {}),
-                ...(to ? { lte: to } : {}),
-              },
-            }
-          : {}),
+        date: {
+          ...(from ? { gte: from } : {}),
+          lte: effectiveTo,
+        },
       },
       orderBy: [{ date: "desc" }, { startTime: "desc" }],
       include: {

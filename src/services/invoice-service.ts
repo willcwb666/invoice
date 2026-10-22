@@ -154,7 +154,7 @@ export class InvoiceService {
     // total here) — that's a real gap, but a separate feature to build
     // deliberately rather than something to paper over in this fix.
     const isPaid = status === "PAID";
-    return prisma.invoice.update({
+    const updatedInvoice = await prisma.invoice.update({
       where: { id },
       data: {
         status,
@@ -170,6 +170,27 @@ export class InvoiceService {
         items: true,
       },
     });
+
+    // Sincroniza pagamentos dos agendamentos vinculados a esta fatura
+    if (isPaid) {
+      await prisma.appointment.updateMany({
+        where: { invoiceId: id, companyId },
+        data: {
+          paid: true,
+          paidAt: updatedInvoice.paidAt || new Date(),
+        },
+      });
+    } else {
+      await prisma.appointment.updateMany({
+        where: { invoiceId: id, companyId },
+        data: {
+          paid: false,
+          paidAt: null,
+        },
+      });
+    }
+
+    return updatedInvoice;
   }
 
   /**
@@ -361,6 +382,7 @@ export class InvoiceService {
         finalNotes = finalNotes ? `${finalNotes}\n\n${discountNote}` : discountNote;
       }
 
+      const isPaid = data.status === "PAID";
       const invoice = await tx.invoice.create({
         data: {
           companyId,
@@ -372,6 +394,8 @@ export class InvoiceService {
           subtotal,
           discount: totalDiscount,
           totalAmount,
+          paidAmount: isPaid ? totalAmount : new Prisma.Decimal(0),
+          paidAt: isPaid ? new Date() : null,
           notes: finalNotes,
           items: {
             create: allItems,
@@ -386,7 +410,12 @@ export class InvoiceService {
       if (appointments.length > 0) {
         await tx.appointment.updateMany({
           where: { id: { in: appointments.map((a) => a.id) } },
-          data: { invoiced: true, invoiceId: invoice.id },
+          data: {
+            invoiced: true,
+            invoiceId: invoice.id,
+            paid: isPaid,
+            paidAt: isPaid ? (invoice.paidAt || new Date()) : null,
+          },
         });
       }
 

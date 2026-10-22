@@ -41,7 +41,7 @@ export class PaymentService {
             }
           : {}),
       },
-      orderBy: { date: "desc" },
+      orderBy: [{ date: "desc" }, { startTime: "desc" }],
       include: {
         client: { select: { id: true, name: true, billingType: true } },
       },
@@ -159,6 +159,39 @@ export class PaymentService {
         paid: true,
         paidAt: opts.paidAt || new Date(),
         paymentMethod: opts.paymentMethod || null,
+      },
+    });
+
+    return appointments.length;
+  }
+
+  /**
+   * Marca vários atendimentos como não pagos (pendentes) de uma só vez.
+   * Permite reverter uma marcação feita por engano.
+   */
+  static async bulkMarkUnpaid(ids: string[], companyId: string) {
+    const appointments = await prisma.appointment.findMany({
+      where: {
+        id: { in: ids },
+        companyId,
+        billable: true,
+        status: "COMPLETED",
+        invoiced: false,
+      },
+    });
+
+    if (appointments.length !== ids.length) {
+      throw new Error(
+        "Um ou mais atendimentos selecionados não foram encontrados, não estão concluídos, são não faturáveis ou já pertencem a uma fatura."
+      );
+    }
+
+    await prisma.appointment.updateMany({
+      where: { id: { in: ids }, companyId },
+      data: {
+        paid: false,
+        paidAt: null,
+        paymentMethod: null,
       },
     });
 

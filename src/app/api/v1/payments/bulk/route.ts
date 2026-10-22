@@ -7,6 +7,7 @@ import { getTargetCompanyId } from "@/lib/company-context";
 
 const bulkPaySchema = z.object({
   appointmentIds: z.array(z.string().min(1)).min(1, "Selecione ao menos um atendimento."),
+  action: z.enum(["PAID", "UNPAID"]).default("PAID"),
   paidAt: z.string().datetime().optional(),
   paymentMethod: z.string().trim().max(50).optional(),
 });
@@ -41,14 +42,19 @@ export async function POST(req: NextRequest) {
     }
 
     const companyId = await getTargetCompanyId(session.companyId);
-    const count = await PaymentService.bulkMarkPaid(
-      parsed.data.appointmentIds,
-      companyId,
-      {
-        paidAt: parsed.data.paidAt ? new Date(parsed.data.paidAt) : undefined,
-        paymentMethod: parsed.data.paymentMethod,
-      }
-    );
+    let count = 0;
+    if (parsed.data.action === "UNPAID") {
+      count = await PaymentService.bulkMarkUnpaid(parsed.data.appointmentIds, companyId);
+    } else {
+      count = await PaymentService.bulkMarkPaid(
+        parsed.data.appointmentIds,
+        companyId,
+        {
+          paidAt: parsed.data.paidAt ? new Date(parsed.data.paidAt) : undefined,
+          paymentMethod: parsed.data.paymentMethod,
+        }
+      );
+    }
 
     return NextResponse.json({ success: true, count });
   } catch (error: unknown) {

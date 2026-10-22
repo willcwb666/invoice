@@ -102,3 +102,68 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+// ==========================================
+// Web Push Notifications & Click Handlers
+// ==========================================
+
+self.addEventListener("push", (event) => {
+  let data = {
+    title: "Renata Matos Cleaning",
+    body: "Você tem uma nova notificação na sua agenda.",
+    icon: "/icons/icon-192x192.png",
+    badge: "/icons/icon-72x72.png",
+    tag: "rm-cleaning-notification",
+    data: { url: "/agenda" },
+  };
+
+  if (event.data) {
+    try {
+      const parsed = event.data.json();
+      data = { ...data, ...parsed };
+    } catch {
+      data.body = event.data.text() || data.body;
+    }
+  }
+
+  const options = {
+    body: data.body,
+    icon: data.icon || "/icons/icon-192x192.png",
+    badge: data.badge || "/icons/icon-72x72.png",
+    tag: data.tag || "rm-push-tag",
+    renotify: true,
+    vibrate: [200, 100, 200],
+    data: data.data || { url: "/agenda" },
+    actions: data.actions || [],
+  };
+
+  event.waitUntil(self.registration.showNotification(data.title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const targetUrl = (event.notification.data && event.notification.data.url) || "/agenda";
+
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
+      // Procura se já existe uma aba aberta no app
+      for (const client of windowClients) {
+        if ("focus" in client) {
+          if (client.url.includes(targetUrl)) {
+            return client.focus();
+          }
+          // Se tiver em outra página do mesmo app, navega para a URL da notificação e foca
+          if ("navigate" in client) {
+            client.navigate(targetUrl);
+          }
+          return client.focus();
+        }
+      }
+      // Se nenhuma janela estiver aberta, abre uma nova
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
+});

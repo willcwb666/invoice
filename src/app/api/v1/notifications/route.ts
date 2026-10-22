@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getTargetCompanyId } from "@/lib/company-context";
 import { NotificationService } from "@/services/notification-service";
+import { DepartureReminderService } from "@/services/departure-reminder-service";
 import { getSessionUser } from "@/lib/security/auth";
 
 export async function GET(req: NextRequest) {
@@ -18,6 +19,11 @@ export async function GET(req: NextRequest) {
     if (!company) {
       return NextResponse.json({ error: "Empresa não encontrada" }, { status: 404 });
     }
+
+    // Dispara a sincronização e despacho antes de listar, para que novos alertas cheguem na hora
+    await DepartureReminderService.syncAndDispatch(company.id).catch((err) =>
+      console.error("[Notifications Heartbeat] Erro:", err)
+    );
 
     const { searchParams } = new URL(req.url);
     const unreadOnly = searchParams.get("unreadOnly") === "true";

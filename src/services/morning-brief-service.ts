@@ -22,10 +22,15 @@ export class MorningBriefService {
    */
   static async dispatchDailyBriefing(targetCompanyId?: string): Promise<MorningBriefResult> {
     const now = new Date();
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(now);
-    endOfDay.setHours(23, 59, 59, 999);
+    const broadStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const broadEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const todayDenverStr = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Denver",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
 
     const companies = await prisma.companyProfile.findMany({
       where: targetCompanyId ? { id: targetCompanyId } : {},
@@ -37,10 +42,10 @@ export class MorningBriefService {
 
     for (const comp of companies) {
       // 1. Busca todos os agendamentos de hoje para a empresa
-      const appointments = await prisma.appointment.findMany({
+      const candidateAppointments = await prisma.appointment.findMany({
         where: {
           companyId: comp.id,
-          date: { gte: startOfDay, lte: endOfDay },
+          date: { gte: broadStart, lte: broadEnd },
           status: { in: ["SCHEDULED", "IN_PROGRESS"] },
         },
         include: {
@@ -50,7 +55,22 @@ export class MorningBriefService {
         orderBy: { startTime: "asc" },
       });
 
+      const appointments = candidateAppointments.filter((a) => {
+        const dStr = new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/Denver",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date(a.date || a.startTime));
+        return dStr === todayDenverStr;
+      });
+
       if (appointments.length === 0) continue;
+
+      // Sincroniza automaticamente todos os alertas de saída do dia
+      await DepartureReminderService.syncDailyReminders(comp.id).catch((err) =>
+        console.error("[MorningBriefService] Erro ao sincronizar alertas do dia:", err)
+      );
 
       // 2. Agrupa por profissional
       const professionalMap = new Map<string, typeof appointments>();
@@ -86,14 +106,13 @@ export class MorningBriefService {
         const title = `Agenda de Hoje: ${count} atendimento${count > 1 ? "s" : ""}`;
         const body = `Bom dia! Seu primeiro trabalho é às ${timeStr} com ${clientName} em ${city}.`;
 
-        // Evita envio duplicado do briefing matinal no mesmo dia
         const todayTag = `morning-brief-${comp.id}-${profId}-${now.toISOString().slice(0, 10)}`;
         const alreadySent = await prisma.scheduledPush.findFirst({
           where: {
             companyId: comp.id,
             professionalId: profId,
             type: "MORNING_BRIEF",
-            createdAt: { gte: startOfDay, lte: endOfDay },
+            title,
           },
         });
 
@@ -108,7 +127,6 @@ export class MorningBriefService {
             },
           });
 
-          // Registra como enviado
           await prisma.scheduledPush.create({
             data: {
               companyId: comp.id,
@@ -124,12 +142,6 @@ export class MorningBriefService {
           });
 
           sentCount += delivered;
-
-          // Pré-agenda automaticamente os alertas de saída (30 min e 10 min) para o 1º cliente do dia
-          await DepartureReminderService.processLocationUpdate({
-            companyId: comp.id,
-            professionalId: profId,
-          }).catch((err) => console.error("[MorningBriefService] Erro ao pré-agendar saída do 1º cliente:", err));
 
           details.push({
             companyId: comp.id,
@@ -166,7 +178,7 @@ export class MorningBriefService {
             companyId: comp.id,
             professionalId: null,
             type: "MORNING_BRIEF",
-            createdAt: { gte: startOfDay, lte: endOfDay },
+            title,
           },
         });
 

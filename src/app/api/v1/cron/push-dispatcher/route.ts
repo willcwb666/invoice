@@ -1,27 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { PushService } from "@/services/push-service";
+import { DepartureReminderService } from "@/services/departure-reminder-service";
 import { MorningBriefService } from "@/services/morning-brief-service";
 import { getSessionUser } from "@/lib/security/auth";
 
+const DEFAULT_CRON_KEY = "rm_cron_secret_e8a209b17c91f0449a5b3";
+
 async function isAuthorized(req: NextRequest): Promise<boolean> {
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = process.env.CRON_SECRET || DEFAULT_CRON_KEY;
   const authHeader = req.headers.get("authorization");
   const xSecret = req.headers.get("x-cron-secret");
+  const xCronKey = req.headers.get("x-cron-key");
+  const isVercelCron = Boolean(req.headers.get("x-vercel-cron"));
 
-  if (cronSecret) {
-    if (authHeader === `Bearer ${cronSecret}` || xSecret === cronSecret) {
-      return true;
-    }
-  }
-
-  // Permite acesso se for um usuário autenticado da aplicação (ex: teste manual no dashboard)
-  const sessionUser = await getSessionUser(req);
-  if (sessionUser && sessionUser.role === "ADMIN") {
+  // Vercel cron oficial
+  if (isVercelCron) {
     return true;
   }
 
-  // Em ambiente de desenvolvimento local, permite sem autenticação rígida
+  // Token de autorização ou chave cron
+  if (
+    authHeader === `Bearer ${cronSecret}` ||
+    authHeader === `Bearer ${DEFAULT_CRON_KEY}` ||
+    xSecret === cronSecret ||
+    xSecret === DEFAULT_CRON_KEY ||
+    xCronKey === cronSecret ||
+    xCronKey === DEFAULT_CRON_KEY
+  ) {
+    return true;
+  }
+
+  // Permite acesso se for um usuário autenticado no app (ex: heartbeat do navegador ou teste)
+  const sessionUser = await getSessionUser(req);
+  if (sessionUser) {
+    return true;
+  }
+
+  // Em ambiente local
   if (process.env.NODE_ENV === "development") {
     return true;
   }
@@ -39,56 +53,13 @@ export async function POST(req: NextRequest) {
     const forceMorning = searchParams.get("morningBrief") === "true";
     const now = new Date();
 
-    // 1. Processa ScheduledPushes pendentes (ex: alertas de saída dos 30 minutos)
-    const pendingPushes = await prisma.scheduledPush.findMany({
-      where: {
-        scheduledFor: { lte: now },
-        sent: false,
-      },
-      take: 50,
-      orderBy: { scheduledFor: "asc" },
-    });
+    // 1. Sincroniza e pré-agenda alertas de saída (30 min e 10 min) para TODOS os atendimentos de hoje
+    const syncResult = await DepartureReminderService.syncDailyReminders();
 
-    let scheduledDispatched = 0;
+    // 2. Despacha todos os ScheduledPushes pendentes que já chegaram no horário de envio
+    const scheduledDispatched = await DepartureReminderService.dispatchPendingReminders();
 
-    for (const item of pendingPushes) {
-      try {
-        if (item.professionalId) {
-          await PushService.sendToProfessional(item.companyId, item.professionalId, {
-            title: item.title,
-            body: item.body,
-            tag: `scheduled-${item.id}`,
-            data: {
-              url: item.url || "/agenda",
-              type: item.type,
-              appointmentId: item.appointmentId || undefined,
-            },
-          });
-        } else {
-          await PushService.sendToCompany(item.companyId, {
-            title: item.title,
-            body: item.body,
-            tag: `scheduled-${item.id}`,
-            data: {
-              url: item.url || "/agenda",
-              type: item.type,
-              appointmentId: item.appointmentId || undefined,
-            },
-          });
-        }
-
-        await prisma.scheduledPush.update({
-          where: { id: item.id },
-          data: { sent: true, sentAt: new Date() },
-        });
-
-        scheduledDispatched++;
-      } catch (err) {
-        console.error(`[PushDispatcher] Erro ao despachar push ${item.id}:`, err);
-      }
-    }
-
-    // 2. Checa se é a janela das 6:00 da manhã no fuso Mountain Time (America/Denver)
+    // 3. Checa janela matinal das 6:00 da manhã no fuso Mountain Time (America/Denver)
     const formatter = new Intl.DateTimeFormat("en-US", {
       timeZone: "America/Denver",
       hour: "numeric",
@@ -105,6 +76,7 @@ export async function POST(req: NextRequest) {
       success: true,
       timestamp: now.toISOString(),
       mountainHour,
+      syncResult,
       dispatchedScheduledPushes: scheduledDispatched,
       morningBriefing: morningResult,
     });

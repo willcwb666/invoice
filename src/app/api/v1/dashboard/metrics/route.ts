@@ -9,6 +9,7 @@ import { hasPermission, DEFAULT_ROLE_PERMISSIONS, Role, RolePermissionsMatrix } 
 import { getTargetCompanyId } from "@/lib/company-context";
 import { prisma } from "@/lib/prisma";
 import { BUSINESS_TIMEZONE, zonedPartsFromUtc, zonedTimeToUtc } from "@/lib/calendar/timezone";
+import { DepartureReminderService } from "@/services/departure-reminder-service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -27,6 +28,12 @@ export async function GET(req: NextRequest) {
 
   try {
     const companyId = await getTargetCompanyId(session.companyId);
+
+    // Heartbeat assíncrono: sincroniza e despacha lembretes de saída pendentes para hoje
+    DepartureReminderService.syncAndDispatch(companyId).catch((err) =>
+      console.error("[DashboardMetrics Heartbeat] Erro ao sincronizar lembretes:", err)
+    );
+
     let canViewFinancials = session.role === "ADMIN" || session.role === "FINANCIAL";
     if (!canViewFinancials) {
       const company = await prisma.companyProfile.findUnique({

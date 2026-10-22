@@ -57,9 +57,11 @@ function findClosestCity(lat: number, lng: number): string {
   return closest;
 }
 
+let lastDispatchTimestamp = 0;
+
 export class DepartureReminderService {
   /**
-   * Obtém o endereço padrão cadastrado em Configurações (ex: casa da profissional)
+   * Obtém o endereço padrão cadastrado em Configurações (ex: casa da profissional / base)
    */
   static async getHomeOriginAddress(companyId: string): Promise<string> {
     const defaultAddress = await prisma.companyAddress.findFirst({
@@ -80,13 +82,258 @@ export class DepartureReminderService {
       return `${anyAddress.street || ""}, ${anyAddress.city}`;
     }
 
-    return "Evans"; // Padrão da sede
+    return "Evans, CO"; // Padrão da sede
   }
 
   /**
-   * Processa a rota para o próximo cliente do dia e agenda os 2 alertas de saída:
-   * - Alerta 1: 30 minutos antes do horário ideal de saída (com estimativa de viagem, trânsito e clima).
-   * - Alerta 2: 10 minutos antes do horário ideal de saída (chamada final de partida).
+   * Varre e sincroniza os lembretes de saída para TODOS os atendimentos do dia
+   * de cada empresa (Casa 1, Casa 2, Casa 3, etc.).
+   *
+   * Rota encadeada:
+   * - Casa 1: sai de Casa (Endereço Padrão em Configurações) -> Casa 1
+   * - Casa 2: sai da Casa 1 -> Casa 2
+   * - Casa 3: sai da Casa 2 -> Casa 3
+   */
+  static async syncDailyReminders(targetCompanyId?: string): Promise<{
+    companiesChecked: number;
+    remindersCreated: number;
+    appointmentsProcessed: number;
+  }> {
+    const now = new Date();
+    const broadStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const broadEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const todayDenverStr = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Denver",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
+
+    const companies = await prisma.companyProfile.findMany({
+      where: targetCompanyId ? { id: targetCompanyId } : {},
+      select: { id: true, name: true },
+    });
+
+    let remindersCreated = 0;
+    let appointmentsProcessed = 0;
+
+    for (const comp of companies) {
+      const homeAddress = await this.getHomeOriginAddress(comp.id);
+
+      const candidateAppts = await prisma.appointment.findMany({
+        where: {
+          companyId: comp.id,
+          date: { gte: broadStart, lte: broadEnd },
+          status: { in: ["SCHEDULED", "IN_PROGRESS", "COMPLETED"] },
+        },
+        include: {
+          client: { select: { name: true, address: true, city: true } },
+          professionals: { select: { professionalId: true } },
+        },
+        orderBy: { startTime: "asc" },
+      });
+
+      // Filtra exatamente os atendimentos que caem no dia de hoje em America/Denver
+      const todayAppts = candidateAppts.filter((a) => {
+        const dStr = new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/Denver",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date(a.date || a.startTime));
+        return dStr === todayDenverStr;
+      });
+
+      if (todayAppts.length === 0) continue;
+
+      for (let i = 0; i < todayAppts.length; i++) {
+        const appt = todayAppts[i];
+        appointmentsProcessed++;
+
+        // Origem: se for a 1ª casa sai de casa; se for casa 2+, sai da casa anterior!
+        const prev = i > 0 ? todayAppts[i - 1] : null;
+        const origin = prev
+          ? prev.location || prev.client?.address || prev.client?.city || homeAddress
+          : homeAddress;
+
+        const destination = appt.location || appt.client?.address || appt.client?.city || "Greeley";
+
+        // Calcula tempo de viagem com +5 min de buffer para trânsito
+        const driveMinutes = await getTravelTimeMinutes(origin, destination, 5);
+
+        const appointmentStart = new Date(appt.startTime);
+        const departureTime = new Date(appointmentStart.getTime() - driveMinutes * 60 * 1000);
+
+        // Alerta 1: 30 minutos antes do horário de saída
+        const alert1Time = new Date(departureTime.getTime() - 30 * 60 * 1000);
+        // Alerta 2: 10 minutos antes do horário de saída
+        const alert2Time = new Date(departureTime.getTime() - 10 * 60 * 1000);
+
+        const clientName = appt.client?.name || appt.title || "Cliente";
+        const originCity = extractCityFromAddress(origin);
+        const destCity = extractCityFromAddress(destination);
+
+        const apptTimeStr = new Intl.DateTimeFormat("pt-BR", {
+          timeZone: "America/Denver",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).format(appointmentStart);
+
+        const departureTimeStr = new Intl.DateTimeFormat("pt-BR", {
+          timeZone: "America/Denver",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).format(departureTime);
+
+        const targetProfId = appt.professionals[0]?.professionalId || null;
+
+        // Títulos e corpos dos alertas
+        const titleAlert1 = `Preparar saída: ${clientName} (${apptTimeStr})`;
+        const bodyAlert1 = `Agenda às ${apptTimeStr}. Viagem: ~${driveMinutes} min (${originCity} → ${destCity}). Saída recomendada às ${departureTimeStr}. Trânsito moderado, tempo nublado.`;
+
+        const titleAlert2 = `Atenção: saída em 10 minutos!`;
+        const bodyAlert2 = `Hora de sair às ${departureTimeStr} para chegar às ${apptTimeStr} em ${clientName} (${destCity}).`;
+
+        // 1. Verifica ou cria Alerta 1
+        const existingAlert1 = await prisma.scheduledPush.findFirst({
+          where: {
+            appointmentId: appt.id,
+            type: "DEPARTURE_REMINDER",
+            title: titleAlert1,
+          },
+        });
+
+        if (!existingAlert1) {
+          await prisma.scheduledPush.create({
+            data: {
+              companyId: comp.id,
+              professionalId: targetProfId,
+              appointmentId: appt.id,
+              type: "DEPARTURE_REMINDER",
+              title: titleAlert1,
+              body: bodyAlert1,
+              url: "/agenda",
+              scheduledFor: alert1Time,
+              sent: false,
+            },
+          });
+          remindersCreated++;
+        }
+
+        // 2. Verifica ou cria Alerta 2
+        const existingAlert2 = await prisma.scheduledPush.findFirst({
+          where: {
+            appointmentId: appt.id,
+            type: "DEPARTURE_REMINDER",
+            title: titleAlert2,
+          },
+        });
+
+        if (!existingAlert2) {
+          await prisma.scheduledPush.create({
+            data: {
+              companyId: comp.id,
+              professionalId: targetProfId,
+              appointmentId: appt.id,
+              type: "DEPARTURE_REMINDER",
+              title: titleAlert2,
+              body: bodyAlert2,
+              url: "/agenda",
+              scheduledFor: alert2Time,
+              sent: false,
+            },
+          });
+          remindersCreated++;
+        }
+      }
+    }
+
+    return {
+      companiesChecked: companies.length,
+      appointmentsProcessed,
+      remindersCreated,
+    };
+  }
+
+  /**
+   * Despacha todos os ScheduledPushes pendentes cuja data scheduledFor já foi atingida.
+   * Envia Web Push para o celular e cria notificação in-app (sino da aplicação).
+   */
+  static async dispatchPendingReminders(): Promise<number> {
+    const now = new Date();
+    const pendingPushes = await prisma.scheduledPush.findMany({
+      where: {
+        scheduledFor: { lte: now },
+        sent: false,
+      },
+      take: 50,
+      orderBy: { scheduledFor: "asc" },
+    });
+
+    let sentCount = 0;
+
+    for (const item of pendingPushes) {
+      try {
+        const payload = {
+          title: item.title,
+          body: item.body,
+          tag: `scheduled-${item.id}`,
+          data: {
+            url: item.url || "/agenda",
+            type: item.type,
+            appointmentId: item.appointmentId || undefined,
+          },
+        };
+
+        // Envia para a empresa inteira (garante que admin e todos os dispositivos recebam)
+        await PushService.sendToCompany(item.companyId, payload);
+
+        // Se houver profissional atribuído com subscrição separada, envia também
+        if (item.professionalId) {
+          await PushService.sendToProfessional(item.companyId, item.professionalId, payload);
+        }
+
+        await prisma.scheduledPush.update({
+          where: { id: item.id },
+          data: { sent: true, sentAt: new Date() },
+        });
+
+        sentCount++;
+      } catch (err) {
+        console.error(`[DepartureReminderService] Erro ao despachar push ${item.id}:`, err);
+      }
+    }
+
+    return sentCount;
+  }
+
+  /**
+   * Sincroniza e despacha em uma única chamada com controle de debounce (máx 1x a cada 15s).
+   */
+  static async syncAndDispatch(targetCompanyId?: string): Promise<{
+    synced: number;
+    dispatched: number;
+  }> {
+    const nowMs = Date.now();
+    if (nowMs - lastDispatchTimestamp < 15000) {
+      return { synced: 0, dispatched: 0 };
+    }
+    lastDispatchTimestamp = nowMs;
+
+    const syncResult = await this.syncDailyReminders(targetCompanyId);
+    const dispatched = await this.dispatchPendingReminders();
+
+    return {
+      synced: syncResult.remindersCreated,
+      dispatched,
+    };
+  }
+
+  /**
+   * Processa a rota para o próximo cliente do dia quando o celular envia coordenadas GPS
    */
   static async processLocationUpdate(input: ProcessLocationInput): Promise<DepartureResult> {
     const { companyId, latitude, longitude, lastAppointmentId } = input;
@@ -107,16 +354,20 @@ export class DepartureReminderService {
     }
 
     const now = new Date();
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(now);
-    endOfDay.setHours(23, 59, 59, 999);
+    const broadStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const broadEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
-    // 1. Busca os agendamentos de hoje
-    const upcomingAppointments = await prisma.appointment.findMany({
+    const todayDenverStr = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Denver",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
+
+    const candidateAppts = await prisma.appointment.findMany({
       where: {
         companyId,
-        date: { gte: startOfDay, lte: endOfDay },
+        date: { gte: broadStart, lte: broadEnd },
         status: { in: ["SCHEDULED", "IN_PROGRESS"] },
         startTime: { gte: new Date(now.getTime() - 15 * 60 * 1000) },
         ...(professionalId
@@ -136,6 +387,16 @@ export class DepartureReminderService {
       take: 1,
     });
 
+    const upcomingAppointments = candidateAppts.filter((a) => {
+      const dStr = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/Denver",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date(a.date || a.startTime));
+      return dStr === todayDenverStr;
+    });
+
     if (upcomingAppointments.length === 0) {
       return {
         hasUpcoming: false,
@@ -146,8 +407,6 @@ export class DepartureReminderService {
     const nextAppointment = upcomingAppointments[0];
     const clientName = nextAppointment.client?.name || nextAppointment.title;
 
-    // 2. Determina o ponto de partida:
-    // Se não há lastAppointmentId, é a primeira saída do dia: usa o endereço da casa/configurações!
     let originLocation = "";
     if (lastAppointmentId) {
       const lastAppt = await prisma.appointment.findUnique({
@@ -159,17 +418,14 @@ export class DepartureReminderService {
       }
     }
 
-    // Se GPS foi fornecido e a profissional estiver em trânsito
     if (!originLocation && typeof latitude === "number" && typeof longitude === "number") {
       originLocation = findClosestCity(latitude, longitude);
     }
 
-    // Se ainda vazio, busca o endereço padrão cadastrado em Configurações (casa)
     if (!originLocation) {
       originLocation = await this.getHomeOriginAddress(companyId);
     }
 
-    // 3. Determina o destino
     const destinationLocation =
       nextAppointment.location ||
       nextAppointment.client?.address ||
@@ -177,18 +433,12 @@ export class DepartureReminderService {
       "Greeley";
 
     const destinationCity = extractCityFromAddress(destinationLocation);
-
-    // 4. Calcula tempo de trajeto em minutos (+5 min de margem de trânsito)
     const driveMinutes = await getTravelTimeMinutes(originLocation, destinationLocation, 5);
 
-    // 5. Horários calculados
     const appointmentStart = new Date(nextAppointment.startTime);
-    // Horário ideal de saída de casa / do último cliente
     const departureTime = new Date(appointmentStart.getTime() - driveMinutes * 60 * 1000);
 
-    // Alerta 1: 30 minutos antes de sair
     const alert1Time = new Date(departureTime.getTime() - 30 * 60 * 1000);
-    // Alerta 2: 10 minutos antes de sair
     const alert2Time = new Date(departureTime.getTime() - 10 * 60 * 1000);
 
     const apptTimeStr = new Intl.DateTimeFormat("pt-BR", {
@@ -205,82 +455,45 @@ export class DepartureReminderService {
       hour12: false,
     }).format(departureTime);
 
-    // Mensagens customizadas com trânsito e previsão
     const titleAlert1 = `Preparar saída: ${clientName} (${apptTimeStr})`;
     const bodyAlert1 = `Agenda às ${apptTimeStr}. Viagem: ~${driveMinutes} min até ${destinationCity}. Saída ideal às ${departureTimeStr}. Trânsito moderado, tempo nublado.`;
 
     const titleAlert2 = `Atenção: saída em 10 minutos!`;
     const bodyAlert2 = `Hora de sair às ${departureTimeStr} para chegar às ${apptTimeStr} em ${clientName} (${destinationCity}).`;
 
-    // 6. Limpa agendamentos anteriores de saída não enviados para esse atendimento
-    await prisma.scheduledPush.deleteMany({
-      where: {
-        appointmentId: nextAppointment.id,
-        type: "DEPARTURE_REMINDER",
-        sent: false,
-      },
-    }).catch(() => {});
-
     const targetProfId = professionalId || nextAppointment.professionals[0]?.professionalId;
     let isImmediate = false;
 
-    // Se já passou do horário do Alerta 1 (ou está a menos de 2 minutos dele):
+    // Se já passou do horário do Alerta 1:
     if (now.getTime() >= alert1Time.getTime() - 2 * 60 * 1000) {
       if (now.getTime() < alert2Time.getTime() - 2 * 60 * 1000) {
-        // Dispara o Alerta 1 agora!
         isImmediate = true;
-        if (targetProfId) {
-          await PushService.sendToProfessional(companyId, targetProfId, {
-            title: titleAlert1,
-            body: bodyAlert1,
-            tag: `dep-alert1-${nextAppointment.id}`,
-            data: { url: "/agenda", type: "DEPARTURE_REMINDER", appointmentId: nextAppointment.id },
-          });
-        }
-      }
-    } else {
-      // Agenda Alerta 1 (30 min antes de sair)
-      await prisma.scheduledPush.create({
-        data: {
-          companyId,
-          professionalId: targetProfId || null,
-          appointmentId: nextAppointment.id,
-          type: "DEPARTURE_REMINDER",
+        const payload1 = {
           title: titleAlert1,
           body: bodyAlert1,
-          url: "/agenda",
-          scheduledFor: alert1Time,
-          sent: false,
-        },
-      });
+          tag: `dep-alert1-${nextAppointment.id}`,
+          data: { url: "/agenda", type: "DEPARTURE_REMINDER", appointmentId: nextAppointment.id },
+        };
+        if (targetProfId) {
+          await PushService.sendToProfessional(companyId, targetProfId, payload1);
+        }
+        await PushService.sendToCompany(companyId, payload1);
+      }
     }
 
-    // Se já passou do horário do Alerta 2 (faltando menos de 10 min para sair ou já na hora de sair):
+    // Se já passou do horário do Alerta 2:
     if (now.getTime() >= alert2Time.getTime() - 2 * 60 * 1000) {
       isImmediate = true;
+      const payload2 = {
+        title: titleAlert2,
+        body: bodyAlert2,
+        tag: `dep-alert2-${nextAppointment.id}`,
+        data: { url: "/agenda", type: "DEPARTURE_REMINDER", appointmentId: nextAppointment.id },
+      };
       if (targetProfId) {
-        await PushService.sendToProfessional(companyId, targetProfId, {
-          title: titleAlert2,
-          body: bodyAlert2,
-          tag: `dep-alert2-${nextAppointment.id}`,
-          data: { url: "/agenda", type: "DEPARTURE_REMINDER", appointmentId: nextAppointment.id },
-        });
+        await PushService.sendToProfessional(companyId, targetProfId, payload2);
       }
-    } else {
-      // Agenda Alerta 2 (10 min antes de sair)
-      await prisma.scheduledPush.create({
-        data: {
-          companyId,
-          professionalId: targetProfId || null,
-          appointmentId: nextAppointment.id,
-          type: "DEPARTURE_REMINDER",
-          title: titleAlert2,
-          body: bodyAlert2,
-          url: "/agenda",
-          scheduledFor: alert2Time,
-          sent: false,
-        },
-      });
+      await PushService.sendToCompany(companyId, payload2);
     }
 
     return {

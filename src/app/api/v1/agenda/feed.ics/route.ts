@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getTargetCompanyId } from "@/lib/company-context";
 import { getSessionUser } from "@/lib/security/auth";
 
 function formatIcsDate(date: Date): string {
@@ -23,8 +24,22 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const company = await prisma.companyProfile.findFirst();
-    const companyId = company?.id;
+    // When the caller has a real authenticated session, scope strictly to
+    // their own company - same pattern as every other migrated route.
+    //
+    // KNOWN GAP (reported BLOCKED, see task-12 report): the token branch
+    // above has no per-company identity at all. WEBCAL_SECRET is a single
+    // global env var shared by every company in the database (see
+    // proxy.ts's identical isWebcalFeed check), so a bare `?token=` request
+    // cannot be mapped to "the company that token belongs to" - there is no
+    // such mapping, because the token doesn't carry a companyId and nothing
+    // stores one per company. Falling back to findFirst() here is a known,
+    // intentional stand-in for that unresolved case, not a scoping bug we
+    // can close with a Prisma query - it needs its own design (e.g. a
+    // per-company secret/column) before it can be fixed for real.
+    const companyId = session?.companyId
+      ? await getTargetCompanyId(session.companyId)
+      : (await prisma.companyProfile.findFirst({ select: { id: true } }))?.id;
 
     const appointments = await prisma.appointment.findMany({
       where: {

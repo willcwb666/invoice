@@ -41,17 +41,17 @@ export async function requirePermission(
     return { session };
   }
 
-  // Scoped to the caller's own company — falling back to findFirst() here
-  // would apply whichever company happens to sort first's custom permission
-  // overrides to every other company's users too.
+  // Scoped to the caller's own company only - there is no longer a
+  // sensible "first" company to fall back to. Unreachable for any ACTIVE
+  // session in practice (see company-context.ts), but fails safe to the
+  // default matrix instead of leaking one company's custom permission
+  // overrides onto another's users.
   const company = session.companyId
     ? await prisma.companyProfile.findUnique({
         where: { id: session.companyId },
         select: { rolePermissions: true },
       })
-    : await prisma.companyProfile.findFirst({
-        select: { rolePermissions: true },
-      });
+    : null;
   const matrix =
     (company?.rolePermissions as unknown as RolePermissionsMatrix | null) ||
     DEFAULT_ROLE_PERMISSIONS;

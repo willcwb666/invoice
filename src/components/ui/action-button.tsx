@@ -13,7 +13,7 @@ export type ActionButtonHoverColor =
   | "purple"
   | "default";
 
-export type ActionButtonActiveColor = "orange" | "green" | "none";
+export type ActionButtonActiveColor = "orange" | "green" | "red" | "none";
 
 interface ActionButtonProps {
   icon: React.ReactNode;
@@ -41,6 +41,7 @@ const hoverClasses: Record<ActionButtonHoverColor, string> = {
 const activeClasses: Record<ActionButtonActiveColor, string> = {
   orange: "text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100 hover:border-amber-300",
   green: "text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300",
+  red: "text-rose-600 bg-rose-50 border-rose-200 hover:bg-rose-100 hover:border-rose-300",
   none: "text-slate-500 bg-white border-slate-200/90",
 };
 

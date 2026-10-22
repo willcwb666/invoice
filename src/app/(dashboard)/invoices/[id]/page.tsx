@@ -13,6 +13,7 @@ import {
   ExternalLink,
   MessageCircle,
   Clock,
+  AlertCircle,
   QrCode,
   Send,
   Building2,
@@ -129,6 +130,7 @@ export default function InvoiceDetailPage({
   }
 
   const isPaid = invoice.status === "PAID";
+  const isOverdue = invoice.status === "OVERDUE";
 
   return (
     <div className="bg-[#f8fafc] min-h-screen">
@@ -150,11 +152,13 @@ export default function InvoiceDetailPage({
 
           {/* Action buttons: ICON ONLY with tooltips */}
           <div className="flex items-center justify-end gap-2">
-            {/* Ícone Marcar como Paga (Laranja se pendente, Verde se pago) */}
+            {/* Ícone Marcar como Paga (verde=paga, vermelho=vencida, amarelo=pendente) */}
             <ActionButton
               icon={
                 isPaid ? (
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                ) : isOverdue ? (
+                  <AlertCircle className="w-4 h-4 text-rose-600" />
                 ) : (
                   <Clock className="w-4 h-4 text-amber-600" />
                 )
@@ -164,10 +168,12 @@ export default function InvoiceDetailPage({
                   ? "Atualizando status..."
                   : isPaid
                   ? "Fatura Paga (Clique para marcar como Pendente)"
+                  : isOverdue
+                  ? "Fatura Vencida (Clique para marcar como Paga)"
                   : "Fatura Pendente (Clique para marcar como Paga)"
               }
-              activeColor={isPaid ? "green" : "orange"}
-              hoverColor={isPaid ? "green" : "orange"}
+              activeColor={isPaid ? "green" : isOverdue ? "red" : "orange"}
+              hoverColor={isPaid ? "green" : isOverdue ? "red" : "orange"}
               onClick={handleToggleStatus}
               disabled={updatingStatus}
             />

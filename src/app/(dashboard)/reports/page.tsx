@@ -38,6 +38,15 @@ interface ClientOption {
   name: string;
 }
 
+// Mesma definição de "atrasado" usada em src/app/(dashboard)/payments/page.tsx:
+// não pago e com data anterior a hoje.
+function isTransactionOverdue(dateIso: string, isPaid: boolean): boolean {
+  if (isPaid) return false;
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  return new Date(dateIso) < startOfToday;
+}
+
 export default function ReportsPage() {
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<ReportType>("financial");
@@ -701,15 +710,23 @@ export default function ReportsPage() {
                           +{fmtCurrency(a.grossAmount)}
                         </td>
                         <td className="py-2.5 px-4 text-center">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              a.status === "PAID"
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                : "bg-amber-50 text-amber-700 border border-amber-200"
-                            }`}
-                          >
-                            {a.status === "PAID" ? "Pago" : "Pendente"}
-                          </span>
+                          {(() => {
+                            const paid = a.status === "PAID";
+                            const overdue = isTransactionOverdue(a.date, paid);
+                            return (
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  paid
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : overdue
+                                    ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                    : "bg-amber-50 text-amber-700 border border-amber-200"
+                                }`}
+                              >
+                                {paid ? "Pago" : overdue ? "Atrasado" : "Pendente"}
+                              </span>
+                            );
+                          })()}
                         </td>
                       </tr>
                     ))}
@@ -796,10 +813,12 @@ export default function ReportsPage() {
                               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                                 inv.status === "PAID"
                                   ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : inv.status === "OVERDUE"
+                                  ? "bg-rose-50 text-rose-700 border border-rose-200"
                                   : "bg-amber-50 text-amber-700 border border-amber-200"
                               }`}
                             >
-                              {inv.status === "PAID" ? "Recebido" : "Pendente"}
+                              {inv.status === "PAID" ? "Recebido" : inv.status === "OVERDUE" ? "Vencida" : "Pendente"}
                             </span>
                           </td>
                         </tr>

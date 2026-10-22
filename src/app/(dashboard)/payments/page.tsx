@@ -73,6 +73,12 @@ export default function PaymentsPage() {
 
   const isOverdue = (appt: any) => !appt.paid && new Date(appt.date) < startOfToday;
 
+  // Cor do valor: verde = pago, vermelho = pendente e atrasado, amarelo =
+  // pendente mas ainda no prazo. Esta tela só lista atendimentos faturáveis
+  // (filtrado no backend), então o caso "não-faturável" (laranja) não ocorre aqui.
+  const paymentTextColor = (appt: any) =>
+    appt.paid ? "text-emerald-600" : isOverdue(appt) ? "text-rose-600" : "text-amber-600";
+
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
@@ -305,7 +311,7 @@ export default function PaymentsPage() {
                           </div>
                         </div>
 
-                        <span className="font-mono font-bold text-slate-900 shrink-0">
+                        <span className={`font-mono font-bold shrink-0 ${paymentTextColor(appt)}`}>
                           ${Number(appt.price).toFixed(2)}
                         </span>
 

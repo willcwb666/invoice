@@ -142,6 +142,27 @@ function dateKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// Cor do valor exibido conforme o status de pagamento do atendimento:
+// verde = pago, laranja = não-faturável (nunca entra em cálculo financeiro),
+// vermelho = pendente e já atrasado, amarelo = pendente mas ainda no prazo.
+// Mesma definição de "atrasado" já usada em src/app/(dashboard)/payments/page.tsx.
+type PaymentColor = "green" | "orange" | "red" | "yellow";
+
+function getPaymentColor(appt: any): PaymentColor {
+  if (appt.billable === false) return "orange";
+  if (appt.paid) return "green";
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  return new Date(appt.date) < startOfToday ? "red" : "yellow";
+}
+
+const PAYMENT_TEXT_COLOR: Record<PaymentColor, string> = {
+  green: "text-emerald-600",
+  orange: "text-orange-600",
+  red: "text-rose-600",
+  yellow: "text-amber-600",
+};
+
 function formatRelativeTime(dateString: string | null): string {
   if (!dateString) return "Não sincronizado";
   const date = new Date(dateString);
@@ -614,7 +635,7 @@ export default function AgendaPage() {
           </div>
         </div>
         <div className="text-right flex flex-col items-end shrink-0">
-          <span className="text-base font-black text-emerald-600 block font-mono">
+          <span className={`text-base font-black block font-mono ${PAYMENT_TEXT_COLOR[getPaymentColor(appt)]}`}>
             ${Number(appt.price).toFixed(2)}
           </span>
           <span
@@ -1070,7 +1091,7 @@ export default function AgendaPage() {
                                 )}
                                 <span className="truncate">{appt.client?.name || appt.title}</span>
                               </span>
-                              <span className="font-mono font-bold shrink-0 text-[9px]">
+                              <span className={`font-mono font-bold shrink-0 text-[9px] ${PAYMENT_TEXT_COLOR[getPaymentColor(appt)]}`}>
                                 ${Number(appt.price).toFixed(0)}
                               </span>
                             </button>
@@ -1189,7 +1210,7 @@ export default function AgendaPage() {
                                   <span className="text-[10px] font-mono text-slate-500 font-semibold">
                                     {formatTime(appt.startTime)}
                                   </span>
-                                  <span className="text-[10px] font-mono font-bold text-emerald-600">
+                                  <span className={`text-[10px] font-mono font-bold ${PAYMENT_TEXT_COLOR[getPaymentColor(appt)]}`}>
                                     ${Number(appt.price).toFixed(0)}
                                   </span>
                                 </div>

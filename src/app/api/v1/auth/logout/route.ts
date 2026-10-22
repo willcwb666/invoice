@@ -40,5 +40,17 @@ export async function POST(req: NextRequest) {
     expires: new Date(0),
   });
 
+  // Clear the super-admin "view as company" override too - otherwise it
+  // survives logout for its full 8h lifetime and silently resumes on the
+  // next login (or leaks to a different super-admin on a shared machine).
+  response.cookies.set({
+    name: "super_admin_viewing_company_id",
+    value: "",
+    path: "/",
+    httpOnly: true,
+    maxAge: 0,
+    expires: new Date(0),
+  });
+
   return response;
 }

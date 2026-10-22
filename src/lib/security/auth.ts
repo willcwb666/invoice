@@ -389,7 +389,7 @@ export async function getSessionUser(
         name: dbUser.name || payload.name,
         companyId: dbUser.companyId ?? payload.companyId,
       },
-      Boolean((dbUser as any).isSuperAdmin)
+      Boolean(dbUser.isSuperAdmin)
     );
   } catch (err) {
     console.error("Erro ao verificar status de sessão do usuário no banco:", err);

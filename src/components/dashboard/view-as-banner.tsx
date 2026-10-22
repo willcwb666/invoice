@@ -19,7 +19,7 @@ export function ViewAsBanner() {
   };
 
   return (
-    <div className="sticky top-0 z-50 bg-amber-500 text-white px-4 py-2 flex items-center justify-between text-xs font-bold print:hidden">
+    <div className="fixed inset-x-0 top-0 z-50 bg-amber-500 text-white px-4 py-2 flex items-center justify-between text-xs font-bold print:hidden">
       <span className="flex items-center gap-1.5">
         <Eye className="w-3.5 h-3.5" />
         Visualizando como: {user.viewingAsCompany.name}

@@ -13,6 +13,7 @@ export interface CurrentUserData {
   role: Role;
   status: UserStatus;
   companyId?: string | null;
+  isSuperAdmin?: boolean;
   createdAt?: string;
   company?: {
     id: string;
@@ -56,5 +57,6 @@ export function useCurrentUser() {
     isActive: user?.status === "ACTIVE",
     isPending: user?.status === "PENDING_APPROVAL",
     isSuspended: user?.status === "SUSPENDED",
+    isSuperAdmin: Boolean(user?.isSuperAdmin),
   };
 }

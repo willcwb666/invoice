@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { StatusDot } from "@/components/ui/status-dot";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import {
   FileText,
   Calendar,
@@ -48,6 +49,7 @@ const commercialNavItems: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { isSuperAdmin } = useCurrentUser();
   const [pendingPaymentsCount, setPendingPaymentsCount] = useState(0);
 
   const isFinancialActive =
@@ -423,6 +425,8 @@ export function Sidebar() {
           {/* CATEGORIA 5: Sistema */}
           <div className="space-y-1">
             {renderNavLink({ name: "Configurações", href: "/settings", icon: Settings })}
+            {isSuperAdmin &&
+              renderNavLink({ name: "Super-Admin: Empresas", href: "/admin/companies", icon: ShieldCheck })}
           </div>
         </nav>
       </div>

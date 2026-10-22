@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
         role: true,
         status: true,
         companyId: true,
+        isSuperAdmin: true,
         createdAt: true,
         company: {
           select: {
@@ -92,6 +93,7 @@ export async function PATCH(req: NextRequest) {
         role: true,
         status: true,
         companyId: true,
+        isSuperAdmin: true,
         createdAt: true,
         company: {
           select: {

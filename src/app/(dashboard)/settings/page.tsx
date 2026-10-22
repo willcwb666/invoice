@@ -28,6 +28,8 @@ import {
 import { Tooltip } from "@/components/ui/tooltip";
 import { SignatureDisplay } from "@/components/ui/signature-display";
 import { useToast } from "@/components/ui/toast";
+import { BellRing } from "lucide-react";
+import { PushPermissionCard } from "@/components/ui/push-permission-card";
 import { DEFAULT_COMPANY_SETTINGS, GENERIC_COMPANY_DEFAULTS } from "@/lib/company-defaults";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -68,7 +70,7 @@ function formatRelativeTime(dateString: string | null): string {
 export default function SettingsPage() {
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<
-    "geral" | "endereco" | "sincronizacao" | "recuperacao_agendamento"
+    "geral" | "endereco" | "sincronizacao" | "recuperacao_agendamento" | "notificacoes"
   >("geral");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -467,6 +469,22 @@ export default function SettingsPage() {
             <span>Recuperação de Orçamentos</span>
             <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black rounded-full uppercase">
               Novo ✨
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("notificacoes")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeTab === "notificacoes"
+                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            }`}
+          >
+            <BellRing className="w-4 h-4" />
+            <span>Notificações Push</span>
+            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded-full uppercase">
+              PWA
             </span>
           </button>
         </div>

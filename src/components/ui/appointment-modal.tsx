@@ -461,6 +461,36 @@ export function AppointmentModal({
           : "Agendamento criado com sucesso.";
 
         showToast(successMsg, "success");
+
+        // Se o atendimento acabou de ser marcado como COMPLETED, envia localização para calcular próximo cliente
+        if (isEditing && payload.status === "COMPLETED") {
+          if (typeof navigator !== "undefined" && "geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                fetch("/api/v1/push/location", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    latitude: pos.coords.latitude,
+                    longitude: pos.coords.longitude,
+                    lastAppointmentId: appointment?.id,
+                  }),
+                }).catch(() => {});
+              },
+              () => {
+                fetch("/api/v1/push/location", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    lastAppointmentId: appointment?.id,
+                  }),
+                }).catch(() => {});
+              },
+              { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+            );
+          }
+        }
+
         onSuccess?.();
         onClose();
       } catch (networkErr: any) {

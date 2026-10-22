@@ -205,4 +205,98 @@ export class PushService {
 
     return results.filter((r) => r.status === "fulfilled" && r.value === true).length;
   }
+
+  /**
+   * Notifica alterações em tempo real na agenda (criação, edição ou cancelamento)
+   */
+  static async notifyAgendaChange(params: {
+    companyId: string;
+    appointmentId: string;
+    action: "CREATED" | "UPDATED" | "CANCELLED";
+    fallbackData?: {
+      clientName?: string;
+      date?: Date;
+      startTime?: Date;
+      location?: string | null;
+      professionalIds?: string[];
+    };
+  }) {
+    const { companyId, appointmentId, action, fallbackData } = params;
+
+    try {
+      // 1. Se foi alterado ou cancelado, limpa qualquer aviso de saída agendado pendente
+      if (action === "UPDATED" || action === "CANCELLED") {
+        await prisma.scheduledPush.deleteMany({
+          where: { appointmentId, sent: false },
+        }).catch(() => {});
+      }
+
+      // 2. Busca os dados completos do agendamento se ainda existir no banco
+      const appt = await prisma.appointment.findUnique({
+        where: { id: appointmentId },
+        include: {
+          client: { select: { name: true } },
+          professionals: { select: { professionalId: true } },
+        },
+      });
+
+      const clientName = appt?.client?.name || fallbackData?.clientName || "Cliente";
+      const startTime = appt?.startTime || fallbackData?.startTime || new Date();
+      const location = appt?.location || fallbackData?.location || "";
+      const assignedProfIds =
+        appt?.professionals.map((p) => p.professionalId) ||
+        fallbackData?.professionalIds ||
+        [];
+
+      const timeStr = new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Denver",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(new Date(startTime));
+
+      const dateStr = new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Denver",
+        day: "2-digit",
+        month: "2-digit",
+      }).format(new Date(startTime));
+
+      let title = "Atualização na Agenda";
+      let body = `Alteração no atendimento de ${clientName}`;
+
+      if (action === "CREATED") {
+        title = `Novo Agendamento: ${clientName}`;
+        body = `Marcado para ${dateStr} às ${timeStr}${location ? ` em ${location}` : ""}.`;
+      } else if (action === "UPDATED") {
+        title = `Agenda Alterada: ${clientName}`;
+        body = `Horário ajustado para ${dateStr} às ${timeStr}${location ? ` em ${location}` : ""}.`;
+      } else if (action === "CANCELLED") {
+        title = `Agendamento Cancelado: ${clientName}`;
+        body = `O atendimento de ${dateStr} às ${timeStr} foi cancelado.`;
+      }
+
+      const payload: PushPayload = {
+        title,
+        body,
+        tag: `agenda-change-${appointmentId}`,
+        data: {
+          url: "/agenda",
+          type: "AGENDA_CHANGE",
+          appointmentId,
+        },
+      };
+
+      // Dispara push para as profissionais escaladas
+      if (assignedProfIds.length > 0) {
+        await Promise.allSettled(
+          assignedProfIds.map((pId) => this.sendToProfessional(companyId, pId, payload))
+        );
+      } else {
+        // Se não houver profissional específica escalada, transmite para a empresa
+        await this.sendToCompany(companyId, payload);
+      }
+    } catch (err) {
+      console.error("[PushService] Erro ao notificar alteração de agenda:", err);
+    }
+  }
 }

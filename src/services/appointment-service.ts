@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { CreateAppointmentInput, UpdateAppointmentInput } from "@/lib/validations/appointment";
 import { Prisma } from "@prisma/client";
+import { PushService } from "./push-service";
 import {
   generateRecurrenceOccurrences,
   generateNextOccurrencesUntil,
@@ -211,6 +212,14 @@ export class AppointmentService {
       createdAppointments.push(appt);
     }
 
+    if (createdAppointments.length > 0) {
+      PushService.notifyAgendaChange({
+        companyId,
+        appointmentId: createdAppointments[0].id,
+        action: "CREATED",
+      }).catch((err) => console.error("[AppointmentService] Erro ao disparar push de criação:", err));
+    }
+
     return createdAppointments[0];
   }
 
@@ -419,7 +428,7 @@ export class AppointmentService {
         (newServiceIds.length !== existingServiceIds.length ||
           newServiceIds.some((id, i) => id !== existingServiceIds[i])));
 
-    return prisma.appointment.update({
+    const updated = await prisma.appointment.update({
       where: { id },
       data: {
         ...(data.clientId !== undefined && { clientId: data.clientId }),
@@ -440,6 +449,14 @@ export class AppointmentService {
         services: { include: { service: true } },
       },
     });
+
+    PushService.notifyAgendaChange({
+      companyId,
+      appointmentId: updated.id,
+      action: updated.status === "CANCELLED" ? "CANCELLED" : "UPDATED",
+    }).catch((err) => console.error("[AppointmentService] Erro ao disparar push de atualização:", err));
+
+    return updated;
   }
 
   /**
@@ -536,6 +553,17 @@ export class AppointmentService {
       where: { id },
     });
 
+    PushService.notifyAgendaChange({
+      companyId,
+      appointmentId: id,
+      action: "CANCELLED",
+      fallbackData: {
+        clientName: existing.title,
+        startTime: existing.startTime,
+        location: existing.location,
+      },
+    }).catch((err) => console.error("[AppointmentService] Erro ao disparar push de cancelamento:", err));
+
     return { count: 1 };
   }
 
@@ -557,7 +585,7 @@ export class AppointmentService {
       }
     }
 
-    return prisma.appointment.update({
+    const updated = await prisma.appointment.update({
       where: { id },
       data: { status },
       include: {
@@ -565,6 +593,16 @@ export class AppointmentService {
         services: { include: { service: true } },
       },
     });
+
+    if (status === "CANCELLED") {
+      PushService.notifyAgendaChange({
+        companyId: updated.companyId,
+        appointmentId: updated.id,
+        action: "CANCELLED",
+      }).catch((err) => console.error("[AppointmentService] Erro ao disparar push de cancelamento:", err));
+    }
+
+    return updated;
   }
 
   /**

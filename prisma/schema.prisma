@@ -255,6 +255,10 @@ model Client {
   city        String?
   state       String?        @default("CO")
   zipCode     String?
+  bedrooms    Int?
+  bathrooms   Float?
+  squareFeet  Int?
+  propertyType String?
   billingType BillingType    @default(PER_JOB)
   notes       String?
   createdAt   DateTime       @default(now())

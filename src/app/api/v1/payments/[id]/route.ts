@@ -6,7 +6,13 @@ import { z } from "zod";
 import { getTargetCompanyId } from "@/lib/company-context";
 
 const patchPaymentSchema = z.object({
-  action: z.enum(["mark_paid", "mark_unpaid"]),
+  action: z.enum([
+    "mark_paid",
+    "mark_unpaid",
+    "toggle_completed",
+    "mark_completed",
+    "mark_uncompleted",
+  ]),
   paidAt: z.string().datetime().optional(),
   paymentMethod: z.string().trim().max(50).optional(),
 });
@@ -46,13 +52,27 @@ export async function PATCH(
 
     const companyId = await getTargetCompanyId(session.companyId);
 
-    const updated =
-      parsed.data.action === "mark_paid"
-        ? await PaymentService.markPaid(id, companyId, {
-            paidAt: parsed.data.paidAt ? new Date(parsed.data.paidAt) : undefined,
-            paymentMethod: parsed.data.paymentMethod,
-          })
-        : await PaymentService.markUnpaid(id, companyId);
+    let updated;
+    switch (parsed.data.action) {
+      case "mark_paid":
+        updated = await PaymentService.markPaid(id, companyId, {
+          paidAt: parsed.data.paidAt ? new Date(parsed.data.paidAt) : undefined,
+          paymentMethod: parsed.data.paymentMethod,
+        });
+        break;
+      case "mark_unpaid":
+        updated = await PaymentService.markUnpaid(id, companyId);
+        break;
+      case "toggle_completed":
+        updated = await PaymentService.toggleCompleted(id, companyId);
+        break;
+      case "mark_completed":
+        updated = await PaymentService.setCompleted(id, companyId, true);
+        break;
+      case "mark_uncompleted":
+        updated = await PaymentService.setCompleted(id, companyId, false);
+        break;
+    }
 
     return NextResponse.json({ data: updated });
   } catch (error: unknown) {

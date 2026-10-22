@@ -7,7 +7,7 @@ import { getTargetCompanyId } from "@/lib/company-context";
 
 const bulkPaySchema = z.object({
   appointmentIds: z.array(z.string().min(1)).min(1, "Selecione ao menos um atendimento."),
-  action: z.enum(["PAID", "UNPAID"]).default("PAID"),
+  action: z.enum(["PAID", "UNPAID", "COMPLETE", "UNCOMPLETE"]).default("PAID"),
   paidAt: z.string().datetime().optional(),
   paymentMethod: z.string().trim().max(50).optional(),
 });
@@ -43,23 +43,34 @@ export async function POST(req: NextRequest) {
 
     const companyId = await getTargetCompanyId(session.companyId);
     let count = 0;
-    if (parsed.data.action === "UNPAID") {
-      count = await PaymentService.bulkMarkUnpaid(parsed.data.appointmentIds, companyId);
-    } else {
-      count = await PaymentService.bulkMarkPaid(
-        parsed.data.appointmentIds,
-        companyId,
-        {
-          paidAt: parsed.data.paidAt ? new Date(parsed.data.paidAt) : undefined,
-          paymentMethod: parsed.data.paymentMethod,
-        }
-      );
+
+    switch (parsed.data.action) {
+      case "UNPAID":
+        count = await PaymentService.bulkMarkUnpaid(parsed.data.appointmentIds, companyId);
+        break;
+      case "COMPLETE":
+        count = await PaymentService.bulkSetCompleted(parsed.data.appointmentIds, companyId, true);
+        break;
+      case "UNCOMPLETE":
+        count = await PaymentService.bulkSetCompleted(parsed.data.appointmentIds, companyId, false);
+        break;
+      case "PAID":
+      default:
+        count = await PaymentService.bulkMarkPaid(
+          parsed.data.appointmentIds,
+          companyId,
+          {
+            paidAt: parsed.data.paidAt ? new Date(parsed.data.paidAt) : undefined,
+            paymentMethod: parsed.data.paymentMethod,
+          }
+        );
+        break;
     }
 
     return NextResponse.json({ success: true, count });
   } catch (error: unknown) {
     return NextResponse.json(
-      { error: (error instanceof Error ? error.message : undefined) || "Erro ao registrar pagamentos." },
+      { error: (error instanceof Error ? error.message : undefined) || "Erro ao atualizar pagamentos em lote." },
       { status: 400 }
     );
   }

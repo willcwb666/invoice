@@ -11,7 +11,7 @@ export interface PaymentFilters {
  * Fonte única de verdade para "quanto o negócio já recebeu / ainda precisa
  * receber" fora do fluxo formal de Invoice. A maioria dos clientes nunca
  * pede uma fatura - eles simplesmente pagam por limpeza, a cada duas
- * semanas ou no fim do mês. Este serviço trata o Appointment concluído
+ * semanas ou no fim do mês. Este serviço trata o Appointment faturável
  * como o registro de cobrança em si.
  *
  * Regra para nunca contar receita duas vezes: um atendimento com
@@ -27,7 +27,7 @@ export class PaymentService {
       where: {
         companyId,
         billable: true,
-        status: "COMPLETED",
+        status: { in: ["SCHEDULED", "COMPLETED", "IN_PROGRESS"] },
         invoiced: false,
         ...(clientId ? { clientId } : {}),
         ...(status === "paid" ? { paid: true } : {}),
@@ -44,6 +44,7 @@ export class PaymentService {
       orderBy: [{ date: "desc" }, { startTime: "desc" }],
       include: {
         client: { select: { id: true, name: true, billingType: true } },
+        services: { include: { service: true } },
       },
     });
   }
@@ -61,7 +62,7 @@ export class PaymentService {
       where: {
         companyId,
         billable: true,
-        status: "COMPLETED",
+        status: { in: ["SCHEDULED", "COMPLETED", "IN_PROGRESS"] },
         invoiced: false,
         paid: false,
         date: { lt: startOfToday },
@@ -69,6 +70,7 @@ export class PaymentService {
       orderBy: { date: "asc" },
       include: {
         client: { select: { id: true, name: true } },
+        services: { include: { service: true } },
       },
     });
 
@@ -79,6 +81,57 @@ export class PaymentService {
       totalPending,
       appointments,
     };
+  }
+
+  /**
+   * Alterna a conclusão de um atendimento (COMPLETED <-> SCHEDULED).
+   */
+  static async toggleCompleted(id: string, companyId: string) {
+    const appt = await prisma.appointment.findFirst({ where: { id, companyId } });
+    if (!appt) {
+      throw new Error("Atendimento não encontrado.");
+    }
+
+    const newStatus = appt.status === "COMPLETED" ? "SCHEDULED" : "COMPLETED";
+
+    return prisma.appointment.update({
+      where: { id },
+      data: { status: newStatus },
+      include: {
+        client: { select: { id: true, name: true, billingType: true } },
+        services: { include: { service: true } },
+      },
+    });
+  }
+
+  /**
+   * Define explicitamente a conclusão de um atendimento.
+   */
+  static async setCompleted(id: string, companyId: string, completed: boolean) {
+    const appt = await prisma.appointment.findFirst({ where: { id, companyId } });
+    if (!appt) {
+      throw new Error("Atendimento não encontrado.");
+    }
+
+    return prisma.appointment.update({
+      where: { id },
+      data: { status: completed ? "COMPLETED" : "SCHEDULED" },
+      include: {
+        client: { select: { id: true, name: true, billingType: true } },
+        services: { include: { service: true } },
+      },
+    });
+  }
+
+  /**
+   * Marca vários atendimentos como concluídos ou agendados em lote.
+   */
+  static async bulkSetCompleted(ids: string[], companyId: string, completed: boolean) {
+    const result = await prisma.appointment.updateMany({
+      where: { id: { in: ids }, companyId, invoiced: false },
+      data: { status: completed ? "COMPLETED" : "SCHEDULED" },
+    });
+    return result.count;
   }
 
   static async markPaid(
@@ -98,9 +151,6 @@ export class PaymentService {
         "Este atendimento já foi incluído em uma fatura - atualize o pagamento pela tela de Faturas."
       );
     }
-    if (appt.status !== "COMPLETED") {
-      throw new Error("Só é possível marcar como pago um atendimento concluído.");
-    }
 
     return prisma.appointment.update({
       where: { id },
@@ -109,7 +159,10 @@ export class PaymentService {
         paidAt: opts.paidAt || new Date(),
         paymentMethod: opts.paymentMethod || null,
       },
-      include: { client: true },
+      include: {
+        client: true,
+        services: { include: { service: true } },
+      },
     });
   }
 
@@ -122,15 +175,15 @@ export class PaymentService {
     return prisma.appointment.update({
       where: { id },
       data: { paid: false, paidAt: null, paymentMethod: null },
-      include: { client: true },
+      include: {
+        client: true,
+        services: { include: { service: true } },
+      },
     });
   }
 
   /**
-   * Marca vários atendimentos como pagos de uma só vez - o fluxo real de
-   * clientes que acertam a conta quinzenal ou mensalmente, cobrindo várias
-   * limpezas de uma vez. Tudo ou nada: se algum item da lista não puder ser
-   * marcado, nada é alterado.
+   * Marca vários atendimentos como pagos de uma só vez.
    */
   static async bulkMarkPaid(
     ids: string[],
@@ -142,14 +195,13 @@ export class PaymentService {
         id: { in: ids },
         companyId,
         billable: true,
-        status: "COMPLETED",
         invoiced: false,
       },
     });
 
     if (appointments.length !== ids.length) {
       throw new Error(
-        "Um ou mais atendimentos selecionados não foram encontrados, não estão concluídos, são não faturáveis ou já pertencem a uma fatura."
+        "Um ou mais atendimentos selecionados não foram encontrados, são não faturáveis ou já pertencem a uma fatura."
       );
     }
 
@@ -167,7 +219,6 @@ export class PaymentService {
 
   /**
    * Marca vários atendimentos como não pagos (pendentes) de uma só vez.
-   * Permite reverter uma marcação feita por engano.
    */
   static async bulkMarkUnpaid(ids: string[], companyId: string) {
     const appointments = await prisma.appointment.findMany({
@@ -175,14 +226,13 @@ export class PaymentService {
         id: { in: ids },
         companyId,
         billable: true,
-        status: "COMPLETED",
         invoiced: false,
       },
     });
 
     if (appointments.length !== ids.length) {
       throw new Error(
-        "Um ou mais atendimentos selecionados não foram encontrados, não estão concluídos, são não faturáveis ou já pertencem a uma fatura."
+        "Um ou mais atendimentos selecionados não foram encontrados, são não faturáveis ou já pertencem a uma fatura."
       );
     }
 
@@ -199,9 +249,7 @@ export class PaymentService {
   }
 
   /**
-   * Alterna a marcação "Não Faturável" de um atendimento. Não mexe em
-   * `manuallyEdited` de propósito: é um controle financeiro independente do
-   * conteúdo do agendamento, e não deve travar o sync do iCloud para ele.
+   * Alterna a marcação "Não Faturável" de um atendimento.
    */
   static async setBillable(id: string, companyId: string, billable: boolean) {
     const appt = await prisma.appointment.findFirst({ where: { id, companyId } });

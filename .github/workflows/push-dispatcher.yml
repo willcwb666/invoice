@@ -12,11 +12,7 @@ jobs:
     steps:
       - name: Trigger Dispatcher
         run: |
-          TARGET_URL="${{ vars.APP_URL || secrets.APP_URL || vars.NEXT_PUBLIC_APP_URL || secrets.NEXT_PUBLIC_APP_URL }}"
-          if [ -z "$TARGET_URL" ]; then
-            echo "Aviso: APP_URL não definida em GitHub Variables/Secrets. O sistema usará o heartbeat in-app e Vercel cron."
-            exit 0
-          fi
+          TARGET_URL="${{ vars.APP_URL || secrets.APP_URL || 'https://kreatorinvoice.vercel.app' }}"
           echo "Disparando Push Dispatcher em $TARGET_URL..."
           curl -s -f -X POST "$TARGET_URL/api/v1/cron/push-dispatcher" \
             -H "x-cron-key: rm_cron_secret_e8a209b17c91f0449a5b3" \

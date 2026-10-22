@@ -39,10 +39,12 @@ export async function proxy(req: NextRequest) {
   // - /api/auth/* (Better Auth endpoints)
   // - /api/v1/auth/* (login, logout, register, me)
   // - /api/v1/public/* (public endpoints for invoice customer portal)
+  // - /api/v1/cron/* (cron dispatchers with their own secret verification)
   const isLoginPage = pathname === "/login";
   const isPublicPay = pathname.startsWith("/pay/");
   const isAuthApi = pathname.startsWith("/api/v1/auth/") || pathname.startsWith("/api/auth/");
   const isPublicApi = pathname.startsWith("/api/v1/public/");
+  const isCronApi = pathname.startsWith("/api/v1/cron/");
   const isWebcalFeed = pathname === "/api/v1/agenda/feed.ics";
 
   // 3. Extract and cryptographically verify session (Better Auth or legacy token)
@@ -127,8 +129,8 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL(redirectUrl, req.url));
   }
 
-  // Allow public routes
-  if (isLoginPage || isPublicPay || isAuthApi || isPublicApi) {
+  // Allow public routes and cron routes
+  if (isLoginPage || isPublicPay || isAuthApi || isPublicApi || isCronApi) {
     return next();
   }
 

@@ -297,6 +297,27 @@ export async function authenticateCredentials(
 }
 
 /**
+ * Overlays the super-admin "view as company" cookie's companyId onto a
+ * SessionPayload, but ONLY when the real, authenticated session's
+ * isSuperAdmin is true - verified server-side by the caller from the DB
+ * row / Better Auth session data, never trusted from the cookie alone.
+ * A non-super-admin setting this cookie has zero effect, since this
+ * function returns `base` unchanged whenever `isSuperAdmin` is false.
+ */
+function applyViewAsOverride(
+  req: Request | NextRequest,
+  base: SessionPayload,
+  isSuperAdmin: boolean
+): SessionPayload {
+  if (!isSuperAdmin) return base;
+  const cookieHeader = req.headers.get("cookie") || "";
+  const match = cookieHeader.match(/(?:^|;\s*)super_admin_viewing_company_id=([^;]+)/);
+  const viewingCompanyId = match ? decodeURIComponent(match[1]) : null;
+  if (!viewingCompanyId) return base;
+  return { ...base, companyId: viewingCompanyId, isSuperAdmin: true };
+}
+
+/**
  * Extracts and verifies the current session from a Request or NextRequest.
  */
 export async function getSessionUser(
@@ -323,15 +344,19 @@ export async function getSessionUser(
         ? Math.floor(new Date(betterSession.session.createdAt).getTime() / 1000)
         : Math.floor(Date.now() / 1000);
 
-      return {
-        sub: u.id,
-        email: u.email,
-        name: u.name || "Usuário",
-        role: u.role || "OPERATOR",
-        companyId: u.companyId || undefined,
-        exp: sessionExpires,
-        iat: sessionIat,
-      };
+      return applyViewAsOverride(
+        req,
+        {
+          sub: u.id,
+          email: u.email,
+          name: u.name || "Usuário",
+          role: u.role || "OPERATOR",
+          companyId: u.companyId || undefined,
+          exp: sessionExpires,
+          iat: sessionIat,
+        },
+        Boolean(u.isSuperAdmin)
+      );
     }
   } catch (baErr) {
     // If Better Auth fails or is bypassed, fall back to legacy token check
@@ -349,19 +374,23 @@ export async function getSessionUser(
   try {
     const dbUser = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { status: true, role: true, companyId: true, name: true },
+      select: { status: true, role: true, companyId: true, name: true, isSuperAdmin: true },
     });
 
     if (!dbUser || dbUser.status !== "ACTIVE") {
       return null;
     }
 
-    return {
-      ...payload,
-      role: dbUser.role,
-      name: dbUser.name || payload.name,
-      companyId: dbUser.companyId ?? payload.companyId,
-    };
+    return applyViewAsOverride(
+      req,
+      {
+        ...payload,
+        role: dbUser.role,
+        name: dbUser.name || payload.name,
+        companyId: dbUser.companyId ?? payload.companyId,
+      },
+      Boolean((dbUser as any).isSuperAdmin)
+    );
   } catch (err) {
     console.error("Erro ao verificar status de sessão do usuário no banco:", err);
     return null;

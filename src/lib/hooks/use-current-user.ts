@@ -20,6 +20,7 @@ export interface CurrentUserData {
     name: string;
     tradeName?: string | null;
   } | null;
+  viewingAsCompany?: { id: string; name: string } | null;
 }
 
 export function useCurrentUser() {

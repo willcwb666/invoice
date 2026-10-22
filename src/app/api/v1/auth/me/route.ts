@@ -45,7 +45,15 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ data: user });
+    let viewingAsCompany: { id: string; name: string } | null = null;
+    if (user.isSuperAdmin && session.companyId && session.companyId !== user.companyId) {
+      viewingAsCompany = await prisma.companyProfile.findUnique({
+        where: { id: session.companyId },
+        select: { id: true, name: true },
+      });
+    }
+
+    return NextResponse.json({ data: { ...user, viewingAsCompany } });
   } catch (error) {
     console.error("Erro ao buscar dados do usuário autenticado:", error);
     return NextResponse.json(

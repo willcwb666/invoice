@@ -259,6 +259,17 @@ export function NotificationBell() {
                 ))
               )}
             </div>
+
+            <div className="pt-2.5 mt-2 border-t border-slate-100 flex items-center justify-between px-1">
+              <Link
+                href="/settings?tab=notificacoes"
+                onClick={() => setIsOpen(false)}
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 transition-colors"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                <span>Configurar Push no Celular</span>
+              </Link>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -415,78 +415,80 @@ export default function SettingsPage() {
       />
 
       <div className="p-6 max-w-5xl mx-auto space-y-6">
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 p-1.5 bg-white rounded-2xl border border-slate-200/80 shadow-xs max-w-fit">
-          <button
-            type="button"
-            onClick={() => setActiveTab("geral")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === "geral"
-                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-            }`}
-          >
-            <Building2 className="w-4 h-4" />
-            <span>Geral</span>
-          </button>
+        {/* Navigation Tabs - com rolagem horizontal para celular */}
+        <div className="w-full overflow-x-auto no-scrollbar pb-1">
+          <div className="flex items-center gap-2 p-1.5 bg-white rounded-2xl border border-slate-200/80 shadow-xs min-w-max">
+            <button
+              type="button"
+              onClick={() => setActiveTab("geral")}
+              className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "geral"
+                  ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+              }`}
+            >
+              <Building2 className="w-4 h-4" />
+              <span>Geral</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("endereco")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === "endereco"
-                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-            }`}
-          >
-            <MapPin className="w-4 h-4" />
-            <span>Endereço</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("endereco")}
+              className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "endereco"
+                  ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+              }`}
+            >
+              <MapPin className="w-4 h-4" />
+              <span>Endereço</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("sincronizacao")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === "sincronizacao"
-                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-            }`}
-          >
-            <Calendar className="w-4 h-4" />
-            <span>Sincronização Agendas</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("sincronizacao")}
+              className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "sincronizacao"
+                  ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+              }`}
+            >
+              <Calendar className="w-4 h-4" />
+              <span>Sincronização Agendas</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("recuperacao_agendamento")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === "recuperacao_agendamento"
-                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-            }`}
-          >
-            <Clock className="w-4 h-4" />
-            <span>Recuperação de Orçamentos</span>
-            <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black rounded-full uppercase">
-              Novo ✨
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("recuperacao_agendamento")}
+              className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "recuperacao_agendamento"
+                  ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              <span>Recuperação de Orçamentos</span>
+              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black rounded-full uppercase">
+                Novo ✨
+              </span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("notificacoes")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === "notificacoes"
-                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-            }`}
-          >
-            <BellRing className="w-4 h-4" />
-            <span>Notificações Push</span>
-            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded-full uppercase">
-              PWA
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("notificacoes")}
+              className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "notificacoes"
+                  ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+              }`}
+            >
+              <BellRing className="w-4 h-4" />
+              <span>Notificações Push</span>
+              <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded-full uppercase">
+                PWA
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* TAB 1: GERAL */}
@@ -496,6 +498,8 @@ export default function SettingsPage() {
             animate={{ opacity: 1, y: 0 }}
             className="space-y-6"
           >
+            {/* Acesso direto às notificações push no celular */}
+            <PushPermissionCard />
             {/* Informações da Empresa e Meta */}
             <div className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-6">
               <div>

@@ -1,3 +1,4 @@
+import { RentCastService } from '@/services/rentcast-service';
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { BUSINESS_TIMEZONE, zonedTimeToUtc, zonedPartsFromUtc } from "@/lib/calendar/timezone";
@@ -1313,6 +1314,25 @@ async function syncICloudCalendarForCompanyUnlocked(
         });
         existingClients.push(autoClient);
         clientCache.set(cacheKey, autoClient);
+
+        if (event.location && event.location.trim().length >= 6) {
+          const clientIdToEnrich = autoClient.id;
+          RentCastService.fetchProperty(event.location)
+            .then(async (prop) => {
+              if (prop && (prop.bedrooms !== null || prop.bathrooms !== null || prop.squareFeet !== null)) {
+                await prisma.client.update({
+                  where: { id: clientIdToEnrich },
+                  data: {
+                    bedrooms: prop.bedrooms ?? undefined,
+                    bathrooms: prop.bathrooms ?? undefined,
+                    squareFeet: prop.squareFeet ?? undefined,
+                    propertyType: prop.propertyType ?? undefined,
+                  },
+                });
+              }
+            })
+            .catch((err) => console.warn('[iCloudSync] RentCast background enrichment error:', err));
+        }
       }
 
       clientId = autoClient.id;

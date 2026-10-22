@@ -127,11 +127,30 @@ export default function ClientsListPage() {
       header: "Endereço (GPS)",
       sortable: true,
       render: (c) => (
-        <div className="max-w-[220px]">
+        <div className="max-w-[240px]">
           <div className="flex items-center gap-1 text-slate-700 font-mono text-[11px] truncate">
             <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
             <span className="truncate">{c.address}</span>
           </div>
+          {(c.bedrooms !== null && c.bedrooms !== undefined ||
+            c.bathrooms !== null && c.bathrooms !== undefined ||
+            c.squareFeet !== null && c.squareFeet !== undefined) && (
+            <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-600 font-medium bg-slate-100/90 border border-slate-200/70 rounded-md px-1.5 py-0.5 w-fit">
+              {c.bedrooms !== null && c.bedrooms !== undefined && <span>{c.bedrooms} qts</span>}
+              {c.bedrooms !== null &&
+                c.bedrooms !== undefined &&
+                (c.bathrooms !== null || c.squareFeet !== null) && <span>•</span>}
+              {c.bathrooms !== null && c.bathrooms !== undefined && (
+                <span>{c.bathrooms} banh</span>
+              )}
+              {c.bathrooms !== null &&
+                c.bathrooms !== undefined &&
+                c.squareFeet !== null && <span>•</span>}
+              {c.squareFeet !== null && c.squareFeet !== undefined && (
+                <span>{c.squareFeet.toLocaleString()} sqft</span>
+              )}
+            </div>
+          )}
           {c.zipCode && (
             <span className="text-[10px] text-slate-400 block font-mono pl-4">
               CEP: {c.zipCode}

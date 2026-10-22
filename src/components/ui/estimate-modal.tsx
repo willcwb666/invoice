@@ -1048,7 +1048,7 @@ export function EstimateModal({ isOpen, onClose, onSuccess }: EstimateModalProps
                     ))}
                     {filteredClients.length === 0 && (
                       <div className="col-span-2 p-6 text-center text-xs text-slate-400">
-                        Nenhum cliente encontrado. Clique em "+ Novo Cliente" para cadastrar.
+                        Nenhum cliente encontrado. Clique em &quot;+ Novo Cliente&quot; para cadastrar.
                       </div>
                     )}
                   </div>

@@ -1,0 +1,16 @@
+name: Push Notification Dispatcher
+
+on:
+  schedule:
+    # Executa a cada 10 minutos para disparar lembretes de saída e trânsito (100% grátis, sem limites da Vercel Hobby)
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Dispatcher
+        run: |
+          curl -s -X POST "https://invoice-bay-gamma.vercel.app/api/v1/cron/push-dispatcher" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" || true

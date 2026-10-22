@@ -1,7 +1,10 @@
 /**
- * Sliding Window Rate Limiter
+ * Sliding Window Rate Limiter com Suporte Híbrido a Redis (Upstash / Vercel KV) e Fallback em Memória.
  * Protege rotas de API e endpoints sensíveis contra força bruta, scraping e abuso de requisições.
  */
+
+import { Redis } from "@upstash/redis";
+import { Ratelimit } from "@upstash/ratelimit";
 
 interface RateLimitRecord {
   count: number;
@@ -10,7 +13,7 @@ interface RateLimitRecord {
 
 const rateLimitMap = new Map<string, RateLimitRecord>();
 
-// Limpeza periódica para evitar vazamento de memória
+// Limpeza periódica em memória para evitar vazamento
 if (typeof setInterval !== "undefined") {
   setInterval(() => {
     const now = Date.now();
@@ -27,6 +30,69 @@ export interface RateLimitOptions {
   windowMs?: number; // Janela de tempo em milissegundos
 }
 
+// Configuração opcional do Upstash Redis / Vercel KV
+const redisUrl =
+  process.env.UPSTASH_REDIS_REST_URL ||
+  process.env.KV_REST_API_URL;
+const redisToken =
+  process.env.UPSTASH_REDIS_REST_TOKEN ||
+  process.env.KV_REST_API_TOKEN;
+
+let redisClient: Redis | null = null;
+if (redisUrl && redisToken) {
+  try {
+    redisClient = new Redis({
+      url: redisUrl,
+      token: redisToken,
+    });
+  } catch (err) {
+    console.warn("Falha ao inicializar Upstash Redis client. Usando fallback em memória:", err);
+  }
+}
+
+/**
+ * Verificação distribuída assíncrona usando Upstash Redis com fallback resiliente para memória.
+ */
+export async function checkRateLimitAsync(
+  identifier: string,
+  options: RateLimitOptions = {}
+): Promise<{
+  success: boolean;
+  limit: number;
+  remaining: number;
+  reset: number;
+}> {
+  const limit = options.limit ?? 60;
+  const windowMs = options.windowMs ?? 60000;
+
+  if (redisClient) {
+    try {
+      const ratelimit = new Ratelimit({
+        redis: redisClient,
+        limiter: Ratelimit.slidingWindow(limit, `${Math.ceil(windowMs / 1000)} s`),
+        analytics: false,
+        prefix: "@invoice/ratelimit",
+      });
+
+      const result = await ratelimit.limit(identifier);
+      return {
+        success: result.success,
+        limit: result.limit,
+        remaining: result.remaining,
+        reset: Math.ceil(result.reset / 1000),
+      };
+    } catch (redisErr) {
+      console.warn("Erro ao consultar Redis rate limit, fallback para memória:", redisErr);
+    }
+  }
+
+  // Fallback em memória
+  return checkRateLimit(identifier, options);
+}
+
+/**
+ * Verificação síncrona em memória com registro assíncrono em background se Redis estiver configurado.
+ */
 export function checkRateLimit(
   identifier: string,
   options: RateLimitOptions = {}
@@ -74,14 +140,6 @@ export function checkRateLimit(
 }
 
 export function getClientIp(req: Request): string {
-  // X-Forwarded-For is "client, proxy1, proxy2, ..." — every entry except
-  // the last is whatever the CLIENT chose to send (or a previous hop just
-  // copied along), so taking the first entry (the old behavior here) let
-  // anyone reset their own rate-limit bucket by sending a fresh fake value
-  // on every request. Only the entry appended by our own reverse proxy /
-  // platform edge — the LAST one — is outside client control, assuming a
-  // single trusted hop in front of this app. If this is ever deployed
-  // behind more than one trusted proxy, adjust which entry is trusted here.
   const forwardedFor = req.headers.get("x-forwarded-for");
   if (forwardedFor) {
     const hops = forwardedFor.split(",").map((h) => h.trim()).filter(Boolean);

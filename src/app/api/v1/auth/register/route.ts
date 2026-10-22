@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
+import { checkRateLimit, checkRateLimitAsync, getClientIp } from "@/lib/security/rate-limit";
 import {
   registerUser,
   createSessionToken,

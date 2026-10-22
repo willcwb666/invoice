@@ -323,11 +323,43 @@ export class InvoiceService {
         total: new Prisma.Decimal(item.quantity).mul(new Prisma.Decimal(item.unitPrice)),
       }));
 
-      const allItems = [...appointmentItems, ...manualItems];
-      const totalAmount = allItems.reduce(
+      // Process credit adjustments as invoice items
+      const creditItems = (data.adjustments || [])
+        .filter((adj) => adj.type === "CREDIT")
+        .map((adj) => ({
+          description: `[Crédito] ${adj.description}`,
+          quantity: 1,
+          unitPrice: new Prisma.Decimal(adj.amount),
+          total: new Prisma.Decimal(adj.amount),
+          serviceDate: null,
+        }));
+
+      const allItems = [...appointmentItems, ...manualItems, ...creditItems];
+      const subtotal = allItems.reduce(
         (acc, item) => acc.add(item.total),
         new Prisma.Decimal(0)
       );
+
+      // Process discount adjustments
+      const adjustmentDiscounts = (data.adjustments || [])
+        .filter((adj) => adj.type === "DISCOUNT")
+        .reduce((sum, adj) => sum.add(new Prisma.Decimal(adj.amount)), new Prisma.Decimal(0));
+      const explicitDiscount = new Prisma.Decimal(data.discount || 0);
+      const totalDiscount = adjustmentDiscounts.add(explicitDiscount);
+
+      // Total balance due (subtotal minus discounts, minimum zero)
+      const totalAmount = Prisma.Decimal.max(new Prisma.Decimal(0), subtotal.sub(totalDiscount));
+
+      // Append discount breakdown to notes if any discount adjustment was provided
+      const discountDetails = (data.adjustments || [])
+        .filter((adj) => adj.type === "DISCOUNT")
+        .map((adj) => `${adj.description}: -${Number(adj.amount).toFixed(2)}`);
+
+      let finalNotes = data.notes || null;
+      if (discountDetails.length > 0) {
+        const discountNote = `Descontos aplicados:\n${discountDetails.map((d) => `• ${d}`).join("\n")}`;
+        finalNotes = finalNotes ? `${finalNotes}\n\n${discountNote}` : discountNote;
+      }
 
       const invoice = await tx.invoice.create({
         data: {
@@ -337,9 +369,10 @@ export class InvoiceService {
           status: data.status,
           dueDate: new Date(data.dueDate),
           providerAddress,
-          subtotal: totalAmount,
+          subtotal,
+          discount: totalDiscount,
           totalAmount,
-          notes: data.notes || null,
+          notes: finalNotes,
           items: {
             create: allItems,
           },

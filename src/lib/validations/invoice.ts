@@ -17,6 +17,19 @@ export const invoiceItemSchema = z.object({
     .max(10000000, "Valor muito alto"),
 });
 
+export const invoiceAdjustmentSchema = z.object({
+  type: z.enum(["CREDIT", "DISCOUNT"]),
+  description: z
+    .string()
+    .trim()
+    .min(1, "Descrição do ajuste obrigatória")
+    .max(200, "Descrição muito longa"),
+  amount: z
+    .number()
+    .positive("Valor do ajuste deve ser maior que zero")
+    .max(10000000, "Valor muito alto"),
+});
+
 export const createInvoiceSchema = z
   .object({
     clientId: z.string().min(1, "ID do cliente obrigatório"),
@@ -39,13 +52,20 @@ export const createInvoiceSchema = z
       .or(z.literal("")),
     items: z.array(invoiceItemSchema).default([]),
     // Atendimentos concluídos e ainda não faturados a incluir automaticamente
-    // como itens da fatura (ver AppointmentService.getUninvoicedAppointments).
     appointmentIds: z.array(z.string().min(1)).default([]),
+    // Ajustes dinâmicos (Crédito (+) ou Desconto (-))
+    adjustments: z.array(invoiceAdjustmentSchema).default([]),
+    discount: z.number().nonnegative().optional().default(0),
   })
-  .refine((data) => data.items.length > 0 || data.appointmentIds.length > 0, {
-    message: "A fatura deve ter pelo menos 1 item ou 1 agendamento selecionado.",
-    path: ["items"],
-  });
+  .refine(
+    (data) =>
+      data.items.length > 0 ||
+      data.appointmentIds.length > 0 ||
+      data.adjustments.length > 0,
+    {
+      message: "A fatura deve ter pelo menos 1 item, agendamento ou ajuste informado.",
+      path: ["items"],
+    }
+  );
 
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
-export type InvoiceItemInput = z.infer<typeof invoiceItemSchema>;

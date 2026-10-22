@@ -3,6 +3,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   FileText,
+  Plus,
+  PlusCircle,
+  Trash2,
   ChevronLeft,
   ChevronRight,
   Check,
@@ -141,6 +144,34 @@ export function AgendaInvoiceModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Dynamic adjustments (Crédito ou Desconto)
+  const [enableAdjustments, setEnableAdjustments] = useState(false);
+  const [adjustments, setAdjustments] = useState<Array<{ id: string; type: "CREDIT" | "DISCOUNT"; description: string; amount: number | string }>>([
+    { id: "adj-1", type: "CREDIT", description: "", amount: "" },
+  ]);
+
+  const addAdjustment = () => {
+    setAdjustments((prev) => [
+      ...prev,
+      { id: `adj-${Date.now()}-${Math.random()}`, type: "CREDIT", description: "", amount: "" },
+    ]);
+  };
+
+  const removeAdjustment = (id: string) => {
+    setAdjustments((prev) => {
+      const remaining = prev.filter((a) => a.id !== id);
+      return remaining.length > 0
+        ? remaining
+        : [{ id: `adj-${Date.now()}`, type: "CREDIT", description: "", amount: "" }];
+    });
+  };
+
+  const updateAdjustment = (id: string, field: "type" | "description" | "amount", value: any) => {
+    setAdjustments((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, [field]: value } : a))
+    );
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     const base = initialMonthDate || new Date();
@@ -194,9 +225,36 @@ export function AgendaInvoiceModal({
     [appointments, selectedJobIds]
   );
 
-  const totalAmount = useMemo(
+  const appointmentsTotal = useMemo(
     () => selectedAppointments.reduce((acc, a) => acc + (Number(a.price) || 0), 0),
     [selectedAppointments]
+  );
+
+  const activeAdjustments = useMemo(() => {
+    return enableAdjustments
+      ? adjustments.filter((a) => a.description.trim() && Number(a.amount) > 0)
+      : [];
+  }, [enableAdjustments, adjustments]);
+
+  const creditsTotal = useMemo(
+    () =>
+      activeAdjustments
+        .filter((a) => a.type === "CREDIT")
+        .reduce((acc, a) => acc + Number(a.amount), 0),
+    [activeAdjustments]
+  );
+
+  const discountsTotal = useMemo(
+    () =>
+      activeAdjustments
+        .filter((a) => a.type === "DISCOUNT")
+        .reduce((acc, a) => acc + Number(a.amount), 0),
+    [activeAdjustments]
+  );
+
+  const totalAmount = useMemo(
+    () => Math.max(0, appointmentsTotal + creditsTotal - discountsTotal),
+    [appointmentsTotal, creditsTotal, discountsTotal]
   );
 
   const toggleAppointment = (appt: any) => {
@@ -283,6 +341,12 @@ export function AgendaInvoiceModal({
             `Fatura referente a ${selectedJobIds.length} serviço(s) selecionado(s) na Agenda.`,
           appointmentIds: selectedJobIds,
           items: [],
+          adjustments: activeAdjustments.map((a) => ({
+            type: a.type,
+            description: a.description.trim(),
+            amount: Number(a.amount),
+          })),
+          discount: discountsTotal,
         }),
       });
 
@@ -520,6 +584,112 @@ export function AgendaInvoiceModal({
             })}
           </div>
         </div>
+      </div>
+
+      {/* Seção Dinâmica de Acréscimos / Deduções (Créditos e Descontos) */}
+      <div className="pt-3 border-t border-slate-200 bg-slate-50/70 p-3.5 rounded-2xl space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={enableAdjustments}
+              onChange={(e) => {
+                setEnableAdjustments(e.target.checked);
+                if (e.target.checked && adjustments.length === 0) {
+                  addAdjustment();
+                }
+              }}
+              className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+            />
+            <span className="text-xs font-bold text-slate-900">
+              Deseja adicionar valores extras (Crédito ou Desconto) nesta Invoice?
+            </span>
+          </label>
+
+          {enableAdjustments && (
+            <button
+              type="button"
+              onClick={addAdjustment}
+              className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1 cursor-pointer"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Adicionar outro valor</span>
+            </button>
+          )}
+        </div>
+
+        {enableAdjustments && (
+          <div className="space-y-2">
+            {adjustments.map((adj) => (
+              <div
+                key={adj.id}
+                className="p-2 rounded-xl bg-white border border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs shadow-2xs"
+              >
+                <div className="w-full sm:w-36">
+                  <select
+                    value={adj.type}
+                    onChange={(e) => updateAdjustment(adj.id, "type", e.target.value as any)}
+                    className={`w-full px-2.5 py-1.5 rounded-lg border font-bold text-xs cursor-pointer focus:outline-none ${
+                      adj.type === "CREDIT"
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                        : "bg-rose-50 text-rose-800 border-rose-300"
+                    }`}
+                  >
+                    <option value="CREDIT">+ Crédito (Acréscimo)</option>
+                    <option value="DISCOUNT">- Desconto (Dedução)</option>
+                  </select>
+                </div>
+
+                <input
+                  type="text"
+                  placeholder={
+                    adj.type === "CREDIT"
+                      ? "Ex: Taxa de deslocamento, produto extra..."
+                      : "Ex: Desconto pontualidade, indicação..."
+                  }
+                  value={adj.description}
+                  onChange={(e) => updateAdjustment(adj.id, "description", e.target.value)}
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                />
+
+                <div className="flex items-center gap-1.5">
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono">
+                      $
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={adj.amount}
+                      onChange={(e) => updateAdjustment(adj.id, "amount", e.target.value)}
+                      className="w-24 pl-6 pr-2 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-900 font-mono font-bold focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={addAdjustment}
+                    title="Adicionar outro valor"
+                    className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => removeAdjustment(adj.id)}
+                    title="Remover ajuste"
+                    className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Bottom Summary & Invoice Generation Controls */}

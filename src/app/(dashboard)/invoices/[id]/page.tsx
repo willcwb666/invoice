@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, use } from "react";
+import React, { useState, useEffect, use, useRef } from "react";
 import Link from "next/link";
 import { Header } from "@/components/dashboard/header";
 import {
   FileText,
   Printer,
+  Image as ImageIcon,
+  Download,
+  Loader2,
   Share2,
   CheckCircle2,
   ArrowLeft,
@@ -22,6 +25,8 @@ import { ActionButton } from "@/components/ui/action-button";
 import { PaymentModal } from "@/components/ui/payment-modal";
 import { SendModal } from "@/components/ui/send-modal";
 import { SignatureDisplay } from "@/components/ui/signature-display";
+import { toPng, toJpeg } from "html-to-image";
+import { ModalShell } from "@/components/ui/modal-shell";
 
 export default function InvoiceDetailPage({
   params,
@@ -36,9 +41,34 @@ export default function InvoiceDetailPage({
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Modals
+  // Modals & Export
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isSendModalOpen, setIsSendModalOpen] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportingImage, setExportingImage] = useState(false);
+  const invoiceCardRef = useRef<HTMLDivElement>(null);
+
+  const handleExportImage = async (format: "png" | "jpeg" = "png") => {
+    if (!invoiceCardRef.current || !invoice) return;
+    setExportingImage(true);
+    try {
+      const fn = format === "png" ? toPng : toJpeg;
+      const dataUrl = await fn(invoiceCardRef.current, {
+        quality: 0.95,
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+      });
+      const link = document.createElement("a");
+      link.download = `Invoice-${invoice.invoiceNumber}.${format}`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error("Erro ao gerar imagem da fatura:", err);
+      alert("Não foi possível gerar a imagem no navegador.");
+    } finally {
+      setExportingImage(false);
+    }
+  };
 
   useEffect(() => {
     async function load() {
@@ -208,6 +238,23 @@ export default function InvoiceDetailPage({
               onClick={() => setIsSendModalOpen(true)}
             />
 
+            {/* Escolher Gerar em PDF ou Imagem */}
+            <ActionButton
+              icon={<Download className="w-4 h-4" />}
+              tooltip="Exportar Fatura (Escolher PDF ou Imagem)"
+              hoverColor="green"
+              onClick={() => setShowExportModal(true)}
+            />
+
+            {/* Ícone Gerar Imagem Direta */}
+            <ActionButton
+              icon={exportingImage ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+              tooltip="Baixar como Imagem (PNG de alta resolução)"
+              hoverColor="purple"
+              disabled={exportingImage}
+              onClick={() => handleExportImage("png")}
+            />
+
             {/* Ícone Imprimir / Salvar PDF */}
             <ActionButton
               icon={<Printer className="w-4 h-4" />}
@@ -219,7 +266,7 @@ export default function InvoiceDetailPage({
         </div>
 
         {/* INVOICE CARD (Visual e Layout Idêntico aos PDFs Reais de Exemplo) */}
-        <div className="p-8 sm:p-12 rounded-3xl bg-white text-slate-900 shadow-xl space-y-8 font-sans border border-slate-200/90 print:p-0 print:border-none print:shadow-none">
+        <div ref={invoiceCardRef} className="p-8 sm:p-12 rounded-3xl bg-white text-slate-900 shadow-xl space-y-8 font-sans border border-slate-200/90 print:p-0 print:border-none print:shadow-none">
           {/* Header Title & Company info */}
           <div>
             <div className="flex items-start justify-between mb-4">
@@ -400,6 +447,106 @@ export default function InvoiceDetailPage({
         onClose={() => setIsSendModalOpen(false)}
         invoice={invoice}
       />
+
+      {/* Modal para Escolher Gerar Fatura em PDF ou Imagem */}
+      <ModalShell
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        icon={<Download className="w-5 h-5 text-indigo-600" />}
+        title="Exportar Fatura"
+        subtitle="Escolha se deseja gerar e baixar esta fatura em PDF ou formato de Imagem"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+        panelClassName="w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-5"
+        headerRowClassName="flex items-center justify-between"
+        headerLeftClassName="flex items-center gap-3"
+        iconWrapperClassName="p-2.5 rounded-2xl bg-indigo-50 border border-indigo-100"
+      >
+        <div className="space-y-3 pt-2 text-xs">
+          {/* Opção 1: PDF */}
+          <div
+            onClick={() => {
+              setShowExportModal(false);
+              window.print();
+            }}
+            className="p-4 rounded-2xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40 transition-all cursor-pointer flex items-center justify-between gap-3 group"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100 group-hover:scale-105 transition-transform">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">Gerar Documento PDF</h4>
+                <p className="text-slate-500 text-[11px]">
+                  Arquivo oficial vetorial. Abre diálogo para salvar ou imprimir em PDF com nitidez perfeita.
+                </p>
+              </div>
+            </div>
+            <Printer className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 shrink-0" />
+          </div>
+
+          {/* Opção 2: Imagem PNG */}
+          <div
+            onClick={() => {
+              setShowExportModal(false);
+              handleExportImage("png");
+            }}
+            className="p-4 rounded-2xl border border-slate-200 hover:border-purple-400 hover:bg-purple-50/40 transition-all cursor-pointer flex items-center justify-between gap-3 group"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100 group-hover:scale-105 transition-transform">
+                <ImageIcon className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">Gerar Imagem PNG (Alta Resolução)</h4>
+                <p className="text-slate-500 text-[11px]">
+                  Arquivo .png pronto para salvar nas fotos ou enviar diretamente no WhatsApp e iMessage.
+                </p>
+              </div>
+            </div>
+            {exportingImage ? (
+              <Loader2 className="w-4 h-4 animate-spin text-purple-600 shrink-0" />
+            ) : (
+              <Download className="w-4 h-4 text-slate-400 group-hover:text-purple-600 shrink-0" />
+            )}
+          </div>
+
+          {/* Opção 3: Imagem JPEG */}
+          <div
+            onClick={() => {
+              setShowExportModal(false);
+              handleExportImage("jpeg");
+            }}
+            className="p-4 rounded-2xl border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/40 transition-all cursor-pointer flex items-center justify-between gap-3 group"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100 group-hover:scale-105 transition-transform">
+                <ImageIcon className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">Gerar Imagem JPEG (Leve)</h4>
+                <p className="text-slate-500 text-[11px]">
+                  Arquivo compacto otimizado para carregamento rápido em redes celulares com pouca conexão.
+                </p>
+              </div>
+            </div>
+            {exportingImage ? (
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-600 shrink-0" />
+            ) : (
+              <Download className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 shrink-0" />
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-2">
+          <button
+            type="button"
+            onClick={() => setShowExportModal(false)}
+            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer transition-colors"
+          >
+            Fechar
+          </button>
+        </div>
+      </ModalShell>
     </div>
   );
 }

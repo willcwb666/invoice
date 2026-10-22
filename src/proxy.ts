@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/security/tokens";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 /**
  * Next.js 16 Proxy Convention
@@ -46,9 +47,13 @@ export async function proxy(req: NextRequest) {
 
   // 3. Extract and cryptographically verify session (Better Auth or legacy token)
   let session: any = null;
+  let pendingOnboardingStatus: string | null = null;
   try {
     const betterSession = await auth.api.getSession({ headers: req.headers });
     const betterUser = betterSession?.user as any;
+    if (betterUser?.status === "PENDING_ONBOARDING") {
+      pendingOnboardingStatus = "PENDING_ONBOARDING";
+    }
     // Mirrors getSessionUser's ACTIVE check - Better Auth's own autoSignIn
     // doesn't know about this app's PENDING_APPROVAL/SUSPENDED statuses, so
     // without this a newly self-registered or suspended user would hold a
@@ -64,9 +69,40 @@ export async function proxy(req: NextRequest) {
     }
   } catch {}
 
-  if (!session) {
+  if (!session && !pendingOnboardingStatus) {
     const sessionCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value;
-    session = sessionCookie ? await verifySessionToken(sessionCookie) : null;
+    const legacyPayload = sessionCookie ? await verifySessionToken(sessionCookie) : null;
+    if (legacyPayload) {
+      // The legacy token doesn't carry a live status (it's a long-lived
+      // signed JWT, not re-checked against the DB on every page load like
+      // getSessionUser does for API routes) - re-check it here so a
+      // PENDING_ONBOARDING self-registration (see Task 3) is routed to
+      // /onboarding at the page level too, not just rejected later when an
+      // API call 401s.
+      const dbUser = await prisma.user.findUnique({
+        where: { id: legacyPayload.sub },
+        select: { status: true },
+      });
+      if (dbUser?.status === "PENDING_ONBOARDING") {
+        pendingOnboardingStatus = "PENDING_ONBOARDING";
+      } else if (dbUser?.status === "ACTIVE") {
+        session = legacyPayload;
+      }
+      // Any other status (PENDING_APPROVAL, SUSPENDED) leaves both
+      // `session` and `pendingOnboardingStatus` unset, i.e. "no session" -
+      // same outcome getSessionUser already produces for API routes.
+    }
+  }
+
+  // A PENDING_ONBOARDING user (either auth mechanism) can only reach the
+  // onboarding wizard itself and its API, no matter what else they request.
+  if (pendingOnboardingStatus) {
+    const isOnboardingPath =
+      pathname === "/onboarding" || pathname.startsWith("/api/v1/onboarding/");
+    if (!isOnboardingPath) {
+      return NextResponse.redirect(new URL("/onboarding", req.url));
+    }
+    return next();
   }
 
   // If already authenticated and accesses /login, redirect directly to dashboard

@@ -369,6 +369,41 @@ export async function getSessionUser(
 }
 
 /**
+ * Like getSessionUser, but for the one narrow case getSessionUser
+ * deliberately rejects: a user who IS authenticated but hasn't finished
+ * onboarding yet (no company, PENDING_ONBOARDING). Used only by the
+ * onboarding API route - every other route keeps requiring ACTIVE via
+ * getSessionUser/requirePermission, unchanged.
+ */
+export async function getPendingOnboardingUser(
+  req: Request | NextRequest
+): Promise<{ id: string; email: string; name: string | null } | null> {
+  try {
+    const betterSession = await betterAuth.api.getSession({ headers: req.headers });
+    const u = betterSession?.user as any;
+    if (u && u.status === "PENDING_ONBOARDING") {
+      return { id: u.id, email: u.email, name: u.name || null };
+    }
+  } catch {}
+
+  const cookieHeader = req.headers.get("cookie") || "";
+  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`));
+  const token = match ? decodeURIComponent(match[1]) : null;
+  if (!token) return null;
+
+  const payload = await verifySessionToken(token);
+  if (!payload) return null;
+
+  const dbUser = await prisma.user.findUnique({
+    where: { id: payload.sub },
+    select: { status: true, email: true, name: true },
+  });
+  if (!dbUser || dbUser.status !== "PENDING_ONBOARDING") return null;
+
+  return { id: payload.sub, email: dbUser.email, name: dbUser.name };
+}
+
+/**
  * Helper to build standard HTTP-Only Cookie options for session cookie.
  */
 export function getSessionCookieOptions(rememberMe: boolean = false) {

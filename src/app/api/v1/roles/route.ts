@@ -50,14 +50,20 @@ export async function GET(req: NextRequest) {
   if (check.response) return check.response;
   const { session } = check;
 
-  const company = session.companyId
-    ? await prisma.companyProfile.findUnique({
-        where: { id: session.companyId },
-        select: { rolePermissions: true },
-      })
-    : await prisma.companyProfile.findFirst({
-        select: { rolePermissions: true },
-      });
+  // No findFirst() fallback: a session with no companyId has no company
+  // whose permission matrix it's entitled to see, arbitrary or otherwise.
+  // Same posture as requirePermission() in permissions.ts.
+  if (!session.companyId) {
+    return NextResponse.json(
+      { error: "Perfil da empresa não encontrado." },
+      { status: 404 }
+    );
+  }
+
+  const company = await prisma.companyProfile.findUnique({
+    where: { id: session.companyId },
+    select: { rolePermissions: true },
+  });
   const matrix =
     (company?.rolePermissions as unknown as RolePermissionsMatrix | null) ||
     DEFAULT_ROLE_PERMISSIONS;
@@ -103,9 +109,13 @@ export async function PUT(req: NextRequest) {
       ADMIN: DEFAULT_ROLE_PERMISSIONS.ADMIN,
     };
 
+    // No findFirst() fallback: without a companyId there is no company this
+    // session is entitled to write to - falling back to an arbitrary one
+    // could overwrite another company's permission matrix. Same posture as
+    // requirePermission() in permissions.ts.
     let company = session.companyId
       ? await prisma.companyProfile.findUnique({ where: { id: session.companyId } })
-      : await prisma.companyProfile.findFirst();
+      : null;
     if (!company) {
       return NextResponse.json(
         { error: "Perfil da empresa não encontrado." },

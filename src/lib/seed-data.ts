@@ -39,6 +39,8 @@ async function performSeed(): Promise<void> {
     const signaturePath = getOrCreateSignatureFile();
 
     if (!company) {
+      // Only reachable when the DB has zero companies - nothing to
+      // self-heal onto yet, so this branch is unconditionally safe.
       company = await prisma.companyProfile.create({
         data: {
           name: DEFAULT_COMPANY_SETTINGS.name,
@@ -73,18 +75,83 @@ async function performSeed(): Promise<void> {
         },
         include: { addresses: true },
       });
-    } else {
-      const needsUpdate = !company.signatureUrl || !company.icloudCalendarUrl;
-      if (needsUpdate) {
-        company = await prisma.companyProfile.update({
-          where: { id: company.id },
-          data: {
-            ...(!company.signatureUrl ? { signatureUrl: signaturePath } : {}),
-            ...(!company.icloudCalendarUrl ? { icloudCalendarUrl: DEFAULT_ICLOUD_URL } : {}),
-          },
-          include: { addresses: true },
+
+      // Ensure primary admin user (Renata Matos de Oliveira) is seeded -
+      // only on the legacy single-tenant bootstrap path above, same as
+      // every write below.
+      await ensureAdminUser();
+
+      // Ensure Clients exist
+      for (const c of SEED_CLIENTS) {
+        await prisma.client.upsert({
+          where: { id: c.id },
+          update: {},
+          create: { ...c, companyId: company.id },
         });
       }
+
+      // Ensure the 8 real invoices from exemple/ exist
+      for (const invData of SEED_INVOICES) {
+        const existing = await prisma.invoice.findUnique({
+          where: { invoiceNumber: invData.invoiceNumber },
+        });
+
+        if (!existing) {
+          await prisma.invoice.create({
+            data: {
+              companyId: company.id,
+              clientId: invData.clientId,
+              invoiceNumber: invData.invoiceNumber,
+              status: invData.status,
+              issueDate: invData.issueDate,
+              dueDate: invData.dueDate,
+              providerAddress: invData.providerAddress,
+              subtotal: invData.subtotal,
+              discount: 0,
+              tax: 0,
+              totalAmount: invData.totalAmount,
+              paidAmount: invData.paidAmount,
+              paidAt: invData.paidAt || null,
+              notes: invData.notes,
+              items: {
+                create: invData.items,
+              },
+            },
+          });
+        }
+      }
+      return;
+    }
+
+    // From here on, `company` already existed in the DB - it's whichever
+    // row Postgres's unordered findFirst() happened to return, which is
+    // undefined/arbitrary once more than one company exists (and can change
+    // over time, since the row is updated by frequent sync timestamps). Every
+    // step below is a "fill in Renata's real data if missing" self-heal
+    // (her real signature path, her real DEFAULT_ICLOUD_URL, her real street
+    // addresses, her real example clients/invoices) - safe ONLY while the DB
+    // still holds exactly the one legacy company this was all seeded for.
+    // The instant a second, unrelated company exists, `company` could BE
+    // that new company, and self-healing it here would silently write
+    // Renata's real personal/business data onto it. So: do nothing more
+    // once count > 1 (do NOT add an ORDER BY to findFirst above - that would
+    // make the wrong behavior deterministic instead of occasional, which is
+    // worse, not better).
+    const totalCompanies = await prisma.companyProfile.count();
+    if (totalCompanies > 1) {
+      return;
+    }
+
+    const needsUpdate = !company.signatureUrl || !company.icloudCalendarUrl;
+    if (needsUpdate) {
+      company = await prisma.companyProfile.update({
+        where: { id: company.id },
+        data: {
+          ...(!company.signatureUrl ? { signatureUrl: signaturePath } : {}),
+          ...(!company.icloudCalendarUrl ? { icloudCalendarUrl: DEFAULT_ICLOUD_URL } : {}),
+        },
+        include: { addresses: true },
+      });
     }
 
     // Ensure Addresses exist
@@ -112,7 +179,7 @@ async function performSeed(): Promise<void> {
         ],
       });
     }
- 
+
     // Ensure primary admin user (Renata Matos de Oliveira) is seeded
     await ensureAdminUser();
 

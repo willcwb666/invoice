@@ -41,6 +41,17 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // DEFAULT_ICLOUD_URL is Renata's own real iCloud calendar feed URL (a
+    // durable bearer credential - see its definition in icloud.ts). It may
+    // only ever stand in for a company's own unset icloudCalendarUrl during
+    // the legacy single-tenant bootstrap window (DB has exactly one
+    // company). From the moment a second, unrelated company exists, falling
+    // back to it here would disclose Renata's personal calendar URL to that
+    // company's Settings screen. Same guard as
+    // ensureICloudCalendarSynced in icloud.ts.
+    const totalCompanies = await prisma.companyProfile.count();
+    const allowEnvSeed = totalCompanies === 1;
+
     const syncedCount = await prisma.appointment.count({
       where: {
         companyId: company?.id,
@@ -87,7 +98,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         configured,
-        icloudCalendarUrl: company?.icloudCalendarUrl || DEFAULT_ICLOUD_URL,
+        icloudCalendarUrl:
+          company?.icloudCalendarUrl || (allowEnvSeed ? DEFAULT_ICLOUD_URL : null),
         syncedCount,
         lastSyncedAt: company?.lastICloudSyncAt || lastSyncAppt?.updatedAt || company?.updatedAt || null,
         status: configured ? "SYNCHRONIZED" : "NOT_CONFIGURED",
@@ -140,12 +152,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Same single-tenant-only guard as the GET handler above (see comment
+    // there) and ensureICloudCalendarSynced in icloud.ts: DEFAULT_ICLOUD_URL
+    // is Renata's real personal calendar feed, and must never be used to
+    // sync an unrelated company's data once a second company exists.
+    const totalCompanies = await prisma.companyProfile.count();
+    const allowEnvSeed = totalCompanies === 1;
+
     // Determine the calendar URL to use: from request body or saved in company profile or default
     const rawUrl =
       body.icloudUrl ||
       body.calendarUrl ||
       company.icloudCalendarUrl ||
-      DEFAULT_ICLOUD_URL;
+      (allowEnvSeed ? DEFAULT_ICLOUD_URL : "");
 
     if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim()) {
       return NextResponse.json(

@@ -28,8 +28,25 @@ import {
 import { Tooltip } from "@/components/ui/tooltip";
 import { SignatureDisplay } from "@/components/ui/signature-display";
 import { useToast } from "@/components/ui/toast";
-import { DEFAULT_COMPANY_SETTINGS } from "@/lib/company-defaults";
+import { DEFAULT_COMPANY_SETTINGS, GENERIC_COMPANY_DEFAULTS } from "@/lib/company-defaults";
 import { motion, AnimatePresence } from "framer-motion";
+
+// DEFAULT_COMPANY_SETTINGS is Renata's own real data (name/email/phone/
+// paymentMethods/signatureUrl/logoUrl/icloudCalendarUrl) - safe only as the
+// fallback for her own company's row. Every OTHER company must fall back to
+// blank values for those personal fields instead, while still getting the
+// genuinely generic defaults (terms, work hours, abandoned-recovery copy,
+// etc.) from GENERIC_COMPANY_DEFAULTS. See src/lib/company-defaults.ts.
+const BLANK_COMPANY_FALLBACK = {
+  ...GENERIC_COMPANY_DEFAULTS,
+  name: "",
+  email: "",
+  phone: "",
+  paymentMethods: "",
+  signatureUrl: "",
+  logoUrl: "",
+  icloudCalendarUrl: "",
+};
 
 function formatRelativeTime(dateString: string | null): string {
   if (!dateString) return "Nunca sincronizado";
@@ -64,7 +81,7 @@ export default function SettingsPage() {
 
   // Original profile & current edited profile
   const [initialData, setInitialData] = useState<any>(null);
-  const [formData, setFormData] = useState({ ...DEFAULT_COMPANY_SETTINGS });
+  const [formData, setFormData] = useState({ ...BLANK_COMPANY_FALLBACK });
 
   const [addresses, setAddresses] = useState<any[]>([]);
 
@@ -129,16 +146,17 @@ export default function SettingsPage() {
         const comp = json.data;
         if (comp) {
           const D = DEFAULT_COMPANY_SETTINGS;
+          const B = BLANK_COMPANY_FALLBACK;
           const loaded = {
-            name: comp.name || D.name,
-            email: comp.email || D.email,
-            phone: comp.phone || D.phone,
+            name: comp.name || B.name,
+            email: comp.email || B.email,
+            phone: comp.phone || B.phone,
             monthlyRevenueGoal: Number(comp.monthlyRevenueGoal) || D.monthlyRevenueGoal,
-            paymentMethods: comp.paymentMethods || D.paymentMethods,
+            paymentMethods: comp.paymentMethods || B.paymentMethods,
             terms: comp.terms || D.terms,
-            signatureUrl: comp.signatureUrl || D.signatureUrl,
-            logoUrl: comp.logoUrl || D.logoUrl,
-            icloudCalendarUrl: comp.icloudCalendarUrl || D.icloudCalendarUrl,
+            signatureUrl: comp.signatureUrl || B.signatureUrl,
+            logoUrl: comp.logoUrl || B.logoUrl,
+            icloudCalendarUrl: comp.icloudCalendarUrl || B.icloudCalendarUrl,
             icloudSyncWindowDays: Number(comp.icloudSyncWindowDays) || D.icloudSyncWindowDays,
             abandonedRecoveryEnabled: comp.abandonedRecoveryEnabled ?? D.abandonedRecoveryEnabled,
             abandonedRecoveryMinutes: Number(comp.abandonedRecoveryMinutes) || D.abandonedRecoveryMinutes,

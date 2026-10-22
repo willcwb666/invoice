@@ -144,6 +144,8 @@ model CompanyProfile {
   expenses           Expense[]
   professionals      Professional[]
   notifications      Notification[]
+  pushSubscriptions  PushSubscription[]
+  scheduledPushes    ScheduledPush[]
 
   @@map("company_profiles")
 }
@@ -188,6 +190,7 @@ model User {
   accounts            Account[]
   auditLogs           AuditLog[]
   notifications       Notification[]
+  pushSubscriptions   PushSubscription[]
 
   @@index([companyId])
   @@index([status])
@@ -333,6 +336,7 @@ model Appointment {
 
   services        AppointmentService[]
   professionals   AppointmentProfessional[]
+  scheduledPushes ScheduledPush[]
 
   // Prevents two concurrent iCloud syncs (manual + auto, or two tabs) from
   // both creating an appointment for the same calendar occurrence before
@@ -530,6 +534,8 @@ model Professional {
 
   history         ProfessionalCommissionHistory[]
   appointments    AppointmentProfessional[]
+  pushSubscriptions PushSubscription[]
+  scheduledPushes ScheduledPush[]
 
   @@index([companyId])
   @@index([companyId, active])
@@ -595,3 +601,54 @@ model Notification {
   @@map("notifications")
 }
 
+
+enum PushNotificationType {
+  MORNING_BRIEF
+  AGENDA_CHANGE
+  DEPARTURE_REMINDER
+  GENERAL
+}
+
+model PushSubscription {
+  id             String         @id @default(uuid())
+  companyId      String
+  company        CompanyProfile @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  professionalId String?
+  professional   Professional?  @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  endpoint       String         @unique
+  p256dh         String
+  auth           String
+  userAgent      String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([professionalId])
+  @@map("push_subscriptions")
+}
+
+model ScheduledPush {
+  id             String               @id @default(uuid())
+  companyId      String
+  company        CompanyProfile       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  professionalId String?
+  professional   Professional?        @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  appointmentId  String?
+  appointment    Appointment?         @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  type           PushNotificationType
+  title          String
+  body           String
+  url            String?              @default("/agenda")
+  scheduledFor   DateTime
+  sent           Boolean              @default(false)
+  sentAt         DateTime?
+  createdAt      DateTime             @default(now())
+
+  @@index([companyId])
+  @@index([scheduledFor, sent])
+  @@index([appointmentId])
+  @@map("scheduled_pushes")
+}

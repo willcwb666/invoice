@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NotificationType } from "@prisma/client";
+import { PushService } from "./push-service";
 
 export interface CreateNotificationInput {
   companyId: string;
@@ -18,7 +19,7 @@ export class NotificationService {
    */
   static async create(input: CreateNotificationInput) {
     try {
-      return await prisma.notification.create({
+      const created = await prisma.notification.create({
         data: {
           companyId: input.companyId,
           userId: input.userId,
@@ -30,6 +31,25 @@ export class NotificationService {
           metadata: input.metadata,
         },
       });
+
+      // Dispara push no celular automaticamente para qualquer notificação do sistema
+      if (!input.metadata?._fromPushService) {
+        const payload = {
+          title: input.title,
+          body: input.message,
+          data: { url: input.link || "/agenda", ...(input.metadata || {}) },
+        };
+
+        if (input.professionalId) {
+          PushService.sendToProfessional(input.companyId, input.professionalId, payload).catch(() => {});
+        } else if (input.userId) {
+          PushService.sendToUser(input.companyId, input.userId, payload).catch(() => {});
+        } else {
+          PushService.sendToCompany(input.companyId, payload).catch(() => {});
+        }
+      }
+
+      return created;
     } catch (error) {
       console.error("Erro ao criar notificação:", error);
       return null;

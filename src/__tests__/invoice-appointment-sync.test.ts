@@ -126,6 +126,7 @@ describe("Invoice to Appointment Payment Synchronization", () => {
       dueDate: "2026-10-30",
       items: [],
       appointmentIds: ["appt-1"],
+      adjustments: [],
       discount: 0,
     });
 

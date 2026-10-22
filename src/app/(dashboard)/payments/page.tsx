@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Header } from "@/components/dashboard/header";
 import { Pagination } from "@/components/ui/pagination";
+import { ActionButton } from "@/components/ui/action-button";
 import {
   CheckCircle2,
   Circle,
@@ -313,52 +314,44 @@ export default function PaymentsPage() {
           </span>
         </div>
 
-        {/* 5. Flag para setar como Concluído */}
-        <div className="w-32 shrink-0 flex items-center">
-          <button
-            type="button"
+        {/* 5. Ações (Concluído & Pago) */}
+        <div className="w-24 shrink-0 flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+          {/* Ação Concluído */}
+          <ActionButton
+            icon={
+              isBusy ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+              ) : isCompleted ? (
+                <CheckSquare className="w-3.5 h-3.5 text-indigo-600" />
+              ) : (
+                <Square className="w-3.5 h-3.5 text-slate-400" />
+              )
+            }
+            tooltip={isCompleted ? "Concluído (clique para desmarcar)" : "Marcar como Concluído"}
+            hoverColor="purple"
+            activeColor="none"
+            className={isCompleted ? "!bg-indigo-50/80 !border-indigo-200" : ""}
+            disabled={isBusy}
             onClick={() => toggleCompleted(appt.id)}
-            disabled={isBusy}
-            title={isCompleted ? "Clique para desmarcar conclusão" : "Clique para marcar como concluído"}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all cursor-pointer disabled:opacity-50 ${
-              isCompleted
-                ? "bg-indigo-50/80 border-indigo-200 text-indigo-700 shadow-2xs"
-                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            {isBusy ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
-            ) : isCompleted ? (
-              <CheckSquare className="w-3.5 h-3.5 text-indigo-600" />
-            ) : (
-              <Square className="w-3.5 h-3.5 text-slate-400" />
-            )}
-            <span>Concluído</span>
-          </button>
-        </div>
+          />
 
-        {/* 6. Flag para setar como Pago */}
-        <div className="w-28 shrink-0 flex items-center justify-end">
-          <button
-            type="button"
-            onClick={() => togglePaid(appt.id, appt.paid)}
+          {/* Ação Pago */}
+          <ActionButton
+            icon={
+              isBusy ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+              ) : appt.paid ? (
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              ) : (
+                <Circle className="w-3.5 h-3.5 text-slate-400" />
+              )
+            }
+            tooltip={appt.paid ? "Pago (clique para reverter para pendente)" : "Marcar como Pago"}
+            hoverColor="green"
+            activeColor={appt.paid ? "green" : "none"}
             disabled={isBusy}
-            title={appt.paid ? "Clique para reverter para pendente" : "Clique para marcar como pago"}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold transition-all cursor-pointer disabled:opacity-50 ${
-              appt.paid
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs"
-                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            {isBusy ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
-            ) : appt.paid ? (
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-            ) : (
-              <Circle className="w-3.5 h-3.5 text-slate-400" />
-            )}
-            <span>Pago</span>
-          </button>
+            onClick={() => togglePaid(appt.id, appt.paid)}
+          />
         </div>
       </div>
     );
@@ -633,8 +626,7 @@ export default function PaymentsPage() {
                       <div className="w-40 shrink-0">Cliente</div>
                       <div className="flex-1 min-w-[170px]">Serviço</div>
                       <div className="w-36 shrink-0">Status & Total</div>
-                      <div className="w-32 shrink-0">Concluído</div>
-                      <div className="w-28 shrink-0 text-right">Pago</div>
+                      <div className="w-24 shrink-0 text-right pr-1">Ações</div>
                     </div>
                     <div className="divide-y divide-slate-100">
                       {items.map((appt) => renderSingleLineRow(appt))}
@@ -666,8 +658,7 @@ export default function PaymentsPage() {
                 <div className="w-40 shrink-0">Cliente</div>
                 <div className="flex-1 min-w-[170px]">Serviço</div>
                 <div className="w-36 shrink-0">Status & Total</div>
-                <div className="w-32 shrink-0">Concluído</div>
-                <div className="w-28 shrink-0 text-right">Pago</div>
+                <div className="w-24 shrink-0 text-right pr-1">Ações</div>
               </div>
 
               {/* Rows */}

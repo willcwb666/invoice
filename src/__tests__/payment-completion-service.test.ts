@@ -97,7 +97,7 @@ describe("PaymentService Completion & Flexible Payment Toggles", () => {
 
     await PaymentService.listPayments("comp-1");
     expect(findManySpy).toHaveBeenCalled();
-    const queryArg = findManySpy.mock.calls[0][0];
+    const queryArg = findManySpy.mock.calls[0][0] as any;
 
     // Date filter must have lte bounded to today
     expect(queryArg?.where?.date?.lte).toBeDefined();

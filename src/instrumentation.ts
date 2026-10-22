@@ -13,22 +13,16 @@ export async function register() {
     } catch (err) {
       const errMessage = err instanceof Error ? err.message : String(err);
       console.error("[Instrumentation] Error initializing iCloud sync:", err);
-      // Mesma lógica do catch em icloud.ts: console.error não aparece pra
-      // ninguém em produção, então também avisa via notificação (sininho)
-      // quando há empresa cadastrada.
-      try {
-        const { prisma } = await import("@/lib/prisma");
-        const { NotificationService } = await import("@/services/notification-service");
-        const company = await prisma.companyProfile.findFirst();
-        if (company) {
-          await NotificationService.create({
-            companyId: company.id,
-            title: "Falha na inicialização do sistema",
-            message: `A rotina de inicialização (seed/sync automático) falhou: ${errMessage}`,
-            type: "URGENT",
-          });
-        }
-      } catch {}
+      // This is a genuinely top-level failure (ensureExampleInvoicesSeeded,
+      // or ensureICloudCalendarSynced's own findMany/count, throwing before
+      // its per-company loop even starts) - it can't be meaningfully
+      // attributed to any one company. ensureICloudCalendarSynced's internal
+      // per-company try/catch already notifies the RIGHT company for any
+      // failure specific to syncing that one company; this outer catch must
+      // not paper over a whole-batch failure by filing a notification
+      // against "whichever company happens to be first" via an unscoped
+      // findFirst() - that's the exact cross-tenant pattern this task fixes
+      // elsewhere. console.error above is the only signal for this case.
     }
   }
 }

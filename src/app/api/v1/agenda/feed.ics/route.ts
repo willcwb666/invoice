@@ -37,7 +37,15 @@ export async function GET(req: NextRequest) {
     // intentional stand-in for that unresolved case, not a scoping bug we
     // can close with a Prisma query - it needs its own design (e.g. a
     // per-company secret/column) before it can be fixed for real.
-    const companyId = session?.companyId
+    //
+    // Branches on `session` itself, not `session?.companyId`: a session that
+    // exists but somehow lacks a companyId (shouldn't happen for a real
+    // ACTIVE user, but this plan fails closed on that, never falls back to
+    // "company #1") must still go through getTargetCompanyId and throw -
+    // caught below as a 500 - rather than silently falling into the
+    // unscoped findFirst() meant only for the genuinely unauthenticated
+    // token path.
+    const companyId = session
       ? await getTargetCompanyId(session.companyId)
       : (await prisma.companyProfile.findFirst({ select: { id: true } }))?.id;
 

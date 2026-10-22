@@ -1699,21 +1699,34 @@ export async function ensureICloudCalendarSynced(
   activeSyncPromise = (async () => {
     try {
       console.log("[iCloud Auto-Sync] Passo 1: Localizando empresas com sync configurado...");
+
       // ICLOUD_CALENDAR_URL (DEFAULT_ICLOUD_URL) é um único valor global por
-      // deploy — não carrega identidade de empresa nenhuma, então não há
-      // como saber "a qual empresa esse env var pertence" quando há mais de
-      // uma. Por isso ele só é usado como seed único para a PRIMEIRA empresa
-      // (por ordem de criação) que ainda não tem icloudCalendarUrl próprio —
-      // preserva o comportamento original de bootstrap single-tenant (a
-      // única empresa que esse env var podia significar antes de haver
-      // multi-tenant) sem jamais sobrescrever uma URL que outra empresa já
-      // configurou para si, e sem "adivinhar" para qual de várias empresas
-      // sem URL configurada o valor era destinado.
+      // deploy, sem identidade de empresa nenhuma. Com multi-tenant real em
+      // jogo, "a primeira empresa sem icloudCalendarUrl próprio" NÃO é um
+      // proxy seguro para "a empresa original" — pelo contrário: a empresa
+      // original (Renata) já tem icloudCalendarUrl persistido (a própria UI
+      // de Settings/sync grava lá assim que configurado), então esse
+      // heurístico só poderia bater, na prática, com uma empresa NOVA e
+      // totalmente alheia ainda não configurada - gravando o feed pessoal do
+      // iCloud de Renata (e todos os Clients/Appointments que ele importa:
+      // nomes, telefones, endereços, notas) nos dados de uma empresa
+      // completamente diferente. Pior que o bug original (que só tocava UMA
+      // empresa, nunca semeava uma empresa alheia).
+      //
+      // Por isso, o env var só é usado como seed quando o banco tem
+      // EXATAMENTE uma empresa no total - ou seja, só no estado legado de
+      // bootstrap single-tenant (antes de existir qualquer segunda empresa).
+      // A partir de 2+ empresas, o seeding via env var é pulado por completo
+      // para todas elas; cada empresa já pode configurar seu próprio
+      // icloudCalendarUrl via Settings, sem precisar de env var nenhuma.
+      const totalCompanies = await prisma.companyProfile.count();
+      const allowEnvSeed = DEFAULT_ICLOUD_URL && totalCompanies === 1;
+
       const companies = await prisma.companyProfile.findMany({
         where: {
           OR: [
             { icloudCalendarUrl: { not: null } },
-            ...(DEFAULT_ICLOUD_URL ? [{ icloudCalendarUrl: null }] : []),
+            ...(allowEnvSeed ? [{ icloudCalendarUrl: null }] : []),
           ],
         },
         orderBy: { createdAt: "asc" },
@@ -1732,13 +1745,13 @@ export async function ensureICloudCalendarSynced(
         let urlToSync = company.icloudCalendarUrl;
 
         if (!urlToSync) {
-          // Só chega aqui se DEFAULT_ICLOUD_URL está configurado (ver filtro
-          // acima) - aplica no máximo uma vez, à primeira empresa sem URL
-          // própria, pelas razões explicadas acima.
+          // Só chega aqui se allowEnvSeed é true (ver filtro acima), ou
+          // seja, só quando o banco tem exatamente uma empresa - aplica no
+          // máximo uma vez, pelas razões explicadas acima.
           if (appliedDefaultUrlOnce) continue;
           appliedDefaultUrlOnce = true;
           console.log(
-            `[iCloud Auto-Sync] Atribuindo ICLOUD_CALENDAR_URL (bootstrap legado) à empresa ${company.id} (${company.name}).`
+            `[iCloud Auto-Sync] Atribuindo ICLOUD_CALENDAR_URL (bootstrap legado, única empresa no banco) à empresa ${company.id} (${company.name}).`
           );
           await prisma.companyProfile.update({
             where: { id: company.id },

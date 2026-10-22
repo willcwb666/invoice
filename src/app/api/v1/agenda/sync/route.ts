@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { requirePermission } from "@/lib/security/permissions";
 import { getTargetCompanyId } from "@/lib/company-context";
+import { DEFAULT_ADMIN_EMAIL } from "@/lib/security/auth";
 import { prisma } from "@/lib/prisma";
 import {
   syncICloudCalendarForCompany,
@@ -58,6 +59,31 @@ export async function GET(req: NextRequest) {
 
     const configured = Boolean(company?.icloudCalendarUrl);
 
+    // WEBCAL_SECRET is a single global env var (see feed.ics/route.ts and
+    // proxy.ts's identical isWebcalFeed check) with no per-company identity
+    // at all - it cannot be scoped to "this company's token" because there
+    // is no such thing yet. Handing it to ANY company's ADMIN here would let
+    // that admin turn around and pull Renata's (the original/primary
+    // company's) entire calendar - full client PII - via the public
+    // feed.ics?token=... path, completely unrelated to their own company.
+    // Stopgap until per-company secrets exist: only the primary company
+    // (resolved the same way ensureAdminUser/auth.ts identifies it - by the
+    // admin user registered under DEFAULT_ADMIN_EMAIL) ever gets the token
+    // back here. Every other company's admin simply doesn't get the
+    // calendar-app-subscription feature via this field - the already-fixed,
+    // session-authenticated feed.ics branch still works fine for them
+    // through a logged-in browser.
+    let webcalToken: string | null = null;
+    if (session.role === "ADMIN" && process.env.WEBCAL_SECRET) {
+      const primaryAdmin = await prisma.user.findUnique({
+        where: { email: DEFAULT_ADMIN_EMAIL.toLowerCase() },
+        select: { companyId: true },
+      });
+      if (primaryAdmin?.companyId && primaryAdmin.companyId === companyId) {
+        webcalToken = process.env.WEBCAL_SECRET;
+      }
+    }
+
     return NextResponse.json(
       {
         configured,
@@ -65,13 +91,7 @@ export async function GET(req: NextRequest) {
         syncedCount,
         lastSyncedAt: company?.lastICloudSyncAt || lastSyncAppt?.updatedAt || company?.updatedAt || null,
         status: configured ? "SYNCHRONIZED" : "NOT_CONFIGURED",
-        // This is the same secret proxy.ts/feed.ics/route.ts accept as a
-        // bypass-auth token for the outbound webcal subscription URL — holding
-        // it grants permanent, unauthenticated access to every client's name,
-        // phone, address and notes via the .ics feed, with no way to revoke it
-        // short of rotating WEBCAL_SECRET itself. Only ADMIN gets to see it;
-        // "agenda:read" alone (FINANCIAL/OPERATOR/VIEWER) is not enough.
-        webcalToken: session.role === "ADMIN" ? process.env.WEBCAL_SECRET || null : null,
+        webcalToken,
       },
       { headers: NO_CACHE_HEADERS }
     );

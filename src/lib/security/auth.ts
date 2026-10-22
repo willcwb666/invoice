@@ -13,7 +13,7 @@ import {
 
 export * from "./tokens";
 
-const DEFAULT_ADMIN_EMAIL = "renatamatoz@gmail.com";
+export const DEFAULT_ADMIN_EMAIL = "renatamatoz@gmail.com";
 const DEFAULT_ADMIN_NAME = "Renata Matos de Oliveira";
 
 /**

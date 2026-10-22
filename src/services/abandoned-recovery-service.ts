@@ -2,9 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { sendAbandonedRecoveryEmail } from "@/lib/email";
 import crypto from "crypto";
 
-export async function processAbandonedEstimates() {
+export async function processAbandonedEstimates(companyId: string) {
   // 1. Obter perfil da empresa com as configurações ativas
-  const company = await prisma.companyProfile.findFirst({
+  const company = await prisma.companyProfile.findUnique({
+    where: { id: companyId },
     include: { addresses: true },
   });
 
@@ -91,8 +92,8 @@ export async function processAbandonedEstimates() {
   return { processed: sentCount, totalFound: abandonedEstimates.length };
 }
 
-export async function sendTestRecoveryEmail(targetEmail: string) {
-  const company = await prisma.companyProfile.findFirst();
+export async function sendTestRecoveryEmail(targetEmail: string, companyId: string) {
+  const company = await prisma.companyProfile.findUnique({ where: { id: companyId } });
   if (!company) throw new Error("Perfil da empresa não encontrado.");
 
   const discountVal = Number(company.abandonedRecoveryDiscount) || 10;

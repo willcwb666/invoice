@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
 import { requirePermission } from "@/lib/security/permissions";
+import { getTargetCompanyId } from "@/lib/company-context";
 import { prisma } from "@/lib/prisma";
 import {
   syncICloudCalendarForCompany,
@@ -28,7 +29,9 @@ export async function GET(req: NextRequest) {
   try {
     await ensureExampleInvoicesSeeded();
 
-    const company = await prisma.companyProfile.findFirst({
+    const companyId = await getTargetCompanyId(session.companyId);
+    const company = await prisma.companyProfile.findUnique({
+      where: { id: companyId },
       select: {
         id: true,
         icloudCalendarUrl: true,
@@ -94,6 +97,7 @@ export async function POST(req: NextRequest) {
 
   const check = await requirePermission(req, "agenda", "update");
   if (check.response) return check.response;
+  const { session } = check;
 
   try {
     let body: { icloudUrl?: string; calendarUrl?: string } = {};
@@ -104,11 +108,10 @@ export async function POST(req: NextRequest) {
       body = {};
     }
 
-    let company = await prisma.companyProfile.findFirst();
-    if (!company) {
-      await ensureExampleInvoicesSeeded();
-      company = await prisma.companyProfile.findFirst();
-    }
+    const companyId = await getTargetCompanyId(session.companyId);
+    const company = await prisma.companyProfile.findUnique({
+      where: { id: companyId },
+    });
 
     if (!company) {
       return NextResponse.json(

@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getTargetCompanyId } from "@/lib/company-context";
 import { NotificationService } from "@/services/notification-service";
 import { getSessionUser } from "@/lib/security/auth";
 
 export async function GET(req: NextRequest) {
   try {
     const user = await getSessionUser(req);
-    const company = await prisma.companyProfile.findFirst({ select: { id: true } });
+    const companyId = await getTargetCompanyId(user?.companyId);
+    const company = await prisma.companyProfile.findUnique({
+      where: { id: companyId },
+      select: { id: true },
+    });
     if (!company) {
       return NextResponse.json({ error: "Empresa não encontrada" }, { status: 404 });
     }
@@ -38,7 +43,11 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const user = await getSessionUser(req);
-    const company = await prisma.companyProfile.findFirst({ select: { id: true } });
+    const companyId = await getTargetCompanyId(user?.companyId);
+    const company = await prisma.companyProfile.findUnique({
+      where: { id: companyId },
+      select: { id: true },
+    });
     if (!company) {
       return NextResponse.json({ error: "Empresa não encontrada" }, { status: 404 });
     }
@@ -52,7 +61,10 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (id) {
-      await NotificationService.markAsRead(id);
+      const updated = await NotificationService.markAsRead(id, company.id);
+      if (!updated) {
+        return NextResponse.json({ error: "Notificação não encontrada" }, { status: 404 });
+      }
       return NextResponse.json({ success: true, message: "Notificação marcada como lida" });
     }
 

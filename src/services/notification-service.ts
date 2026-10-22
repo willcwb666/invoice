@@ -77,14 +77,18 @@ export class NotificationService {
   }
 
   /**
-   * Marca uma notificação individual como lida
+   * Marca uma notificação individual como lida. Escopado por companyId
+   * para impedir que uma empresa marque como lida uma notificação de
+   * outra (IDOR) - updateMany retorna count 0 (sem lançar) quando o id
+   * pertence a outra empresa, o que é tratado como "não encontrada".
    */
-  static async markAsRead(id: string) {
+  static async markAsRead(id: string, companyId: string) {
     try {
-      return await prisma.notification.update({
-        where: { id },
+      const result = await prisma.notification.updateMany({
+        where: { id, companyId },
         data: { read: true },
       });
+      return result.count > 0 ? result : null;
     } catch {
       return null;
     }

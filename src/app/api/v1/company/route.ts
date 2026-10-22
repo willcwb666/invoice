@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getTargetCompanyId } from "@/lib/company-context";
 import { ensureExampleInvoicesSeeded } from "@/lib/seed-data";
 import { requirePermission } from "@/lib/security/permissions";
 import { updateCompanySchema } from "@/lib/validations/company";
@@ -10,7 +11,9 @@ export async function GET(req: NextRequest) {
 
   try {
     await ensureExampleInvoicesSeeded();
-    const company = await prisma.companyProfile.findFirst({
+    const companyId = await getTargetCompanyId(check.session.companyId);
+    const company = await prisma.companyProfile.findUnique({
+      where: { id: companyId },
       include: {
         addresses: {
           orderBy: { isDefault: "desc" },
@@ -43,12 +46,10 @@ export async function PATCH(req: NextRequest) {
     }
     const data = parsed.data;
 
-    let company = await prisma.companyProfile.findFirst();
-
-    if (!company) {
-      await ensureExampleInvoicesSeeded();
-      company = await prisma.companyProfile.findFirst();
-    }
+    const companyId = await getTargetCompanyId(check.session.companyId);
+    const company = await prisma.companyProfile.findUnique({
+      where: { id: companyId },
+    });
 
     if (!company) {
       return NextResponse.json(

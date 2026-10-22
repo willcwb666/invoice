@@ -50,6 +50,8 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [signupName, setSignupName] = useState("");
 
   // Catch errors or info forwarded via searchParams (e.g. from OAuth callback)
   useEffect(() => {
@@ -121,12 +123,58 @@ function LoginForm() {
 
       // Brief delay for visual confirmation before redirect
       setTimeout(() => {
-        const destination = from.startsWith("/") && from !== "/login" ? from : "/";
+        const destination =
+          data.user?.status === "PENDING_ONBOARDING"
+            ? "/onboarding"
+            : from.startsWith("/") && from !== "/login"
+            ? from
+            : "/";
         router.push(destination);
         router.refresh();
       }, 500);
     } catch {
       showToast("Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.", "error");
+      setLoading(false);
+    }
+  };
+
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!signupName || !email || !password) {
+      showToast("Por favor, preencha nome, e-mail e senha.", "error");
+      return;
+    }
+    if (password.length < 6) {
+      showToast("A senha deve ter pelo menos 6 caracteres.", "error");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/v1/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: signupName.trim(),
+          email: email.trim(),
+          password,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(data.error || "Não foi possível criar sua conta.", "error");
+        setLoading(false);
+        return;
+      }
+
+      setSuccess(true);
+      showToast("Conta criada! Vamos configurar sua empresa...", "success");
+      setTimeout(() => {
+        router.push("/onboarding");
+        router.refresh();
+      }, 500);
+    } catch {
+      showToast("Não foi possível conectar ao servidor. Verifique sua conexão.", "error");
       setLoading(false);
     }
   };
@@ -176,7 +224,23 @@ function LoginForm() {
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={mode === "login" ? handleSubmit : handleSignup} className="space-y-4">
+        {mode === "signup" && (
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700">
+              Seu Nome
+            </label>
+            <input
+              type="text"
+              required
+              autoFocus
+              value={signupName}
+              onChange={(e) => setSignupName(e.target.value)}
+              placeholder="Nome completo"
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+            />
+          </div>
+        )}
         <div className="space-y-1.5">
           <label className="block text-xs font-bold text-slate-700">
             E-mail de Acesso
@@ -226,19 +290,21 @@ function LoginForm() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between pt-1">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 accent-indigo-600 cursor-pointer"
-            />
-            <span className="text-xs text-slate-600 font-medium">
-              Lembrar-me neste dispositivo
-            </span>
-          </label>
-        </div>
+        {mode === "login" && (
+          <div className="flex items-center justify-between pt-1">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 accent-indigo-600 cursor-pointer"
+              />
+              <span className="text-xs text-slate-600 font-medium">
+                Lembrar-me neste dispositivo
+              </span>
+            </label>
+          </div>
+        )}
 
         <button
           type="submit"
@@ -247,12 +313,25 @@ function LoginForm() {
         >
           {loading ? (
             <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          ) : (
+          ) : mode === "login" ? (
             <>
               <span>Entrar no Sistema</span>
               <ArrowRight className="w-4 h-4" />
             </>
+          ) : (
+            <>
+              <span>Criar Conta</span>
+              <ArrowRight className="w-4 h-4" />
+            </>
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMode(mode === "login" ? "signup" : "login")}
+          className="w-full text-center text-[11px] text-slate-500 hover:text-indigo-600 font-semibold transition-colors cursor-pointer"
+        >
+          {mode === "login" ? "Não tem conta? Criar conta" : "Já tem conta? Entrar"}
         </button>
       </form>
 

@@ -3,19 +3,6 @@ import { BUSINESS_TIMEZONE, zonedPartsFromUtc, zonedTimeToUtc } from "@/lib/cale
 
 export class CompanyService {
   /**
-   * Obtém o perfil da empresa com endereços cadastrados
-   */
-  static async getProfile() {
-    return prisma.companyProfile.findFirst({
-      include: {
-        addresses: {
-          orderBy: { isDefault: "desc" },
-        },
-      },
-    });
-  }
-
-  /**
    * Obtém o endereço padrão vigente (Evans) ou histórico (Greeley)
    */
   static async getDefaultAddress(companyId: string): Promise<string> {

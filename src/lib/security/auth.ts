@@ -102,13 +102,20 @@ export async function ensureAdminUser() {
 }
 
 /**
- * Registers a new user via the public, password-based registration form.
- * Self-reported email is NOT proof of ownership, so this never grants
- * ADMIN automatically — every new self-registration starts as OPERATOR
- * and PENDING_APPROVAL, awaiting an existing admin's approval. The only
- * account allowed to bootstrap as ADMIN is provisioned by ensureAdminUser()
- * at server startup. Callers with an authenticated ADMIN session (see
- * /api/v1/users) may still pass an explicit role/status.
+ * Registers a new user, either via the public, password-based registration
+ * form or by an authenticated ADMIN adding a teammate to their own company
+ * (see POST /api/v1/users).
+ *
+ * Self-reported email is NOT proof of ownership, so a public self-
+ * registration (no companyId passed) is never auto-elevated and never
+ * joins an existing company: it always starts as OPERATOR / PENDING_ONBOARDING,
+ * with no company at all, pending the /onboarding wizard that creates its
+ * own brand-new company. The only account allowed to bootstrap as ADMIN is
+ * provisioned by ensureAdminUser() at server startup.
+ *
+ * Callers with an authenticated ADMIN session passing an explicit companyId
+ * (adding a teammate directly) may also pass an explicit role/status,
+ * defaulting to OPERATOR / ACTIVE.
  */
 export async function registerUser({
   email,

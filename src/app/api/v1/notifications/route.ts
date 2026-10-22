@@ -7,6 +7,9 @@ import { getSessionUser } from "@/lib/security/auth";
 export async function GET(req: NextRequest) {
   try {
     const user = await getSessionUser(req);
+    if (!user) {
+      return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+    }
     const companyId = await getTargetCompanyId(user?.companyId);
     const company = await prisma.companyProfile.findUnique({
       where: { id: companyId },
@@ -43,6 +46,9 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const user = await getSessionUser(req);
+    if (!user) {
+      return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+    }
     const companyId = await getTargetCompanyId(user?.companyId);
     const company = await prisma.companyProfile.findUnique({
       where: { id: companyId },

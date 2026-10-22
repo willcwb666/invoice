@@ -18,6 +18,10 @@ export class ClientService {
         city: true,
         state: true,
         zipCode: true,
+        bedrooms: true,
+        bathrooms: true,
+        squareFeet: true,
+        propertyType: true,
         billingType: true,
         notes: true,
         createdAt: true,
@@ -57,7 +61,7 @@ export class ClientService {
     });
 
     if (existing) {
-      // Se já existe e os novos dados trazem endereço real ou telefone/email faltando, atualiza
+      // Se já existe e os novos dados trazem endereço real ou dimensões faltando, atualiza
       const hasBetterAddress =
         data.address &&
         (!existing.address ||
@@ -66,8 +70,13 @@ export class ClientService {
 
       const hasNewPhone = data.phone && !existing.phone;
       const hasNewEmail = data.email && !existing.email;
+      const hasNewPropertyData =
+        (data.bedrooms !== undefined && !existing.bedrooms) ||
+        (data.bathrooms !== undefined && !existing.bathrooms) ||
+        (data.squareFeet !== undefined && !existing.squareFeet) ||
+        (data.propertyType !== undefined && !existing.propertyType);
 
-      if (hasBetterAddress || hasNewPhone || hasNewEmail) {
+      if (hasBetterAddress || hasNewPhone || hasNewEmail || hasNewPropertyData) {
         return prisma.client.update({
           where: { id: existing.id },
           data: {
@@ -81,6 +90,10 @@ export class ClientService {
               : {}),
             ...(hasNewPhone ? { phone: data.phone } : {}),
             ...(hasNewEmail ? { email: data.email } : {}),
+            ...(data.bedrooms !== undefined ? { bedrooms: data.bedrooms } : {}),
+            ...(data.bathrooms !== undefined ? { bathrooms: data.bathrooms } : {}),
+            ...(data.squareFeet !== undefined ? { squareFeet: data.squareFeet } : {}),
+            ...(data.propertyType !== undefined ? { propertyType: data.propertyType } : {}),
             ...(data.notes && !existing.notes ? { notes: data.notes } : {}),
           },
         });
@@ -99,6 +112,10 @@ export class ClientService {
         city: data.city || null,
         state: data.state || "CO",
         zipCode: data.zipCode || null,
+        bedrooms: data.bedrooms !== undefined ? data.bedrooms : null,
+        bathrooms: data.bathrooms !== undefined ? data.bathrooms : null,
+        squareFeet: data.squareFeet !== undefined ? data.squareFeet : null,
+        propertyType: data.propertyType || null,
         billingType: (data.billingType as any) || "PER_JOB",
         notes: data.notes || null,
       },
@@ -119,6 +136,10 @@ export class ClientService {
         ...(data.city !== undefined ? { city: data.city || null } : {}),
         ...(data.state !== undefined ? { state: data.state || "CO" } : {}),
         ...(data.zipCode !== undefined ? { zipCode: data.zipCode || null } : {}),
+        ...(data.bedrooms !== undefined ? { bedrooms: data.bedrooms } : {}),
+        ...(data.bathrooms !== undefined ? { bathrooms: data.bathrooms } : {}),
+        ...(data.squareFeet !== undefined ? { squareFeet: data.squareFeet } : {}),
+        ...(data.propertyType !== undefined ? { propertyType: data.propertyType } : {}),
         ...(data.billingType ? { billingType: data.billingType as any } : {}),
         ...(data.notes !== undefined ? { notes: data.notes || null } : {}),
       },

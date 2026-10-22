@@ -36,6 +36,10 @@ export const createClientSchema = z.object({
   city: z.string().trim().max(100).optional().or(z.literal("")),
   state: z.string().trim().max(10).optional().or(z.literal("")),
   zipCode: z.string().trim().max(20).optional().or(z.literal("")),
+  bedrooms: z.number().int().min(0).nullable().optional(),
+  bathrooms: z.number().min(0).nullable().optional(),
+  squareFeet: z.number().int().min(0).nullable().optional(),
+  propertyType: z.string().trim().max(100).nullable().optional(),
   billingType: z
     .enum(["CONSOLIDATED_MONTHLY", "PER_JOB"])
     .optional()

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { extractCityFromAddress } from "@/lib/routing/travel-time";
 import { PushService } from "./push-service";
+import { DepartureReminderService } from "./departure-reminder-service";
 
 export interface MorningBriefResult {
   sentCount: number;
@@ -123,6 +124,13 @@ export class MorningBriefService {
           });
 
           sentCount += delivered;
+
+          // Pré-agenda automaticamente os alertas de saída (30 min e 10 min) para o 1º cliente do dia
+          await DepartureReminderService.processLocationUpdate({
+            companyId: comp.id,
+            professionalId: profId,
+          }).catch((err) => console.error("[MorningBriefService] Erro ao pré-agendar saída do 1º cliente:", err));
+
           details.push({
             companyId: comp.id,
             professionalId: profId,

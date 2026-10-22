@@ -156,6 +156,19 @@ export class PushService {
       },
     });
 
+    // Cria também notificação in-app (sino da aplicação)
+    await prisma.notification.create({
+      data: {
+        companyId,
+        professionalId,
+        title: payload.title,
+        message: payload.body,
+        type: payload.data?.type === "DEPARTURE_REMINDER" ? "WARNING" : "INFO",
+        link: payload.data?.url || "/agenda",
+        metadata: (payload.data as any) || {},
+      },
+    }).catch((err) => console.error("[PushService] Erro ao salvar notificação in-app:", err));
+
     if (subscriptions.length === 0) return 0;
 
     const results = await Promise.allSettled(
@@ -193,6 +206,18 @@ export class PushService {
    * Envia transmissão para todos os dispositivos de uma empresa (admins e profissionais)
    */
   static async sendToCompany(companyId: string, payload: PushPayload): Promise<number> {
+    // Cria também notificação in-app (sino da aplicação)
+    await prisma.notification.create({
+      data: {
+        companyId,
+        title: payload.title,
+        message: payload.body,
+        type: "INFO",
+        link: payload.data?.url || "/agenda",
+        metadata: (payload.data as any) || {},
+      },
+    }).catch((err) => console.error("[PushService] Erro ao salvar notificação in-app:", err));
+
     const subscriptions = await prisma.pushSubscription.findMany({
       where: { companyId },
     });

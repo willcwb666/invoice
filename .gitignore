@@ -48,6 +48,7 @@ next-env.d.ts
 
 # generated analysis and agent state
 graphify-out/
+.superpowers/
 .agents/
 .claude-flow/
 .swarm/

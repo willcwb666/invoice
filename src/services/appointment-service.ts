@@ -106,6 +106,7 @@ export class AppointmentService {
           price: new Prisma.Decimal(data.price),
           origin: data.origin,
           billable: data.billable,
+          status: data.status || "SCHEDULED",
           notes: data.notes || null,
           recurrenceRule: "NONE",
           seriesId: null,

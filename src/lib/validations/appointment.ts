@@ -24,6 +24,7 @@ export const createAppointmentSchema = z.object({
   // preenchido - útil para eventos sincronizados do iCloud que não são
   // trabalhos pagos.
   billable: z.boolean().default(true),
+  status: z.enum(["SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]).optional(),
   notes: z.string().trim().max(1000, "Observações muito longas").optional().nullable(),
   recurrenceRule: z
     .enum(["NONE", "WEEKLY", "BIWEEKLY", "EVERY_3_WEEKS", "MONTHLY"])

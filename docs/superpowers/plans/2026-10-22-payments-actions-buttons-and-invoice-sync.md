@@ -35,17 +35,17 @@
 - Modify: `src/__tests__/payment-completion-service.test.ts`
 - Create: `src/__tests__/invoice-appointment-sync.test.ts`
 
-- [ ] **Step 1: Write failing unit tests**
+- [x] **Step 1: Write failing unit tests**
   - In `src/__tests__/payment-completion-service.test.ts`, add test ensuring `PaymentService.listPayments` caps `date` to end of today.
   - In `src/__tests__/invoice-appointment-sync.test.ts`, test:
     - `InvoiceService.updateInvoiceStatus(id, companyId, "PAID")` updates linked appointments to `paid: true, paidAt: Date`.
     - `InvoiceService.updateInvoiceStatus(id, companyId, "PENDING")` reverts linked appointments to `paid: false, paidAt: null`.
     - `InvoiceService.createInvoice` with `data.status: "PAID"` sets linked appointments to `paid: true`.
 
-- [ ] **Step 2: Run test to make sure it fails**
+- [x] **Step 2: Run test to make sure it fails**
   Run `pnpm test src/__tests__/invoice-appointment-sync.test.ts`.
 
-- [ ] **Step 3: Implement Backend Changes**
+- [x] **Step 3: Implement Backend Changes**
   - In `src/services/payment-service.ts`:
     - Calculate `endOfTodayInDenver`:
       ```ts
@@ -86,10 +86,10 @@
       });
       ```
 
-- [ ] **Step 4: Run tests and verify**
+- [x] **Step 4: Run tests and verify**
   Run `pnpm test src/__tests__/invoice-appointment-sync.test.ts` and `pnpm test`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
   Run `git add src/services/payment-service.ts src/services/invoice-service.ts src/__tests__/` and commit as `feat(payments): cap payments to past/today and sync invoice payment status with appointments`.
 
 ---
@@ -99,7 +99,7 @@
 **Files:**
 - Modify: `src/app/(dashboard)/payments/page.tsx`
 
-- [ ] **Step 1: Replace separate flag columns with "Ações" column using `ActionButton`**
+- [x] **Step 1: Replace separate flag columns with "Ações" column using `ActionButton`**
   In `src/app/(dashboard)/payments/page.tsx`:
   - Import `ActionButton` from `@/components/ui/action-button`.
   - Update header to: `Data - Hora Início | Cliente | Serviço | Status & Total | Ações`.
@@ -126,10 +126,10 @@
       </div>
       ```
 
-- [ ] **Step 2: Verify TypeScript & Tests**
+- [x] **Step 2: Verify TypeScript & Tests**
   Run `pnpm exec tsc --noEmit` and `pnpm test`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
   Run `git add src/app/(dashboard)/payments/page.tsx` and commit as `feat(ui): use ActionButton in unified Ações column on payments page`.
 
 ---
@@ -141,11 +141,11 @@
 - Run: `pnpm build`
 - Git: `git push origin main`
 
-- [ ] **Step 1: Run complete test suite**
+- [x] **Step 1: Run complete test suite**
   Run `pnpm test` and verify 100% pass rate.
 
-- [ ] **Step 2: Run production Next.js build**
+- [x] **Step 2: Run production Next.js build**
   Run `pnpm build` and verify 0 errors.
 
-- [ ] **Step 3: Deploy to Vercel via Git Push**
+- [x] **Step 3: Deploy to Vercel via Git Push**
   Run `git push origin main`.

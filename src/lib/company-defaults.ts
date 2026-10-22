@@ -1,22 +1,21 @@
 /**
- * Valores-padrão de uma CompanyProfile nova (nome, contato, cobrança, agenda).
- * Única fonte da verdade: antes esses mesmos valores apareciam hand-copied em
- * settings/page.tsx (duas vezes - estado inicial do form e fallback ao
- * carregar do banco) e em seed-data.ts, com risco de uma cópia ficar
- * desatualizada em relação às outras.
+ * Valores-padrão de uma CompanyProfile. Dividido em dois conjuntos:
+ *
+ * - GENERIC_COMPANY_DEFAULTS: seguro reaproveitar em QUALQUER empresa nova
+ *   (termos de pagamento genéricos, horário de trabalho, textos de
+ *   recuperação de orçamento abandonado). Usado pelo onboarding
+ *   (POST /api/v1/onboarding/complete) ao criar a empresa de um dono novo.
+ *
+ * - DEFAULT_COMPANY_SETTINGS: os valores de UMA empresa específica (a da
+ *   Renata) - nome, e-mail, telefone, Zelle/Venmo reais dela, assinatura
+ *   dela. Nunca deve ser usado como base pra criar uma empresa nova; é só
+ *   o fallback/estado inicial da tela de Configurações dela mesma e do
+ *   seed de dados de exemplo (seed-data.ts).
  */
-export const DEFAULT_COMPANY_SETTINGS = {
-  name: "Renata Matos de Oliveira",
-  email: "renatamatoz@gmail.com",
-  phone: "9704129406",
+export const GENERIC_COMPANY_DEFAULTS = {
   monthlyRevenueGoal: 6000,
-  paymentMethods:
-    "Zelle: 9704129406\nVenmo: @RenataMatoz\nCheck payable to: Renata Matos de Oliveira",
   terms:
     "Payment is due within 7 days of invoice date. Late payments are subject to a 1.5% monthly finance charge.",
-  signatureUrl: "/signatures/renata-signature.svg",
-  logoUrl: "",
-  icloudCalendarUrl: "",
   icloudSyncWindowDays: 60,
   abandonedRecoveryEnabled: true,
   abandonedRecoveryMinutes: 30,
@@ -32,4 +31,16 @@ export const DEFAULT_COMPANY_SETTINGS = {
   defaultStandardDurationMinutes: 120,
   defaultDeepDurationMinutes: 300,
   recurrenceHorizonMonths: 2,
+};
+
+export const DEFAULT_COMPANY_SETTINGS = {
+  ...GENERIC_COMPANY_DEFAULTS,
+  name: "Renata Matos de Oliveira",
+  email: "renatamatoz@gmail.com",
+  phone: "9704129406",
+  paymentMethods:
+    "Zelle: 9704129406\nVenmo: @RenataMatoz\nCheck payable to: Renata Matos de Oliveira",
+  signatureUrl: "/signatures/renata-signature.svg",
+  logoUrl: "",
+  icloudCalendarUrl: "",
 };

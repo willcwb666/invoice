@@ -36,6 +36,7 @@ const screenPermissionsSchema = z.object({
   settings: actionFlagsSchema,
   users: actionFlagsSchema,
   reports: actionFlagsSchema.default({ read: false, create: false, update: false, delete: false, export: false }),
+  cleaner: actionFlagsSchema.default({ read: false, create: false, update: false, delete: false, export: false }),
 });
 
 const roleMatrixSchema = z.object({
@@ -43,6 +44,7 @@ const roleMatrixSchema = z.object({
   FINANCIAL: screenPermissionsSchema,
   OPERATOR: screenPermissionsSchema,
   VIEWER: screenPermissionsSchema,
+  CLEANER: screenPermissionsSchema.optional(),
 });
 
 export async function GET(req: NextRequest) {

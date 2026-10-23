@@ -6,9 +6,10 @@
 export interface SessionPayload {
   sub: string; // User ID
   email: string; // User Email
-  role: string; // Role (ADMIN, OPERATOR, FINANCIAL, VIEWER)
+  role: string; // Role (ADMIN, OPERATOR, FINANCIAL, VIEWER, CLEANER)
   name: string; // User Name
   companyId?: string;
+  professionalId?: string | null;
   status?: string; // UserStatus - only populated where the caller needs it
   isSuperAdmin?: boolean;
   exp: number; // Expiration epoch in seconds

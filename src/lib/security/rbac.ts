@@ -1,4 +1,4 @@
-export type Role = "ADMIN" | "FINANCIAL" | "OPERATOR" | "VIEWER";
+export type Role = "ADMIN" | "FINANCIAL" | "OPERATOR" | "VIEWER" | "CLEANER";
 
 export type UserStatus = "PENDING_APPROVAL" | "ACTIVE" | "SUSPENDED";
 
@@ -17,7 +17,8 @@ export type ScreenId =
   | "professionals"
   | "settings"
   | "users"
-  | "reports";
+  | "reports"
+  | "cleaner";
 
 export type ActionId = "read" | "create" | "update" | "delete" | "export";
 
@@ -149,6 +150,13 @@ export const SYSTEM_SCREENS: ScreenDefinition[] = [
     description: "Relatórios consolidados financeiros e operacionais com filtros avançados e exportação.",
     category: "financial",
   },
+  {
+    id: "cleaner",
+    name: "Portal da Diarista",
+    route: "/cleaner",
+    description: "Visão móvel restrita com os trabalhos atribuídos, navegação GPS e instruções de acesso.",
+    category: "operations",
+  },
 ];
 
 export const SYSTEM_ACTIONS: ActionDefinition[] = [
@@ -188,6 +196,13 @@ export const ROLE_DEFINITIONS: Record<Role, RoleDefinition> = {
     description: "Acesso de somente leitura para consulta geral, sem permissão de alteração.",
     scope: "Consulta e Visualização Básica",
   },
+  CLEANER: {
+    id: "CLEANER",
+    name: "Diarista / Limpeza",
+    badgeColor: "bg-teal-50 text-teal-700 border-teal-200",
+    description: "Visualiza exclusivamente os atendimentos atribuídos a ela no dia, rota GPS e instruções de acesso, com blindagem total de faturamento.",
+    scope: "Acesso restrito à tela /cleaner e Meu Perfil",
+  },
 };
 
 export type RolePermissionsMatrix = Record<Role, Record<ScreenId, Record<ActionId, boolean>>>;
@@ -209,6 +224,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     settings: { read: true, create: true, update: true, delete: true, export: true },
     users: { read: true, create: true, update: true, delete: true, export: true },
     reports: { read: true, create: true, update: true, delete: true, export: true },
+    cleaner: { read: true, create: true, update: true, delete: true, export: true },
   },
   FINANCIAL: {
     dashboard: { read: true, create: false, update: false, delete: false, export: true },
@@ -226,6 +242,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     settings: { read: false, create: false, update: false, delete: false, export: false },
     users: { read: false, create: false, update: false, delete: false, export: false },
     reports: { read: true, create: false, update: false, delete: false, export: true },
+    cleaner: { read: false, create: false, update: false, delete: false, export: false },
   },
   OPERATOR: {
     dashboard: { read: true, create: false, update: false, delete: false, export: false },
@@ -243,6 +260,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     settings: { read: false, create: false, update: false, delete: false, export: false },
     users: { read: false, create: false, update: false, delete: false, export: false },
     reports: { read: true, create: false, update: false, delete: false, export: true },
+    cleaner: { read: true, create: false, update: false, delete: false, export: false },
   },
   VIEWER: {
     dashboard: { read: true, create: false, update: false, delete: false, export: false },
@@ -260,6 +278,25 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMatrix = {
     settings: { read: false, create: false, update: false, delete: false, export: false },
     users: { read: false, create: false, update: false, delete: false, export: false },
     reports: { read: true, create: false, update: false, delete: false, export: true },
+    cleaner: { read: false, create: false, update: false, delete: false, export: false },
+  },
+  CLEANER: {
+    dashboard: { read: false, create: false, update: false, delete: false, export: false },
+    invoices: { read: false, create: false, update: false, delete: false, export: false },
+    estimates: { read: false, create: false, update: false, delete: false, export: false },
+    clients: { read: false, create: false, update: false, delete: false, export: false },
+    appointments: { read: false, create: false, update: false, delete: false, export: false },
+    agenda: { read: false, create: false, update: false, delete: false, export: false },
+    services: { read: false, create: false, update: false, delete: false, export: false },
+    payments: { read: false, create: false, update: false, delete: false, export: false },
+    expenses: { read: false, create: false, update: false, delete: false, export: false },
+    financeiro: { read: false, create: false, update: false, delete: false, export: false },
+    commissions: { read: false, create: false, update: false, delete: false, export: false },
+    professionals: { read: false, create: false, update: false, delete: false, export: false },
+    settings: { read: false, create: false, update: false, delete: false, export: false },
+    users: { read: false, create: false, update: false, delete: false, export: false },
+    reports: { read: false, create: false, update: false, delete: false, export: false },
+    cleaner: { read: true, create: false, update: true, delete: false, export: false },
   },
 };
 

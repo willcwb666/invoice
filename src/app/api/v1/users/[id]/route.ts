@@ -6,8 +6,9 @@ import { z } from "zod";
 const updateUserSchema = z.object({
   name: z.string().trim().min(2).optional(),
   phone: z.string().trim().optional(),
-  role: z.enum(["ADMIN", "FINANCIAL", "OPERATOR", "VIEWER"]).optional(),
+  role: z.enum(["ADMIN", "FINANCIAL", "OPERATOR", "VIEWER", "CLEANER"]).optional(),
   status: z.enum(["PENDING_APPROVAL", "ACTIVE", "SUSPENDED"]).optional(),
+  professionalId: z.string().nullable().optional(),
 });
 
 const ADMIN_WHITELIST = ["renatamatoz@gmail.com", "willcwb666@gmail.com"];
@@ -58,6 +59,7 @@ export async function PATCH(
 
     if (parsed.data.name !== undefined) updates.name = parsed.data.name;
     if (parsed.data.phone !== undefined) updates.phone = parsed.data.phone;
+    if (parsed.data.professionalId !== undefined) (updates as any).professionalId = parsed.data.professionalId;
 
     // Safeguards for administrator accounts
     const isPrimaryAdmin = ADMIN_WHITELIST.includes(targetUser.email.toLowerCase());
@@ -95,6 +97,7 @@ export async function PATCH(
         phone: true,
         role: true,
         status: true,
+        professionalId: true,
         emailVerified: true,
         createdAt: true,
         updatedAt: true,

@@ -9,8 +9,9 @@ const createUserSchema = z.object({
   name: z.string().trim().min(2, "O nome deve ter pelo menos 2 caracteres"),
   phone: z.string().trim().optional(),
   password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres").optional(),
-  role: z.enum(["ADMIN", "FINANCIAL", "OPERATOR", "VIEWER"]).optional().default("OPERATOR"),
+  role: z.enum(["ADMIN", "FINANCIAL", "OPERATOR", "VIEWER", "CLEANER"]).optional().default("OPERATOR"),
   status: z.enum(["PENDING_APPROVAL", "ACTIVE", "SUSPENDED"]).optional().default("ACTIVE"),
+  professionalId: z.string().nullable().optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest) {
         phone: true,
         role: true,
         status: true,
+        professionalId: true,
         emailVerified: true,
         createdAt: true,
         updatedAt: true,
@@ -103,6 +105,14 @@ export async function POST(req: NextRequest) {
       companyId: session.companyId,
     });
 
+    let finalUser = user;
+    if (parsed.data.professionalId) {
+      finalUser = await prisma.user.update({
+        where: { id: user.id },
+        data: { professionalId: parsed.data.professionalId },
+      });
+    }
+
     // Register audit log
     try {
       await prisma.auditLog.create({
@@ -110,11 +120,12 @@ export async function POST(req: NextRequest) {
           userId: session.sub,
           action: "CREATE",
           entity: "User",
-          entityId: user.id,
+          entityId: finalUser.id,
           details: JSON.stringify({
-            email: user.email,
-            role: user.role,
-            status: user.status,
+            email: finalUser.email,
+            role: finalUser.role,
+            status: finalUser.status,
+            professionalId: finalUser.professionalId,
             createdByUser: session.email,
           }),
         },
@@ -128,13 +139,14 @@ export async function POST(req: NextRequest) {
         success: true,
         message: "Usuário cadastrado com sucesso.",
         data: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          phone: user.phone,
-          role: user.role,
-          status: user.status,
-          createdAt: user.createdAt,
+          id: finalUser.id,
+          email: finalUser.email,
+          name: finalUser.name,
+          phone: finalUser.phone,
+          role: finalUser.role,
+          status: finalUser.status,
+          professionalId: finalUser.professionalId,
+          createdAt: finalUser.createdAt,
         },
         isFirstUser,
       },

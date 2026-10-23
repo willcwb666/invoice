@@ -130,7 +130,7 @@ export async function registerUser({
   password?: string;
   name?: string;
   phone?: string;
-  role?: "ADMIN" | "FINANCIAL" | "OPERATOR" | "VIEWER";
+  role?: "ADMIN" | "FINANCIAL" | "OPERATOR" | "VIEWER" | "CLEANER";
   status?: "PENDING_ONBOARDING" | "PENDING_APPROVAL" | "ACTIVE" | "SUSPENDED";
   // Caller's own company (admin-created teammate, see POST /api/v1/users).
   // Omitted entirely for public self-registration - that path creates a
@@ -291,6 +291,7 @@ export async function authenticateCredentials(
         name: user.name || "Usuário",
         role: user.role,
         companyId: user.companyId,
+        professionalId: user.professionalId,
         status: user.status,
       },
     };
@@ -359,6 +360,7 @@ export async function getSessionUser(
           name: u.name || "Usuário",
           role: u.role || "OPERATOR",
           companyId: u.companyId || undefined,
+          professionalId: u.professionalId || null,
           exp: sessionExpires,
           iat: sessionIat,
         },
@@ -381,7 +383,7 @@ export async function getSessionUser(
   try {
     const dbUser = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { status: true, role: true, companyId: true, name: true, isSuperAdmin: true },
+      select: { status: true, role: true, companyId: true, name: true, isSuperAdmin: true, professionalId: true },
     });
 
     if (!dbUser || dbUser.status !== "ACTIVE") {
@@ -395,6 +397,7 @@ export async function getSessionUser(
         role: dbUser.role,
         name: dbUser.name || payload.name,
         companyId: dbUser.companyId ?? payload.companyId,
+        professionalId: dbUser.professionalId ?? payload.professionalId ?? null,
       },
       Boolean(dbUser.isSuperAdmin)
     );

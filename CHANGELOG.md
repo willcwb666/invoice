@@ -37,6 +37,13 @@ Este arquivo documenta o histórico detalhado de todas as funcionalidades implan
 ### 4. Visão da Diarista (Cleaner Portal — Role: CLEANER)
 - **Acesso Móvel Restrito (`/cleaner`):**
   - Tela mobile-first limpa e de alta performance onde a colaboradora visualiza única e exclusivamente suas casas atribuídas no dia selecionado (Hoje, Amanhã ou seletor de datas).
+  - **Correção e Alinhamento de Fuso Horário (America/Denver / Mountain Time):**
+    - Correção do cálculo de janelas de consulta diária (`getDenverDayBounds`), garantindo cobertura exata de 00:00:00 a 23:59:59.999 no horário das Montanhas com suporte automático à transição entre Horário de Verão (MDT UTC-6) e Horário Padrão (MST UTC-7).
+    - Eliminação do deslocamento de data em atendimentos noturnos (`sanitizeAppointment`), evitando que atendimentos após às 18h no Colorado fossem erroneamente exibidos no dia seguinte devido à conversão UTC padrão.
+  - **Suporte a Casas Não Atribuídas e Proprietárias Titulares:**
+    - Inclusão transparente de atendimentos onde nenhum ajudante foi explicitamente escalado (`professionals: []`), permitindo que a proprietária/titular (`isOwner: true`) e os administradores visualizem suas rotas do dia sem ficarem com a lista vazia.
+    - Seletor rápido de rota / diarista para Administradores e Operadores, permitindo alternar facilmente entre "Minhas Casas / Todas" ou filtrar por uma colaboradora específica (`prof-renata`, `prof-willians`, etc.).
+    - Auto-vinculação resiliente entre a conta de usuário (`User`) e o registro operacional (`Professional`) por e-mail ou primeiro nome.
   - **Blindagem Total contra Vazamento Financeiro:**
     - Exclusão absoluta de valores, faturamentos, comissões, relatórios, despesas e faturas tanto na interface gráfica quanto nos payloads sanitizados pelo backend (`CleanerService.sanitizeAppointment`).
     - Matriz RBAC para o perfil `CLEANER` com permissões zeradas para telas financeiras e de gestão.

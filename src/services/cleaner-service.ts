@@ -1,6 +1,44 @@
 import { prisma } from "@/lib/prisma";
 import { AppointmentStatus } from "@prisma/client";
 
+/**
+ * Calculates start (00:00:00.000) and end (23:59:59.999) Date objects
+ * for a YYYY-MM-DD date in America/Denver (Mountain Time), accurately
+ * accounting for Daylight Saving Time (MDT UTC-6 vs MST UTC-7).
+ */
+export function getDenverDayBounds(dateStr: string): { startOfDay: Date; endOfDay: Date } {
+  const noonUtc = new Date(`${dateStr}T12:00:00Z`);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Denver",
+    timeZoneName: "shortOffset",
+  }).formatToParts(noonUtc);
+  const tzPart = parts.find((p) => p.type === "timeZoneName")?.value || "GMT-6";
+  const match = tzPart.match(/GMT([+-])(\d+)(?::(\d+))?/);
+  let offsetStr = "-06:00";
+  if (match) {
+    const sign = match[1];
+    const hours = match[2].padStart(2, "0");
+    const minutes = (match[3] || "00").padStart(2, "0");
+    offsetStr = `${sign}${hours}:${minutes}`;
+  }
+  return {
+    startOfDay: new Date(`${dateStr}T00:00:00.000${offsetStr}`),
+    endOfDay: new Date(`${dateStr}T23:59:59.999${offsetStr}`),
+  };
+}
+
+/**
+ * Returns today's date formatted as YYYY-MM-DD in America/Denver.
+ */
+export function getDenverTodayDateString(date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Denver",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 export interface SanitizedCleanerAppointment {
   id: string;
   date: string;
@@ -84,7 +122,12 @@ export class CleanerService {
       id: appt.id,
       date:
         appt.date instanceof Date
-          ? appt.date.toISOString().split("T")[0]
+          ? new Intl.DateTimeFormat("en-CA", {
+              timeZone: "America/Denver",
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+            }).format(appt.date)
           : String(appt.date).split("T")[0],
       timeStart,
       timeEnd,
@@ -134,22 +177,56 @@ export class CleanerService {
   /**
    * Fetches assigned appointments for a cleaner on a given date.
    * Blinded against financial information.
+   * Accurately supports Mountain Time daylight-saving boundaries and includes
+   * unassigned appointments when viewing as owner or when requested.
    */
   static async listCleanerAppointments({
     companyId,
     professionalId,
     date,
+    includeUnassigned,
   }: {
     companyId: string;
     professionalId?: string | null;
     date: string;
+    includeUnassigned?: boolean;
   }): Promise<SanitizedCleanerAppointment[]> {
-    if (!professionalId) {
-      return [];
+    let isOwner = false;
+    if (professionalId) {
+      const prof = await prisma.professional.findUnique({
+        where: { id: professionalId },
+        select: { id: true, isOwner: true },
+      });
+      isOwner = Boolean(prof?.isOwner);
     }
 
-    const startOfDay = new Date(`${date}T00:00:00.000Z`);
-    const endOfDay = new Date(`${date}T23:59:59.999Z`);
+    const { startOfDay, endOfDay } = getDenverDayBounds(date);
+
+    const andFilters: any[] = [
+      {
+        OR: [
+          { date: { gte: startOfDay, lte: endOfDay } },
+          { startTime: { gte: startOfDay, lte: endOfDay } },
+        ],
+      },
+    ];
+
+    const shouldIncludeUnassigned = includeUnassigned ?? (isOwner || !professionalId);
+
+    if (shouldIncludeUnassigned) {
+      andFilters.push({
+        OR: [
+          ...(professionalId ? [{ professionals: { some: { professionalId } } }] : []),
+          { professionals: { none: {} } },
+        ],
+      });
+    } else if (professionalId) {
+      andFilters.push({
+        professionals: {
+          some: { professionalId },
+        },
+      });
+    }
 
     const appts = await prisma.appointment.findMany({
       where: {
@@ -157,15 +234,7 @@ export class CleanerService {
         status: {
           not: "CANCELLED",
         },
-        date: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
-        professionals: {
-          some: {
-            professionalId,
-          },
-        },
+        AND: andFilters,
       },
       orderBy: {
         startTime: "asc",
@@ -211,7 +280,8 @@ export class CleanerService {
 
   /**
    * Updates an appointment's operational status (IN_PROGRESS or COMPLETED).
-   * Verifies that the cleaner is assigned to this job unless caller is an admin.
+   * Verifies that the cleaner is assigned to this job unless caller is an admin,
+   * is an owner, or the appointment is unassigned.
    */
   static async updateAppointmentStatus({
     companyId,
@@ -246,7 +316,26 @@ export class CleanerService {
     if (!isAdmin && professionalId) {
       const isAssigned = appt.professionals.some((p) => p.professionalId === professionalId);
       if (!isAssigned) {
-        throw new Error("Você não tem autorização para atualizar este atendimento.");
+        const prof = await prisma.professional.findUnique({
+          where: { id: professionalId },
+          select: { isOwner: true },
+        });
+        const isOwner = Boolean(prof?.isOwner);
+        const isUnassigned = appt.professionals.length === 0;
+
+        if (!isOwner && !isUnassigned) {
+          throw new Error("Você não tem autorização para atualizar este atendimento.");
+        }
+
+        // If unassigned house is started by a cleaner, automatically associate them
+        if (isUnassigned) {
+          await prisma.appointmentProfessional.create({
+            data: {
+              appointmentId,
+              professionalId,
+            },
+          }).catch(() => {});
+        }
       }
     }
 

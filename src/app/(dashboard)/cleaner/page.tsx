@@ -90,11 +90,38 @@ interface WeatherInfo {
   warning?: string | null;
 }
 
+function getDenverTodayDateString(): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Denver",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().split("T")[0];
+  }
+}
+
+function offsetDate(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d + days, 12, 0, 0));
+  return date.toISOString().split("T")[0];
+}
+
 export default function CleanerPortalPage() {
   const { user, isCleaner, isAdmin, isOperator } = useCurrentUser();
-  const [selectedDate, setSelectedDate] = useState(() => {
-    return new Date().toISOString().split("T")[0];
-  });
+  const [selectedDate, setSelectedDate] = useState(() => getDenverTodayDateString());
+  const [selectedCleanerId, setSelectedCleanerId] = useState<string>("all");
+  const [allProfessionals, setAllProfessionals] = useState<
+    Array<{ id: string; name: string; isOwner: boolean; color: string | null }>
+  >([]);
+  const [currentProfessional, setCurrentProfessional] = useState<{
+    id: string;
+    name: string;
+    isOwner: boolean;
+  } | null>(null);
+  const [isAdminView, setIsAdminView] = useState(false);
   const [appointments, setAppointments] = useState<CleanerAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -115,31 +142,43 @@ export default function CleanerPortalPage() {
   const [activePhotoAppt, setActivePhotoAppt] = useState<CleanerAppointment | null>(null);
   const [activeEnRouteAppt, setActiveEnRouteAppt] = useState<CleanerAppointment | null>(null);
 
-  const fetchCleanerData = useCallback(async (dateStr: string) => {
+  const fetchCleanerData = useCallback(async (dateStr: string, cleanerId?: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/cleaner/appointments?date=${dateStr}`, {
+      const activeCleanerId = cleanerId !== undefined ? cleanerId : selectedCleanerId;
+      const params = new URLSearchParams({ date: dateStr });
+      if (activeCleanerId && activeCleanerId !== "all") {
+        params.set("cleanerId", activeCleanerId);
+      }
+      const res = await fetch(`/api/v1/cleaner/appointments?${params.toString()}`, {
         cache: "no-store",
       });
       if (res.ok) {
         const json = await res.json();
         setAppointments(json.data || []);
+        if (Array.isArray(json.allProfessionals)) {
+          setAllProfessionals(json.allProfessionals);
+        }
+        if (json.professional) {
+          setCurrentProfessional(json.professional);
+        }
+        if (json.isAdminView !== undefined) {
+          setIsAdminView(json.isAdminView);
+        }
       }
     } catch (err) {
       console.error("Erro ao carregar atendimentos da diarista:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedCleanerId]);
 
   useEffect(() => {
-    fetchCleanerData(selectedDate);
-  }, [selectedDate, fetchCleanerData]);
+    fetchCleanerData(selectedDate, selectedCleanerId);
+  }, [selectedDate, selectedCleanerId, fetchCleanerData]);
 
   const handleDateChange = (daysOffset: number) => {
-    const current = new Date(`${selectedDate}T12:00:00.000Z`);
-    current.setDate(current.getDate() + daysOffset);
-    setSelectedDate(current.toISOString().split("T")[0]);
+    setSelectedDate((prev) => offsetDate(prev, daysOffset));
   };
 
   const handleCopy = (text: string, id: string) => {
@@ -169,10 +208,8 @@ export default function CleanerPortalPage() {
     }
   };
 
-  const todayStr = new Date().toISOString().split("T")[0];
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split("T")[0];
+  const todayStr = getDenverTodayDateString();
+  const tomorrowStr = offsetDate(todayStr, 1);
 
   const completedCount = appointments.filter((a) => a.status === "COMPLETED").length;
   const inProgressCount = appointments.filter((a) => a.status === "IN_PROGRESS").length;
@@ -190,14 +227,14 @@ export default function CleanerPortalPage() {
               <h1 className="font-bold text-sm text-slate-900">Portal da Diarista</h1>
               <p className="text-[11px] text-teal-700 font-semibold flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
-                {user?.name || "Colaboradora"}
+                {currentProfessional?.name || user?.name || "Colaboradora"}
               </p>
             </div>
           </div>
 
           <button
             type="button"
-            onClick={() => fetchCleanerData(selectedDate)}
+            onClick={() => fetchCleanerData(selectedDate, selectedCleanerId)}
             className="w-8 h-8 rounded-lg border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-600 transition-colors cursor-pointer"
             title="Atualizar"
           >
@@ -207,6 +244,28 @@ export default function CleanerPortalPage() {
       </header>
 
       <main className="max-w-2xl mx-auto p-4 sm:p-6 space-y-4">
+        {/* Cleaner / Route Selector for Admins & Operators */}
+        {allProfessionals.length > 0 && (isAdmin || isOperator || isAdminView) && (
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-3 shadow-xs flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+              <Users className="w-4 h-4 text-teal-600 shrink-0" />
+              <span>Colaboradora / Roteiro:</span>
+            </div>
+            <select
+              value={selectedCleanerId}
+              onChange={(e) => setSelectedCleanerId(e.target.value)}
+              className="text-xs font-bold text-teal-900 bg-teal-50 border border-teal-200 rounded-xl px-3 py-1.5 focus:outline-hidden cursor-pointer"
+            >
+              <option value="all">⭐ Minhas Casas / Todas</option>
+              {allProfessionals.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} {p.isOwner ? "(Titular)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Date Selector Navigation */}
         <div className="bg-white rounded-2xl border border-slate-200/90 p-3 shadow-xs space-y-2.5">
           <div className="flex items-center justify-between gap-2">

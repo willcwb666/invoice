@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { hasPermission } from "@/lib/security/rbac";
-import { CleanerService } from "@/services/cleaner-service";
+import {
+  CleanerService,
+  getDenverDayBounds,
+  getDenverTodayDateString,
+} from "@/services/cleaner-service";
 
 describe("Cleaner RBAC & Zero Financial Exposure", () => {
   it("enforces CLEANER role cannot access financial screens", () => {
@@ -99,5 +103,36 @@ describe("Cleaner RBAC & Zero Financial Exposure", () => {
     expect(sanitized.checklists).toHaveLength(1);
     expect(sanitized.photos).toHaveLength(1);
     expect(sanitized.team[0].name).toBe("Renata");
+  });
+
+  it("accurately computes Mountain Time day bounds accounting for daylight saving", () => {
+    // October is MDT (UTC-6)
+    const boundsOct = getDenverDayBounds("2026-10-22");
+    expect(boundsOct.startOfDay.toISOString()).toBe("2026-10-22T06:00:00.000Z");
+    expect(boundsOct.endOfDay.toISOString()).toBe("2026-10-23T05:59:59.999Z");
+
+    // January is MST (UTC-7)
+    const boundsJan = getDenverDayBounds("2026-01-15");
+    expect(boundsJan.startOfDay.toISOString()).toBe("2026-01-15T07:00:00.000Z");
+    expect(boundsJan.endOfDay.toISOString()).toBe("2026-01-16T06:59:59.999Z");
+  });
+
+  it("formats appointment dates and times accurately in Denver timezone without next-day drift", () => {
+    // 8:00 PM MDT on Oct 22 is 02:00 UTC on Oct 23
+    const lateEvening = new Date("2026-10-23T02:00:00.000Z");
+    const raw = {
+      id: "appt_evening",
+      date: lateEvening,
+      startTime: lateEvening,
+      endTime: new Date("2026-10-23T04:00:00.000Z"),
+      status: "SCHEDULED",
+      client: { name: "Evening Client" },
+      professionals: [],
+    };
+
+    const sanitized = CleanerService.sanitizeAppointment(raw as any);
+    expect(sanitized.date).toBe("2026-10-22");
+    expect(sanitized.timeStart).toBe("20:00");
+    expect(sanitized.timeEnd).toBe("22:00");
   });
 });

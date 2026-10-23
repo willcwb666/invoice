@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/security/permissions";
-import { CleanerService } from "@/services/cleaner-service";
+import { CleanerService, getDenverTodayDateString } from "@/services/cleaner-service";
 import { prisma } from "@/lib/prisma";
 import { getTargetCompanyId } from "@/lib/company-context";
 
@@ -15,46 +15,91 @@ export async function GET(req: NextRequest) {
   try {
     const companyId = await getTargetCompanyId(session.companyId);
 
-    // Resolve professionalId
+    // 1. Resolve professionalId from session or DB
     let professionalId = session.professionalId;
+    let dbUser: any = null;
     if (!professionalId) {
-      // Check user record
-      const dbUser = await prisma.user.findUnique({
+      dbUser = await prisma.user.findUnique({
         where: { id: session.sub },
-        select: { professionalId: true },
+        select: { id: true, professionalId: true, email: true, name: true },
       });
       professionalId = dbUser?.professionalId;
     }
 
-    // If still not linked and user is an admin or operator, allow querying by ?cleanerId=
-    const cleanerIdParam = req.nextUrl.searchParams.get("cleanerId");
-    if ((session.role === "ADMIN" || session.role === "OPERATOR") && cleanerIdParam) {
-      professionalId = cleanerIdParam;
-    } else if (!professionalId && (session.role === "ADMIN" || session.role === "OPERATOR")) {
-      // Fallback for admin preview: pick first active professional in company
-      const firstProf = await prisma.professional.findFirst({
-        where: { companyId, active: true },
-        orderBy: { name: "asc" },
+    // Auto-link fallback if professionalId is still null
+    if (!professionalId && (session.email || dbUser?.email)) {
+      const email = session.email || dbUser?.email;
+      const firstName = (session.name || dbUser?.name || "").split(" ")[0];
+      const matchedProf = await prisma.professional.findFirst({
+        where: {
+          companyId,
+          OR: [
+            ...(email ? [{ email }] : []),
+            ...(firstName ? [{ name: { contains: firstName, mode: "insensitive" as const } }] : []),
+          ],
+        },
       });
-      if (firstProf) professionalId = firstProf.id;
+      if (matchedProf) {
+        professionalId = matchedProf.id;
+        await prisma.user
+          .update({
+            where: { id: session.sub },
+            data: { professionalId: matchedProf.id },
+          })
+          .catch(() => {});
+      }
     }
 
-    // Default to today in YYYY-MM-DD
-    const dateParam = req.nextUrl.searchParams.get("date");
-    const todayStr = new Date().toISOString().split("T")[0];
-    const targetDate = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : todayStr;
+    // 2. Handle Admin/Operator preview and cleaner selector
+    const isAdminOrOperator = session.role === "ADMIN" || session.role === "OPERATOR";
+    const cleanerIdParam = req.nextUrl.searchParams.get("cleanerId");
 
+    let targetProfessionalId: string | null = professionalId || null;
+    let includeUnassigned = false;
+
+    if (isAdminOrOperator) {
+      if (cleanerIdParam === "all") {
+        targetProfessionalId = null;
+        includeUnassigned = true;
+      } else if (cleanerIdParam) {
+        targetProfessionalId = cleanerIdParam;
+        includeUnassigned = false;
+      } else {
+        // Default for admin/operator: if no cleaner specified, show own + unassigned houses
+        includeUnassigned = true;
+      }
+    } else {
+      includeUnassigned = false;
+    }
+
+    // 3. Default to today in America/Denver (YYYY-MM-DD)
+    const dateParam = req.nextUrl.searchParams.get("date");
+    const denverToday = getDenverTodayDateString();
+    const targetDate = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : denverToday;
+
+    // 4. Query sanitized appointments
     const appointments = await CleanerService.listCleanerAppointments({
       companyId,
-      professionalId,
+      professionalId: targetProfessionalId,
       date: targetDate,
+      includeUnassigned,
     });
 
+    // 5. Fetch current cleaner info & all active professionals for switcher
     let professionalInfo = null;
-    if (professionalId) {
+    if (targetProfessionalId) {
       professionalInfo = await prisma.professional.findUnique({
-        where: { id: professionalId },
-        select: { id: true, name: true, phone: true, color: true },
+        where: { id: targetProfessionalId },
+        select: { id: true, name: true, phone: true, color: true, isOwner: true },
+      });
+    }
+
+    let allProfessionals: Array<{ id: string; name: string; isOwner: boolean; color: string | null }> = [];
+    if (isAdminOrOperator) {
+      allProfessionals = await prisma.professional.findMany({
+        where: { companyId, active: true },
+        select: { id: true, name: true, isOwner: true, color: true },
+        orderBy: { name: "asc" },
       });
     }
 
@@ -63,6 +108,8 @@ export async function GET(req: NextRequest) {
       data: appointments,
       date: targetDate,
       professional: professionalInfo,
+      allProfessionals,
+      isAdminView: isAdminOrOperator,
     });
   } catch (error: any) {
     console.error("Erro ao listar atendimentos da diarista:", error);

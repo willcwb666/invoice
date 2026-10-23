@@ -110,4 +110,46 @@ describe("RentCastService", () => {
     const result = await RentCastService.fetchProperty("123 Error St");
     expect(result).toBeNull();
   });
+
+  it("sanitizes malformed address with duplicate city names and hyphenated states", () => {
+    const raw = "3068 Aries Drive, Loveland, Loveland - CO 80538";
+    const cleaned = RentCastService.sanitizeAddress(raw);
+    expect(cleaned).toBe("3068 Aries Drive, Loveland, CO 80538");
+  });
+
+  it("retries without zip code when initial query with zip yields no results", async () => {
+    const mockApiResponse = [
+      {
+        bedrooms: 4,
+        bathrooms: 3.5,
+        squareFootage: 3028,
+        propertyType: "Single Family",
+        formattedAddress: "3068 Aries Dr, Loveland, CO 80537",
+      },
+    ];
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => [], // First search with wrong zip (80538) returns empty
+      } as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockApiResponse, // Second search without zip finds the property!
+      } as any);
+
+    const result = await RentCastService.fetchProperty("3068 Aries Drive, Loveland, CO 80538");
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const firstCallUrl = decodeURIComponent(fetchSpy.mock.calls[0][0] as string);
+    const secondCallUrl = decodeURIComponent(fetchSpy.mock.calls[1][0] as string);
+
+    expect(firstCallUrl).toContain("80538");
+    expect(secondCallUrl).not.toContain("80538");
+    expect(result?.bedrooms).toBe(4);
+    expect(result?.squareFeet).toBe(3028);
+  });
 });

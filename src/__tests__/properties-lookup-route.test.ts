@@ -1,12 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 import { GET } from "../app/api/v1/properties/lookup/route";
 import { RentCastService } from "../services/rentcast-service";
 import * as permissionsModule from "../lib/security/permissions";
 
 describe("GET /api/v1/properties/lookup", () => {
+  const originalEnv = process.env.RENTCAST_API_KEY;
+
   beforeEach(() => {
     vi.restoreAllMocks();
+    process.env.RENTCAST_API_KEY = "test-rentcast-key";
     // Default authorized admin session mock
     vi.spyOn(permissionsModule, "requirePermission").mockResolvedValue({
       session: {
@@ -17,6 +20,10 @@ describe("GET /api/v1/properties/lookup", () => {
         companyId: "comp-1",
       },
     } as any);
+  });
+
+  afterEach(() => {
+    process.env.RENTCAST_API_KEY = originalEnv;
   });
 
   it("returns 400 if address param is missing or too short", async () => {

@@ -161,10 +161,13 @@ export function ClientModal({
       showToast("Consultando dados do imóvel na RentCast...", "info", 4000);
 
       try {
-        const fullQueryAddress =
-          addressToQuery.includes(",") || !explicitCity
-            ? addressToQuery
-            : `${addressToQuery}, ${explicitCity}, ${explicitState || "CO"} ${explicitZip || ""}`.trim();
+        const city = explicitCity || formData.city || "Loveland";
+        const cleanStreet = addressToQuery
+          .replace(new RegExp(`,?\\s*${city}\\b`, "i"), "")
+          .trim();
+        const fullQueryAddress = `${cleanStreet || addressToQuery}, ${city}, ${
+          explicitState || formData.state || "CO"
+        } ${explicitZip || formData.zipCode || ""}`.trim();
 
         const res = await fetch(
           `/api/v1/properties/lookup?address=${encodeURIComponent(fullQueryAddress)}`
@@ -176,6 +179,10 @@ export function ClientModal({
         }
 
         const json = await res.json();
+        if (json.error) {
+          showToast(json.error, "warning", 5000);
+          return;
+        }
         if (json.success && json.found && json.data) {
           const prop = json.data;
           setFormData((prev) => ({

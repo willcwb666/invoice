@@ -121,11 +121,20 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     showToast("Consultando dados atualizados na RentCast...", "info", 4000);
 
     try {
-      const fullAddr = `${client.address}, ${client.city || "Greeley"}, ${
+      const city = client.city || "Loveland";
+      const cleanStreet = (client.address || "")
+        .replace(new RegExp(`,?\\s*${city}\\b`, "i"), "")
+        .trim();
+      const fullAddr = `${cleanStreet || client.address}, ${city}, ${
         client.state || "CO"
       } ${client.zipCode || ""}`.trim();
       const res = await fetch(`/api/v1/properties/lookup?address=${encodeURIComponent(fullAddr)}`);
       const json = await res.json();
+
+      if (json.error) {
+        showToast(json.error, "warning", 5000);
+        return;
+      }
 
       if (json.success && json.found && json.data) {
         const prop = json.data;

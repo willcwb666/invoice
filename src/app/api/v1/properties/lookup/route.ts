@@ -20,6 +20,17 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const address = searchParams.get("address");
 
+  if (!process.env.RENTCAST_API_KEY) {
+    return NextResponse.json(
+      {
+        success: false,
+        found: false,
+        error: "A chave RENTCAST_API_KEY não está ativa no ambiente do servidor.",
+      },
+      { status: 200 }
+    );
+  }
+
   if (!address || address.trim().length < 5) {
     return NextResponse.json(
       { error: "Endereço inválido ou muito curto para consulta." },

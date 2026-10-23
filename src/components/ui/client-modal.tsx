@@ -82,60 +82,7 @@ export function ClientModal({
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const suggestionsContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // Initialize or reset session token on open
-  useEffect(() => {
-    if (isOpen) {
-      mapboxSessionTokenRef.current = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}`;
-      if (initialQuery && initialQuery.trim()) {
-        const query = initialQuery.trim();
-        const isLikelyAddress =
-          /^\d+/.test(query) ||
-          /\b(st|street|ave|avenue|dr|drive|rd|road|blvd|lane|ct|court|way|pl)\b/i.test(query);
-        setFormData({
-          name: isLikelyAddress ? "" : query,
-          email: "",
-          phone: "",
-          address: isLikelyAddress ? query : "",
-          city: "Greeley",
-          state: "CO",
-          zipCode: "80634",
-          bedrooms: "",
-          bathrooms: "",
-          squareFeet: "",
-          propertyType: "",
-          billingType: "PER_JOB",
-          entryCode: "",
-          alarmCode: "",
-          pets: "",
-          parkingInstructions: "",
-          notes: "",
-        });
-
-        if (isLikelyAddress) {
-          lookupProperty(query);
-        }
-      } else {
-        resetForm();
-      }
-      setError(null);
-    }
-  }, [isOpen, initialQuery]);
-
-  // Click outside suggestions listener
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        suggestionsContainerRef.current &&
-        !suggestionsContainerRef.current.contains(event.target as Node)
-      ) {
-        setShowSuggestions(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setFormData({
       name: "",
       email: "",
@@ -160,7 +107,7 @@ export function ClientModal({
     setShowSuggestions(false);
     lastQueriedAddressRef.current = "";
     setPropertySource(null);
-  };
+  }, []);
 
   /**
    * Queries RentCast Property API via our internal API route
@@ -226,6 +173,59 @@ export function ClientModal({
     },
     [showToast, formData.city, formData.state, formData.zipCode]
   );
+
+  // Initialize or reset session token on open
+  useEffect(() => {
+    if (isOpen) {
+      mapboxSessionTokenRef.current = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}`;
+      if (initialQuery && initialQuery.trim()) {
+        const query = initialQuery.trim();
+        const isLikelyAddress =
+          /^\d+/.test(query) ||
+          /\b(st|street|ave|avenue|dr|drive|rd|road|blvd|lane|ct|court|way|pl)\b/i.test(query);
+        setFormData({
+          name: isLikelyAddress ? "" : query,
+          email: "",
+          phone: "",
+          address: isLikelyAddress ? query : "",
+          city: "Greeley",
+          state: "CO",
+          zipCode: "80634",
+          bedrooms: "",
+          bathrooms: "",
+          squareFeet: "",
+          propertyType: "",
+          billingType: "PER_JOB",
+          entryCode: "",
+          alarmCode: "",
+          pets: "",
+          parkingInstructions: "",
+          notes: "",
+        });
+
+        if (isLikelyAddress) {
+          lookupProperty(query);
+        }
+      } else {
+        resetForm();
+      }
+      setError(null);
+    }
+  }, [isOpen, initialQuery, lookupProperty, resetForm]);
+
+  // Click outside suggestions listener
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        suggestionsContainerRef.current &&
+        !suggestionsContainerRef.current.contains(event.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   /**
    * Trigger RentCast on address input blur

@@ -101,6 +101,27 @@ export async function POST(req: NextRequest) {
         ? parsed.data.professionalIds
         : await ProfessionalService.getDefaultOwnerProfessionalIds(companyId);
 
+    // Validação de prevenção de sobreposição de horários (a menos que explicitamente permitido)
+    if (!parsed.data.allowConflict) {
+      const conflictResult = await AppointmentService.checkSchedulingConflict({
+        companyId,
+        startTime: parsed.data.startTime,
+        endTime: parsed.data.endTime,
+        professionalIds,
+      });
+
+      if (conflictResult.hasConflict) {
+        return NextResponse.json(
+          {
+            error: "Conflito de horário detectado para este profissional.",
+            conflict: true,
+            conflictingAppointment: conflictResult.conflictingAppointment,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const appointment = await AppointmentService.createAppointment(
       companyId,
       parsed.data,

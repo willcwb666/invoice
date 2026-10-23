@@ -10,6 +10,10 @@ import {
   AppointmentUpdateScope,
   AppointmentDeleteScope,
 } from "@/lib/scheduling/recurrence";
+import {
+  findMultiCleanerConflict,
+  ExistingAppointmentWithProfessionals,
+} from "@/lib/scheduling/conflict";
 import crypto from "crypto";
 
 export class AppointmentService {
@@ -83,6 +87,10 @@ export class AppointmentService {
     }
 
     const location = data.location || client.address;
+    const entryCode = data.entryCode !== undefined ? data.entryCode : client.entryCode;
+    const alarmCode = data.alarmCode !== undefined ? data.alarmCode : client.alarmCode;
+    const pets = data.pets !== undefined ? data.pets : client.pets;
+    const parkingInstructions = data.parkingInstructions !== undefined ? data.parkingInstructions : client.parkingInstructions;
 
     const services = data.serviceIds.length
       ? await prisma.service.findMany({
@@ -108,6 +116,10 @@ export class AppointmentService {
           billable: data.billable,
           status: data.status || "SCHEDULED",
           notes: data.notes || null,
+          entryCode: entryCode || null,
+          alarmCode: alarmCode || null,
+          pets: pets || null,
+          parkingInstructions: parkingInstructions || null,
           recurrenceRule: "NONE",
           seriesId: null,
           recurrenceIndex: 0,
@@ -187,6 +199,10 @@ export class AppointmentService {
           origin: data.origin,
           billable: data.billable,
           notes: data.notes || null,
+          entryCode: entryCode || null,
+          alarmCode: alarmCode || null,
+          pets: pets || null,
+          parkingInstructions: parkingInstructions || null,
           recurrenceRule,
           seriesId,
           recurrenceIndex: occ.index,
@@ -440,6 +456,10 @@ export class AppointmentService {
         ...(data.location !== undefined && { location: data.location }),
         ...(data.price !== undefined && { price: new Prisma.Decimal(data.price) }),
         ...(data.notes !== undefined && { notes: data.notes }),
+        ...(data.entryCode !== undefined && { entryCode: data.entryCode }),
+        ...(data.alarmCode !== undefined && { alarmCode: data.alarmCode }),
+        ...(data.pets !== undefined && { pets: data.pets }),
+        ...(data.parkingInstructions !== undefined && { parkingInstructions: data.parkingInstructions }),
         ...(data.status !== undefined && { status: data.status }),
         ...(data.recurrenceRule !== undefined && { recurrenceRule: data.recurrenceRule }),
         ...(servicesUpdate ? { services: servicesUpdate } : {}),
@@ -620,6 +640,78 @@ export class AppointmentService {
       orderBy: { date: "asc" },
       include: { services: { include: { service: true } } },
     });
+  }
+
+  /**
+   * Verifica se há conflito de horário para os profissionais especificados.
+   */
+  static async checkSchedulingConflict(params: {
+    companyId: string;
+    startTime: Date | string;
+    endTime: Date | string;
+    professionalIds?: string[];
+    excludeAppointmentId?: string;
+  }) {
+    const { companyId, startTime, endTime, professionalIds, excludeAppointmentId } = params;
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) {
+      return { hasConflict: false };
+    }
+
+    const candidates = await prisma.appointment.findMany({
+      where: {
+        companyId,
+        status: { notIn: ["CANCELLED"] },
+        id: excludeAppointmentId ? { not: excludeAppointmentId } : undefined,
+        startTime: { lt: end },
+        endTime: { gt: start },
+      },
+      include: {
+        client: { select: { id: true, name: true } },
+        professionals: {
+          include: {
+            professional: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    const formattedExisting: ExistingAppointmentWithProfessionals[] = candidates.map((c) => ({
+      id: c.id,
+      title: c.title,
+      status: c.status,
+      startTime: c.startTime,
+      endTime: c.endTime,
+      professionalIds: c.professionals.map((p) => p.professionalId),
+      clientName: c.client?.name,
+    }));
+
+    const conflict = findMultiCleanerConflict(
+      { startTime: start, endTime: end, professionalIds },
+      formattedExisting,
+      excludeAppointmentId
+    );
+
+    if (!conflict) {
+      return { hasConflict: false };
+    }
+
+    const matchedDb = candidates.find((c) => c.id === conflict.id);
+    const professionalNames = matchedDb?.professionals.map((p) => p.professional.name) || [];
+
+    return {
+      hasConflict: true,
+      conflictingAppointment: {
+        id: conflict.id,
+        title: conflict.title,
+        startTime: conflict.startTime,
+        endTime: conflict.endTime,
+        clientName: conflict.clientName,
+        professionalNames,
+      },
+    };
   }
 
   /**

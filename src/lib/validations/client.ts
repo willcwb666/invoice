@@ -44,6 +44,10 @@ export const createClientSchema = z.object({
     .enum(["CONSOLIDATED_MONTHLY", "PER_JOB"])
     .optional()
     .default("PER_JOB"),
+  entryCode: z.string().trim().max(100).optional().nullable(),
+  alarmCode: z.string().trim().max(100).optional().nullable(),
+  pets: z.string().trim().max(200).optional().nullable(),
+  parkingInstructions: z.string().trim().max(200).optional().nullable(),
   notes: z.string().trim().max(1000).optional().or(z.literal("")),
 });
 

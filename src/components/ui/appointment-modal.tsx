@@ -20,6 +20,12 @@ import {
   HelpCircle,
   Search,
   Ban,
+  AlertTriangle,
+  Key,
+  Shield,
+  Dog,
+  Car,
+  ChevronUp,
 } from "lucide-react";
 import { ClientModal } from "@/components/ui/client-modal";
 import { ModalShell } from "@/components/ui/modal-shell";
@@ -147,6 +153,17 @@ export function AppointmentModal({
   const [error, setError] = useState<string | null>(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
 
+  // Conflito de horários (Double-Booking Prevention)
+  const [conflictWarning, setConflictWarning] = useState<any | null>(null);
+  const [allowConflict, setAllowConflict] = useState(false);
+
+  // Campos Estruturados de Acesso ao Imóvel
+  const [entryCode, setEntryCode] = useState("");
+  const [alarmCode, setAlarmCode] = useState("");
+  const [pets, setPets] = useState("");
+  const [parkingInstructions, setParkingInstructions] = useState("");
+  const [showAccessFields, setShowAccessFields] = useState(false);
+
   const fetchClients = async () => {
     try {
       const res = await fetch("/api/v1/clients");
@@ -257,6 +274,22 @@ export function AppointmentModal({
       setRecurrenceRule((appointment.recurrenceRule as RecurrenceFrequency) || "NONE");
       setRecurrenceDurationMonths(12);
       setSelectedScope("THIS_AND_FOLLOWING");
+      setEntryCode(appointment.entryCode || appointment.client?.entryCode || "");
+      setAlarmCode(appointment.alarmCode || appointment.client?.alarmCode || "");
+      setPets(appointment.pets || appointment.client?.pets || "");
+      setParkingInstructions(appointment.parkingInstructions || appointment.client?.parkingInstructions || "");
+      setShowAccessFields(Boolean(
+        appointment.entryCode ||
+        appointment.alarmCode ||
+        appointment.pets ||
+        appointment.parkingInstructions ||
+        appointment.client?.entryCode ||
+        appointment.client?.alarmCode ||
+        appointment.client?.pets ||
+        appointment.client?.parkingInstructions
+      ));
+      setConflictWarning(null);
+      setAllowConflict(false);
     } else {
       setSelectedClientId("");
       setSelectedServiceIds([]);
@@ -270,6 +303,13 @@ export function AppointmentModal({
       setLocation("");
       setPrice(0);
       setNotes("");
+      setEntryCode("");
+      setAlarmCode("");
+      setPets("");
+      setParkingInstructions("");
+      setShowAccessFields(false);
+      setConflictWarning(null);
+      setAllowConflict(false);
       setStatus("SCHEDULED");
       setBillable(true);
       setRecurrenceRule("NONE");
@@ -311,6 +351,13 @@ export function AppointmentModal({
         client.state ? `, ${client.state}` : ""
       }${client.zipCode ? ` ${client.zipCode}` : ""}`;
       setLocation(fullAddr);
+    }
+    if (client.entryCode) setEntryCode(client.entryCode);
+    if (client.alarmCode) setAlarmCode(client.alarmCode);
+    if (client.pets) setPets(client.pets);
+    if (client.parkingInstructions) setParkingInstructions(client.parkingInstructions);
+    if (client.entryCode || client.alarmCode || client.pets || client.parkingInstructions) {
+      setShowAccessFields(true);
     }
   };
 
@@ -371,6 +418,52 @@ export function AppointmentModal({
     });
   };
 
+  // Efeito de verificação em tempo real de conflito / double-booking
+  useEffect(() => {
+    if (!isOpen || !date || !startTime || !endTime) {
+      setConflictWarning(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const [year, month, day] = date.split("-").map(Number);
+        const [startHour, startMinute] = startTime.split(":").map(Number);
+        const [endHour, endMinute] = endTime.split(":").map(Number);
+
+        if (isNaN(year) || isNaN(startHour) || isNaN(endHour)) return;
+
+        const startIso = zonedTimeToUtc(year, month - 1, day, startHour, startMinute, 0).toISOString();
+        const endIso = zonedTimeToUtc(year, month - 1, day, endHour, endMinute, 0).toISOString();
+
+        const res = await fetch("/api/v1/appointments/check-conflict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            startTime: startIso,
+            endTime: endIso,
+            professionalIds: selectedProfessionalIds,
+            excludeAppointmentId: appointment?.id,
+          }),
+        });
+
+        if (res.ok) {
+          const result = await res.json();
+          if (result.hasConflict) {
+            setConflictWarning(result.conflictingAppointment);
+          } else {
+            setConflictWarning(null);
+            setAllowConflict(false);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [isOpen, date, startTime, endTime, selectedProfessionalIds, appointment?.id]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedClientId) {
@@ -389,6 +482,11 @@ export function AppointmentModal({
   };
 
   const executeSave = async (scopeToApply: AppointmentUpdateScope) => {
+    if (conflictWarning && !allowConflict) {
+      setError("Conflito de horário detectado para o profissional escalado. Confirme a sobreposição abaixo para prosseguir.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setIsScopeConfirmOpen(false);
@@ -414,6 +512,11 @@ export function AppointmentModal({
         location: location || null,
         price: Number(price),
         notes: notes || null,
+        entryCode: entryCode.trim() || null,
+        alarmCode: alarmCode.trim() || null,
+        pets: pets.trim() || null,
+        parkingInstructions: parkingInstructions.trim() || null,
+        allowConflict,
         billable,
         recurrenceRule,
         recurrenceDurationMonths,
@@ -943,18 +1046,94 @@ export function AppointmentModal({
             )}
           </div>
 
-          {/* 5. Observações Internas (Portão, Pet, etc.) */}
-          <div>
-            <label className="font-bold text-slate-700 block mb-1.5 text-xs">
-              Observações Internas (Portão, Pet, etc.)
-            </label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Instruções de acesso, portão, animais, alarmes, detalhes específicos do trabalho..."
-              className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs resize-none text-xs"
-            />
+          {/* 5. Acesso Estruturado & Observações Internas */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="font-bold text-slate-700 flex items-center gap-1.5 text-xs">
+                <Key className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Instruções de Acesso ao Imóvel (Diarista / GPS)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowAccessFields((prev) => !prev)}
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+              >
+                {showAccessFields ? (
+                  <>
+                    <span>Ocultar detalhes de acesso</span>
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  </>
+                ) : (
+                  <>
+                    <span>Editar códigos de portão/alarme/pets</span>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            </div>
+
+            {showAccessFields && (
+              <div className="p-3 bg-slate-50 border border-slate-200/90 rounded-2xl grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1 text-[11px] flex items-center gap-1">
+                    <Key className="w-3 h-3 text-slate-400" /> Portão / Porta / Lockbox:
+                  </label>
+                  <input
+                    type="text"
+                    value={entryCode}
+                    onChange={(e) => setEntryCode(e.target.value)}
+                    placeholder="Ex: Lockbox #4590, Chave sob o vaso"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1 text-[11px] flex items-center gap-1">
+                    <Shield className="w-3 h-3 text-slate-400" /> Alarme / Desarme:
+                  </label>
+                  <input
+                    type="text"
+                    value={alarmCode}
+                    onChange={(e) => setAlarmCode(e.target.value)}
+                    placeholder="Ex: Código 1234 (espera 30s)"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1 text-[11px] flex items-center gap-1">
+                    <Dog className="w-3 h-3 text-slate-400" /> Animais / Pets:
+                  </label>
+                  <input
+                    type="text"
+                    value={pets}
+                    onChange={(e) => setPets(e.target.value)}
+                    placeholder="Ex: 2 cães dóceis, deixar na lavanderia"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1 text-[11px] flex items-center gap-1">
+                    <Car className="w-3 h-3 text-slate-400" /> Onde Estacionar:
+                  </label>
+                  <input
+                    type="text"
+                    value={parkingInstructions}
+                    onChange={(e) => setParkingInstructions(e.target.value)}
+                    placeholder="Ex: Garagem ou lado esquerdo da rua"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <textarea
+                rows={2}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Observações internas e instruções gerais do trabalho..."
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs resize-none text-xs"
+              />
+            </div>
           </div>
 
           {/* 6. Linha horizontal com 4 colunas: Data | Início | Término | Valor Cobrado ($ USD) * */}
@@ -1214,6 +1393,36 @@ export function AppointmentModal({
                   </option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {/* Aviso de Conflito de Horário / Double-Booking Banner */}
+          {conflictWarning && (
+            <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300/80 text-amber-950 space-y-2 shadow-2xs">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-bold text-xs text-amber-900">
+                    Aviso de Sobreposição de Horários Detectado!
+                  </p>
+                  <p className="text-[11px] text-amber-800 leading-relaxed mt-0.5">
+                    Já existe o atendimento <strong>&quot;{conflictWarning.title}&quot;</strong>
+                    {conflictWarning.clientName ? ` (${conflictWarning.clientName})` : ""} agendado neste mesmo intervalo
+                    {conflictWarning.professionalNames?.length > 0 && (
+                      <span> para o(a) profissional <strong>{conflictWarning.professionalNames.join(", ")}</strong></span>
+                    )}.
+                  </p>
+                </div>
+              </div>
+              <label className="flex items-center gap-2 pt-2 border-t border-amber-200 cursor-pointer text-[11px] font-bold text-amber-900 select-none">
+                <input
+                  type="checkbox"
+                  checked={allowConflict}
+                  onChange={(e) => setAllowConflict(e.target.checked)}
+                  className="w-4 h-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                />
+                <span>Estou ciente da sobreposição e confirmo o agendamento mesmo assim</span>
+              </label>
             </div>
           )}
 

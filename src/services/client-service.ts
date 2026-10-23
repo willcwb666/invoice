@@ -23,6 +23,10 @@ export class ClientService {
         squareFeet: true,
         propertyType: true,
         billingType: true,
+        entryCode: true,
+        alarmCode: true,
+        pets: true,
+        parkingInstructions: true,
         notes: true,
         createdAt: true,
         _count: {
@@ -117,6 +121,10 @@ export class ClientService {
         squareFeet: data.squareFeet !== undefined ? data.squareFeet : null,
         propertyType: data.propertyType || null,
         billingType: (data.billingType as any) || "PER_JOB",
+        entryCode: data.entryCode || null,
+        alarmCode: data.alarmCode || null,
+        pets: data.pets || null,
+        parkingInstructions: data.parkingInstructions || null,
         notes: data.notes || null,
       },
     });
@@ -141,6 +149,10 @@ export class ClientService {
         ...(data.squareFeet !== undefined ? { squareFeet: data.squareFeet } : {}),
         ...(data.propertyType !== undefined ? { propertyType: data.propertyType } : {}),
         ...(data.billingType ? { billingType: data.billingType as any } : {}),
+        ...(data.entryCode !== undefined ? { entryCode: data.entryCode || null } : {}),
+        ...(data.alarmCode !== undefined ? { alarmCode: data.alarmCode || null } : {}),
+        ...(data.pets !== undefined ? { pets: data.pets || null } : {}),
+        ...(data.parkingInstructions !== undefined ? { parkingInstructions: data.parkingInstructions || null } : {}),
         ...(data.notes !== undefined ? { notes: data.notes || null } : {}),
       },
     });

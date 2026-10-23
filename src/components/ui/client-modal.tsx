@@ -15,6 +15,10 @@ import {
   Maximize2,
   Home,
   Sparkles,
+  Key,
+  Shield,
+  Dog,
+  Car,
 } from "lucide-react";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useToast } from "@/components/ui/toast";
@@ -57,6 +61,10 @@ export function ClientModal({
     squareFeet: "" as number | "",
     propertyType: "",
     billingType: "PER_JOB" as "PER_JOB" | "CONSOLIDATED_MONTHLY",
+    entryCode: "",
+    alarmCode: "",
+    pets: "",
+    parkingInstructions: "",
     notes: "",
   });
 
@@ -137,6 +145,10 @@ export function ClientModal({
       squareFeet: "",
       propertyType: "",
       billingType: "PER_JOB",
+      entryCode: "",
+      alarmCode: "",
+      pets: "",
+      parkingInstructions: "",
       notes: "",
     });
     setError(null);
@@ -725,6 +737,64 @@ export function ClientModal({
                 </span>
               </div>
             </button>
+          </div>
+        </div>
+
+        {/* Access Intelligence (Codes, Alarm, Pets, Parking) */}
+        <div className="pt-2 border-t border-slate-100 space-y-2.5">
+          <label className="block text-slate-700 font-semibold mb-1 flex items-center gap-1.5">
+            <Key className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Instruções de Acesso & Segurança (Diarista / GPS)</span>
+          </label>
+          <div className="p-3 bg-slate-50 border border-slate-200/90 rounded-2xl grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1 text-[11px] flex items-center gap-1">
+                <Key className="w-3 h-3 text-slate-400" /> Portão / Porta / Lockbox:
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: Lockbox #4590, Chave sob o vaso"
+                value={formData.entryCode}
+                onChange={(e) => setFormData({ ...formData, entryCode: e.target.value })}
+                className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1 text-[11px] flex items-center gap-1">
+                <Shield className="w-3 h-3 text-slate-400" /> Alarme / Desarme:
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: Código 1234 (espera 30s)"
+                value={formData.alarmCode}
+                onChange={(e) => setFormData({ ...formData, alarmCode: e.target.value })}
+                className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1 text-[11px] flex items-center gap-1">
+                <Dog className="w-3 h-3 text-slate-400" /> Animais / Pets:
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: 2 cães dóceis, deixar na lavanderia"
+                value={formData.pets}
+                onChange={(e) => setFormData({ ...formData, pets: e.target.value })}
+                className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1 text-[11px] flex items-center gap-1">
+                <Car className="w-3 h-3 text-slate-400" /> Onde Estacionar:
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: Garagem ou lado esquerdo da rua"
+                value={formData.parkingInstructions}
+                onChange={(e) => setFormData({ ...formData, parkingInstructions: e.target.value })}
+                className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+              />
+            </div>
           </div>
         </div>
 

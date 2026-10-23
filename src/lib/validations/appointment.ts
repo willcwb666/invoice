@@ -32,6 +32,11 @@ export const createAppointmentSchema = z.object({
   recurrenceDurationMonths: z.number().int().min(1).max(24).optional(),
   professionalIds: z.array(z.string().min(1)).optional(),
   cleaningCategory: z.enum(["STANDARD", "DEEP", "MOVE_IN_OUT", "CUSTOM"]).optional(),
+  entryCode: z.string().trim().max(100).optional().nullable(),
+  alarmCode: z.string().trim().max(100).optional().nullable(),
+  pets: z.string().trim().max(200).optional().nullable(),
+  parkingInstructions: z.string().trim().max(200).optional().nullable(),
+  allowConflict: z.boolean().optional(),
 });
 
 // Full edit of an existing appointment (e.g. clicking one imported from the
@@ -58,6 +63,11 @@ export const updateAppointmentSchema = z.object({
     .default("THIS_ONLY"),
   professionalIds: z.array(z.string().min(1)).optional(),
   cleaningCategory: z.enum(["STANDARD", "DEEP", "MOVE_IN_OUT", "CUSTOM"]).optional(),
+  entryCode: z.string().trim().max(100).optional().nullable(),
+  alarmCode: z.string().trim().max(100).optional().nullable(),
+  pets: z.string().trim().max(200).optional().nullable(),
+  parkingInstructions: z.string().trim().max(200).optional().nullable(),
+  allowConflict: z.boolean().optional(),
 });
 
 export type CreateAppointmentInput = z.infer<typeof createAppointmentSchema>;

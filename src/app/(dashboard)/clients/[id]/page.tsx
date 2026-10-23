@@ -28,6 +28,10 @@ import {
   Sparkles,
   Save,
   RotateCcw,
+  Key,
+  Shield,
+  Dog,
+  Car,
   Loader2,
   Building,
 } from "lucide-react";
@@ -150,6 +154,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         state: client.state || "CO",
         zipCode: client.zipCode || "",
         billingType: client.billingType || "PER_JOB",
+        entryCode: client.entryCode || "",
+        alarmCode: client.alarmCode || "",
+        pets: client.pets || "",
+        parkingInstructions: client.parkingInstructions || "",
         notes: client.notes || "",
         bedrooms: client.bedrooms ?? "",
         bathrooms: client.bathrooms ?? "",
@@ -186,6 +194,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         state: formData.state.trim().toUpperCase() || "CO",
         zipCode: formData.zipCode.trim() || null,
         billingType: formData.billingType,
+        entryCode: formData.entryCode?.trim() || null,
+        alarmCode: formData.alarmCode?.trim() || null,
+        pets: formData.pets?.trim() || null,
+        parkingInstructions: formData.parkingInstructions?.trim() || null,
         notes: formData.notes.trim() || null,
         bedrooms: formData.bedrooms === "" ? null : Number(formData.bedrooms),
         bathrooms: formData.bathrooms === "" ? null : Number(formData.bathrooms),
@@ -228,6 +240,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         state: client.state || "CO",
         zipCode: client.zipCode || "",
         billingType: client.billingType || "PER_JOB",
+        entryCode: client.entryCode || "",
+        alarmCode: client.alarmCode || "",
+        pets: client.pets || "",
+        parkingInstructions: client.parkingInstructions || "",
         notes: client.notes || "",
         bedrooms: client.bedrooms ?? "",
         bathrooms: client.bathrooms ?? "",
@@ -544,7 +560,65 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               </div>
             </div>
 
-            {/* Linha 3: Modelo de Faturamento & Notas de Acesso */}
+            {/* Linha 3: Instruções de Acesso ao Imóvel */}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-2.5">
+              <label className="font-bold text-slate-800 block text-xs flex items-center gap-1.5">
+                <Key className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Instruções Estruturadas de Acesso ao Imóvel (Diarista / GPS)</span>
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1 text-[11px] flex items-center gap-1">
+                    <Key className="w-3 h-3 text-slate-400" /> Portão / Lockbox:
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.entryCode}
+                    onChange={(e) => handleFieldChange("entryCode", e.target.value)}
+                    placeholder="Ex: Lockbox 4590"
+                    className="w-full px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs focus:outline-none focus:border-indigo-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1 text-[11px] flex items-center gap-1">
+                    <Shield className="w-3 h-3 text-slate-400" /> Alarme / Desarme:
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.alarmCode}
+                    onChange={(e) => handleFieldChange("alarmCode", e.target.value)}
+                    placeholder="Ex: 1234 (30s)"
+                    className="w-full px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs focus:outline-none focus:border-indigo-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1 text-[11px] flex items-center gap-1">
+                    <Dog className="w-3 h-3 text-slate-400" /> Animais / Pets:
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.pets}
+                    onChange={(e) => handleFieldChange("pets", e.target.value)}
+                    placeholder="Ex: 2 cães dóceis"
+                    className="w-full px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs focus:outline-none focus:border-indigo-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1 text-[11px] flex items-center gap-1">
+                    <Car className="w-3 h-3 text-slate-400" /> Onde Estacionar:
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.parkingInstructions}
+                    onChange={(e) => handleFieldChange("parkingInstructions", e.target.value)}
+                    placeholder="Ex: Garagem ou rua"
+                    className="w-full px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs focus:outline-none focus:border-indigo-500 font-medium"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Linha 4: Modelo de Faturamento & Notas de Acesso */}
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
               <div className="sm:col-span-4">
                 <label className="font-bold text-slate-700 block mb-1 text-xs">

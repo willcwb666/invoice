@@ -31,6 +31,7 @@ import {
   Repeat,
 } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
+import { SmartNavigationButton } from "@/components/ui/smart-navigation-button";
 import { AppointmentModal } from "@/components/ui/appointment-modal";
 import { AgendaInvoiceModal } from "@/components/ui/agenda-invoice-modal";
 import {
@@ -572,6 +573,7 @@ export default function AgendaPage() {
     <div
       key={appt.id}
       onClick={() => openEditModal(appt)}
+      title={`Horário: ${formatTime(appt.startTime)}${appt.endTime ? ` - ${formatTime(appt.endTime)}` : ""}\nEndereço: ${appt.location || "Sem endereço cadastrado"}`}
       className="p-4 rounded-2xl bg-white border border-slate-200/80 flex flex-col gap-3 shadow-xs hover:shadow-md transition-shadow cursor-pointer"
     >
       <div className="flex items-start justify-between gap-3">
@@ -663,19 +665,9 @@ export default function AgendaPage() {
         )}
         <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
           {appt.location && (
-            <ActionButton
-              icon={<Navigation className="w-3.5 h-3.5" />}
-              tooltip="Navegar no Apple Maps"
-              hoverColor="blue"
-              href={`https://maps.apple.com/?daddr=${encodeURIComponent(appt.location)}`}
-            />
-          )}
-          {appt.location && (
-            <ActionButton
-              icon={<Navigation className="w-3.5 h-3.5 text-emerald-600" />}
-              tooltip="Navegar no Google Maps"
-              hoverColor="green"
-              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(appt.location)}`}
+            <SmartNavigationButton
+              address={appt.location}
+              tooltip="Navegar até endereço"
             />
           )}
           {appt.status !== "COMPLETED" && (
@@ -1079,6 +1071,7 @@ export default function AgendaPage() {
                                     e.stopPropagation();
                                     openEditModal(appt);
                                   }}
+                                  title={`Horário: ${formatTime(appt.startTime)}${appt.endTime ? ` - ${formatTime(appt.endTime)}` : ""}\nEndereço: ${appt.location || "Sem endereço cadastrado"}`}
                                   className={`text-left px-1.5 py-1 rounded-lg text-[10px] font-medium truncate flex items-center justify-between gap-1 border transition-colors cursor-pointer ${
                                     appt.status === "COMPLETED"
                                       ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
@@ -1208,6 +1201,7 @@ export default function AgendaPage() {
                                   e.stopPropagation();
                                   openEditModal(appt);
                                 }}
+                                title={`Horário: ${formatTime(appt.startTime)}${appt.endTime ? ` - ${formatTime(appt.endTime)}` : ""}\nEndereço: ${appt.location || "Sem endereço cadastrado"}`}
                                 className="p-2 rounded-xl bg-white border border-slate-200/80 text-left hover:shadow-xs transition-shadow cursor-pointer space-y-1"
                               >
                                 <div className="flex items-center justify-between">

@@ -19,6 +19,7 @@ import {
   Trash2,
   HelpCircle,
   Search,
+  Ban,
 } from "lucide-react";
 import { ClientModal } from "@/components/ui/client-modal";
 import { ModalShell } from "@/components/ui/modal-shell";
@@ -102,6 +103,16 @@ export function AppointmentModal({
   const clientSearchContainerRef = useRef<HTMLDivElement>(null);
   const [services, setServices] = useState<ServiceOption[]>([]);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const [showExtras, setShowExtras] = useState(false);
+
+  const visibleServices = useMemo(() => {
+    return services.filter((s) => {
+      if (s.type === "EXTRA") {
+        return showExtras || selectedServiceIds.includes(s.id);
+      }
+      return true;
+    });
+  }, [services, showExtras, selectedServiceIds]);
   const [professionals, setProfessionals] = useState<ProfessionalRecord[]>([]);
   const [selectedProfessionalIds, setSelectedProfessionalIds] = useState<string[]>([
     "prof-willians",
@@ -578,7 +589,7 @@ export function AppointmentModal({
             : "Cadastre novos atendimentos avulsos ou séries recorrentes com repetição automática"
         }
         backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
-        panelClassName="w-full max-w-xl bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col"
+        panelClassName="w-full max-w-3xl sm:max-w-4xl bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col"
         iconWrapperClassName="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600"
         closeButtonClassName="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
       >
@@ -613,24 +624,11 @@ export function AppointmentModal({
             </div>
           )}
 
-          {/* Cliente Selector via Campo de Busca por Texto (Nome ou Endereço) */}
+          {/* 1. Cliente Atendido */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="font-bold text-slate-700 block text-xs">
-                Cliente Atendido *
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsClientSearchOpen(false);
-                  setIsClientModalOpen(true);
-                }}
-                className="text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1 cursor-pointer text-xs"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>+ Cadastrar Novo Cliente</span>
-              </button>
-            </div>
+            <label className="font-bold text-slate-700 block text-xs mb-1.5">
+              Cliente Atendido *
+            </label>
 
             {selectedClient ? (
               <div className="p-3.5 rounded-2xl bg-indigo-50/80 border border-indigo-200/90 flex items-center justify-between gap-3 shadow-2xs">
@@ -777,11 +775,190 @@ export function AppointmentModal({
             )}
           </div>
 
-          {/* Profissionais Escalados & Tipo de Limpeza */}
+          {/* 2. Endereço do Atendimento (GPS) */}
+          <div>
+            <label className="font-bold text-slate-700 block mb-1.5 text-xs">
+              Endereço do Atendimento (GPS)
+            </label>
+            <div className="relative">
+              <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Ex: 4172 MeadowView - Evans, CO"
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs text-xs font-mono"
+              />
+            </div>
+          </div>
+
+          {/* 3. Título do Atendimento na Agenda */}
+          <div>
+            <label className="font-bold text-slate-700 block mb-1.5 text-xs">
+              Título do Atendimento na Agenda *
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              placeholder="Ex: House - Standard Regular Cleaning"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs text-xs font-medium"
+            />
+          </div>
+
+          {/* 4. Serviços / Itens Contratados (3 Colunas, Tooltip no nome, Checkbox de Extras) */}
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+              <label className="font-bold text-slate-700 flex items-center gap-1.5 text-xs">
+                <Wrench className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Serviços / Itens Contratados</span>
+              </label>
+              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 font-semibold cursor-pointer hover:text-indigo-600 transition-colors select-none">
+                <input
+                  type="checkbox"
+                  checked={showExtras}
+                  onChange={(e) => setShowExtras(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <span>Serviços extras</span>
+              </label>
+            </div>
+
+            {services.length === 0 ? (
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-center text-slate-400">
+                Carregando catálogo de serviços...
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1.5 border border-slate-100 rounded-2xl bg-slate-50/50">
+                {visibleServices.map((s) => {
+                  const checked = selectedServiceIds.includes(s.id);
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => toggleService(s.id)}
+                      title={s.name}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2 ${
+                        checked
+                          ? "bg-indigo-50 border-indigo-300 text-indigo-950 shadow-2xs"
+                          : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div
+                        className={`mt-0.5 w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${
+                          checked
+                            ? "border-indigo-600 bg-indigo-600 text-white"
+                            : "border-slate-300 bg-white"
+                        }`}
+                      >
+                        {checked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1 justify-between">
+                          <span className="truncate font-bold text-xs" title={s.name}>
+                            {s.name}
+                          </span>
+                          <span
+                            className={`text-[9px] font-bold uppercase px-1 py-0.2 rounded shrink-0 ${
+                              s.type === "STANDARD"
+                                ? "bg-indigo-100 text-indigo-700"
+                                : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {s.type === "STANDARD" ? "Std" : "Extra"}
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-mono text-emerald-600 mt-0.5 font-bold">
+                          ${Number(s.basePrice).toFixed(2)}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 5. Observações Internas (Portão, Pet, etc.) */}
+          <div>
+            <label className="font-bold text-slate-700 block mb-1.5 text-xs">
+              Observações Internas (Portão, Pet, etc.)
+            </label>
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Instruções de acesso, portão, animais, alarmes, detalhes específicos do trabalho..."
+              className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs resize-none text-xs"
+            />
+          </div>
+
+          {/* 6. Linha horizontal com 4 colunas: Data | Início | Término | Valor Cobrado ($ USD) * */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div>
+              <label className="font-bold text-slate-700 block mb-1.5 text-xs">
+                Data do Atendimento *
+              </label>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                required
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs font-mono text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700 block mb-1.5 text-xs">
+                Horário de Início *
+              </label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                required
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs font-mono text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700 block mb-1.5 text-xs">
+                Horário de Término *
+              </label>
+              <input
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                required
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs font-mono text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700 block mb-1.5 text-xs">
+                Valor Cobrado ($ USD) *
+              </label>
+              <div className="relative">
+                <DollarSign className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={price}
+                  onChange={(e) => setPrice(Number(e.target.value))}
+                  required
+                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs font-mono font-bold text-xs"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 7. Profissionais Escalados - Categoria de Comissão */}
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
             <div className="sm:col-span-7 relative" ref={profDropdownRef}>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="font-bold text-slate-700 flex items-center gap-1.5">
+                <label className="font-bold text-slate-700 flex items-center gap-1.5 text-xs">
                   <Users className="w-3.5 h-3.5 text-indigo-600" />
                   <span>Profissionais Escalados</span>
                 </label>
@@ -847,12 +1024,12 @@ export function AppointmentModal({
                             <span
                               className={`w-2 h-2 rounded-full ${
                                 prof.color === "indigo"
-                                  ? "bg-indigo-500"
-                                  : prof.color === "emerald"
-                                  ? "bg-emerald-500"
-                                  : prof.color === "amber"
-                                  ? "bg-amber-500"
-                                  : "bg-slate-400"
+                                    ? "bg-indigo-500"
+                                    : prof.color === "emerald"
+                                    ? "bg-emerald-500"
+                                    : prof.color === "amber"
+                                    ? "bg-amber-500"
+                                    : "bg-slate-400"
                               }`}
                             />
                             <span>{prof.name}</span>
@@ -870,14 +1047,14 @@ export function AppointmentModal({
             </div>
 
             <div className="sm:col-span-5">
-              <label className="font-bold text-slate-700 block mb-1.5 flex items-center gap-1.5">
+              <label className="font-bold text-slate-700 block mb-1.5 text-xs flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                 <span>Categoria de Comissão</span>
               </label>
               <select
                 value={cleaningCategory}
                 onChange={(e) => setCleaningCategory(e.target.value as CleaningCommissionCategory)}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs cursor-pointer"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs cursor-pointer text-xs"
               >
                 {CLEANING_CATEGORY_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -888,122 +1065,74 @@ export function AppointmentModal({
             </div>
           </div>
 
-          {/* Serviços do Catálogo */}
-          <div>
-            <label className="font-bold text-slate-700 block mb-1.5 flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Wrench className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Serviços / Itens Contratados</span>
-              </span>
-              <span className="text-[11px] text-slate-400">
-                Selecione um ou mais para compor o valor e título
-              </span>
+          {/* 8. Não Faturável - Serviço Concluído */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Não Faturável */}
+            <label
+              className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                !billable
+                  ? "bg-amber-50/80 border-amber-300 ring-1 ring-amber-500/20"
+                  : "bg-slate-50/70 border-slate-200 hover:bg-slate-100/70"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
+                    !billable ? "bg-amber-600 text-white" : "bg-white border border-slate-200 text-slate-400"
+                  }`}
+                >
+                  <Ban className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="font-bold text-slate-900 text-xs">Não Faturável</p>
+                  <p className="text-[10px] text-slate-500">
+                    Compromisso pessoal, cortesia, etc.
+                  </p>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={!billable}
+                onChange={(e) => setBillable(!e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+              />
             </label>
 
-            {services.length === 0 ? (
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-center text-slate-400">
-                Carregando catálogo de serviços...
+            {/* Serviço Concluído */}
+            <div
+              onClick={() => setStatus((prev) => (prev === "COMPLETED" ? "SCHEDULED" : "COMPLETED"))}
+              className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                status === "COMPLETED"
+                  ? "bg-indigo-50/80 border-indigo-300 ring-1 ring-indigo-500/20"
+                  : "bg-slate-50/70 border-slate-200 hover:bg-slate-100/70"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
+                    status === "COMPLETED"
+                      ? "bg-indigo-600 text-white"
+                      : "bg-white border border-slate-200 text-slate-400"
+                  }`}
+                >
+                  <Check className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="font-bold text-slate-900 text-xs">Serviço Concluído</p>
+                  <p className="text-[10px] text-slate-500">
+                    {status === "COMPLETED" ? "Finalizado na residência" : "Agendado para execução"}
+                  </p>
+                </div>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto p-1 border border-slate-100 rounded-2xl bg-slate-50/50">
-                {services.map((s) => {
-                  const checked = selectedServiceIds.includes(s.id);
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => toggleService(s.id)}
-                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2 ${
-                        checked
-                          ? "bg-indigo-50 border-indigo-300 text-indigo-950"
-                          : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      <div
-                        className={`mt-0.5 w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${
-                          checked ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300 bg-white"
-                        }`}
-                      >
-                        {checked && <Check className="w-2.5 h-2.5" />}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="truncate font-bold text-xs">{s.name}</span>
-                          <span
-                            className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                              s.type === "STANDARD"
-                                ? "bg-indigo-100 text-indigo-700"
-                                : "bg-amber-100 text-amber-700"
-                            }`}
-                          >
-                            {s.type === "STANDARD" ? "Std" : "Extra"}
-                          </span>
-                        </div>
-                        <div className="text-[11px] font-mono text-emerald-600 mt-0.5 font-bold">
-                          ${Number(s.basePrice).toFixed(2)}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
+              <div
+                className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+                  status === "COMPLETED"
+                    ? "bg-indigo-600 border-indigo-600 text-white"
+                    : "border-slate-300 bg-white"
+                }`}
+              >
+                {status === "COMPLETED" && <Check className="w-3.5 h-3.5 stroke-[3]" />}
               </div>
-            )}
-          </div>
-
-          {/* Custom Title */}
-          <div>
-            <label className="font-bold text-slate-700 block mb-1.5">
-              Título do Atendimento na Agenda
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              placeholder="Ex: House - Standard Regular Cleaning"
-              className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs"
-            />
-          </div>
-
-          {/* Date & Times */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="font-bold text-slate-700 block mb-1.5">
-                Data do Atendimento
-              </label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="font-bold text-slate-700 block mb-1.5">
-                Horário de Início
-              </label>
-              <input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                required
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="font-bold text-slate-700 block mb-1.5">
-                Horário de Término
-              </label>
-              <input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                required
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs font-mono"
-              />
             </div>
           </div>
 
@@ -1070,83 +1199,6 @@ export function AppointmentModal({
             )}
           </div>
 
-          {/* Price & Location */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="font-bold text-slate-700 block mb-1.5">
-                Valor Cobrado ($ USD) *
-              </label>
-              <div className="relative">
-                <DollarSign className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="number"
-                  step="0.01"
-                  min="1"
-                  value={price}
-                  onChange={(e) => setPrice(Number(e.target.value))}
-                  required
-                  className="w-full pl-8 pr-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs font-mono font-bold"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="font-bold text-slate-700 block mb-1.5">
-                Endereço do Atendimento (GPS)
-              </label>
-              <div className="relative">
-                <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Ex: 4172 MeadowView - Evans, CO"
-                  className="w-full pl-8 pr-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Flag de Conclusão do Atendimento */}
-          <div
-            onClick={() => setStatus((prev) => (prev === "COMPLETED" ? "SCHEDULED" : "COMPLETED"))}
-            className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-              status === "COMPLETED"
-                ? "bg-indigo-50/80 border-indigo-300 ring-1 ring-indigo-500/20"
-                : "bg-slate-50/70 border-slate-200 hover:bg-slate-100/70"
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${
-                  status === "COMPLETED"
-                    ? "bg-indigo-600 text-white"
-                    : "bg-white border border-slate-200 text-slate-400"
-                }`}
-              >
-                <Check className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="font-bold text-slate-900 text-xs">Atendimento Concluído</p>
-                <p className="text-[11px] text-slate-500">
-                  {status === "COMPLETED"
-                    ? "Serviço finalizado na residência (pronto para cobrança)"
-                    : "Serviço agendado para execução"}
-                </p>
-              </div>
-            </div>
-
-            <div
-              className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
-                status === "COMPLETED"
-                  ? "bg-indigo-600 border-indigo-600 text-white"
-                  : "border-slate-300 bg-white"
-              }`}
-            >
-              {status === "COMPLETED" && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-            </div>
-          </div>
-
           {/* Status Detalhado (ao editar) */}
           {isEditing && (
             <div>
@@ -1164,37 +1216,6 @@ export function AppointmentModal({
               </select>
             </div>
           )}
-
-          {/* Notes */}
-          <div>
-            <label className="font-bold text-slate-700 block mb-1.5">
-              Observações Internas (Portão, Pet, etc.)
-            </label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Instruções de acesso, detalhes específicos do trabalho..."
-              className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:outline-none focus:border-indigo-500 shadow-2xs resize-none"
-            />
-          </div>
-
-          {/* Não Faturável */}
-          <label className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={!billable}
-              onChange={(e) => setBillable(!e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            <span>
-              <span className="font-semibold text-slate-900 block">Não Faturável</span>
-              <span className="text-slate-500">
-                Marque para eventos que não devem contar no financeiro (compromisso
-                pessoal, cortesia, etc).
-              </span>
-            </span>
-          </label>
 
           {/* Footer Actions */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2.5">

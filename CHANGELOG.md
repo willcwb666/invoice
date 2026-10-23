@@ -158,6 +158,60 @@ Este arquivo documenta o histórico detalhado de todas as funcionalidades implan
 
 ---
 
+### 5. Sanitização de Endereços iCloud & Normalização Centralizada
+
+#### O que foi implantado / melhorado:
+- Criação do engine `AddressNormalizer` (`src/lib/address-normalizer.ts`) para limpeza e padronização de endereços ruidosos oriundos do iCloud/Apple Maps.
+- Script de sanitização em lote (`scripts/sanitize-client-addresses.ts`) executado no banco com sucesso.
+- Integração do normalizador na RentCast, telas de clientes e sincronização do iCloud.
+
+---
+
+### 6. Navegação GPS Inteligente, Edição de Clientes, Tooltips na Agenda e Redesenho do Modal
+
+#### O que foi implantado / melhorado:
+- **Navegação GPS Inteligente Unificada (`SmartNavigationButton`):**
+  - Substituição dos botões separados de Apple Maps e Google Maps por um único botão *"Navegar até endereço"*.
+  - **No iPhone / iOS:** abre modal com seleção interativa entre **Google Maps** e **Apple Maps**.
+  - **No Android e Navegador Desktop:** abre diretamente o **Google Maps** em nova aba com o endereço normalizado.
+- **Edição Completa de Clientes (`/clients` e `/clients/[id]`):**
+  - Na listagem de clientes (`/clients`): botão "Ver ficha completa" substituído por um **Lápis** com tooltip *"Editar cadastro"*.
+  - Na tela do cliente (`/clients/[id]`): campos de cadastro totalmente editáveis (Nome, Telefone, E-mail, Endereço, Cidade, Estado, CEP, Modelo de Cobrança, Notas de Acesso, Quartos, Banheiros, Área e Tipo de Imóvel) com botões **Salvar Alterações** e **Cancelar** integrados a `PATCH /api/v1/clients/[id]`.
+- **Tooltips na Agenda (`/agenda`):**
+  - Ao passar o mouse sobre agendamentos nas visões de **Mês**, **Semana** e **Hoje/Lista**, exibe tooltip com o **endereço** e o **horário** do atendimento.
+  - Em áreas em branco das células, preserva o tooltip informativo padrão para criação de novos agendamentos.
+- **Redesenho do Modal de Agendamentos (`AppointmentModal`):**
+  - Aumento da largura do modal na versão web em ~20-30% (`max-w-3xl sm:max-w-4xl`), criando uma disposição muito mais harmoniosa e espaçosa.
+  - Remoção do botão redundante `+ Cadastrar Novo Cliente` do cabeçalho da busca (mantendo a opção contextual ao digitar no campo).
+  - Reordenação estrita dos campos conforme especificado:
+    1. *Cliente atendido*
+    2. *Endereço do Atendimento (GPS)*
+    3. *Título do Atendimento na Agenda*
+    4. *Serviços / itens contratados* em **3 colunas**, com tooltip no nome e checkbox **"Serviços extras"** para filtrar/exibir adicionais
+    5. *Observações Internas (Portão, Pet, etc.)*
+    6. *Linha horizontal de 4 colunas:* Data | Horário de Início | Horário de Término | Valor Cobrado ($ USD) *
+    7. *Profissionais Escalados | Categoria de Comissão*
+    8. *Não faturável | Atendimento concluído*
+- **Prevenção de Duplo Agendamento (Double-Booking Guard):**
+  - Novo engine de conflito de intervalos em `src/lib/scheduling/conflict.ts`.
+  - Bloqueio automático de sobreposição de horários na API de auto-agendamento público (`POST /api/v1/public/estimates/[token]/book`), retornando código HTTP 409 caso o horário já esteja reservado.
+
+---
+
+## Tabela de Arquivos Criados (Novas Entregas)
+
+| Arquivo | Descrição / Finalidade |
+|---|---|
+| `src/lib/navigation.ts` | Helpers de URL para Google Maps, Apple Maps e detecção de dispositivo iOS/Android |
+| `src/components/ui/smart-navigation-button.tsx` | Componente reutilizável de navegação GPS com suporte a modal de escolha no iOS e disparo direto no Google Maps |
+| `src/lib/scheduling/conflict.ts` | Engine de detecção de sobreposição e conflito de agendamentos |
+| `src/__tests__/navigation.test.ts` | Testes unitários para URLs de navegação e detecção de iOS/Android |
+| `src/__tests__/scheduling-conflict.test.ts` | Testes unitários para prevenção de sobreposição de horários e double-booking |
+| `docs/superpowers/specs/2026-10-22-client-editing-agenda-tooltips-and-modal-redesign.md` | Especificação técnica completa da refatoração |
+| `docs/superpowers/plans/2026-10-22-client-editing-agenda-tooltips-and-modal-redesign.md` | Plano de implementação passo a passo executado |
+
+---
+
 ## Tabela de Arquivos Alterados (Principais Modificações)
 
 | Arquivo | Principais Alterações |

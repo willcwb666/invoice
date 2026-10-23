@@ -61,6 +61,33 @@ export async function POST(
     const startDateTime = new Date(year, month - 1, day, hours, minutes, 0);
     const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60 * 1000);
 
+    // Prevenção de conflito de horários (Double-Booking Prevention)
+    const conflictingAppointment = await prisma.appointment.findFirst({
+      where: {
+        companyId: estimate.companyId,
+        status: { notIn: ["CANCELLED"] },
+        startTime: { lt: endDateTime },
+        endTime: { gt: startDateTime },
+      },
+      select: {
+        id: true,
+        title: true,
+        startTime: true,
+        endTime: true,
+      },
+    });
+
+    if (conflictingAppointment) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `O horário selecionado (${time}) não está mais disponível pois já existe outro agendamento neste período. Por favor, selecione outro horário.`,
+          conflict: true,
+        },
+        { status: 409 }
+      );
+    }
+
     // Cria o agendamento oficial no sistema
     const appointment = await prisma.appointment.create({
       data: {

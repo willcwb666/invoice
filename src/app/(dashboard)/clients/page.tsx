@@ -7,8 +7,7 @@ import {
   Users,
   Plus,
   Search,
-  Navigation,
-  ArrowUpRight,
+  Pencil,
   Phone,
   Mail,
   MapPin,
@@ -18,6 +17,7 @@ import {
 import { DataTable, ColumnDef } from "@/components/ui/data-table";
 import { Pagination } from "@/components/ui/pagination";
 import { ActionButton } from "@/components/ui/action-button";
+import { SmartNavigationButton } from "@/components/ui/smart-navigation-button";
 import { ClientModal } from "@/components/ui/client-modal";
 import { motion } from "framer-motion";
 
@@ -196,40 +196,26 @@ export default function ClientsListPage() {
       key: "actions",
       header: "Ações & Rotas",
       sortable: false,
-      className: "w-44 text-right",
+      className: "w-36 text-right",
       render: (c) => (
         <div
           className="flex items-center justify-end gap-1.5"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Apple Maps */}
+          {/* Navegar até endereço */}
           {c.address && (
-            <ActionButton
-              icon={<Navigation className="w-3.5 h-3.5" />}
-              tooltip="Navegar no Apple Maps"
-              hoverColor="blue"
-              href={`https://maps.apple.com/?daddr=${encodeURIComponent(
-                `${c.address}, ${c.city || "Greeley"}, ${c.state || "CO"}`
-              )}`}
+            <SmartNavigationButton
+              address={c.address}
+              city={c.city}
+              state={c.state}
+              tooltip="Navegar até endereço"
             />
           )}
 
-          {/* Google Maps */}
-          {c.address && (
-            <ActionButton
-              icon={<Navigation className="w-3.5 h-3.5 text-emerald-600" />}
-              tooltip="Navegar no Google Maps"
-              hoverColor="green"
-              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-                `${c.address}, ${c.city || "Greeley"}, ${c.state || "CO"}`
-              )}`}
-            />
-          )}
-
-          {/* Ver Ficha Completa */}
+          {/* Editar Cadastro */}
           <ActionButton
-            icon={<ArrowUpRight className="w-3.5 h-3.5" />}
-            tooltip="Ver Ficha Completa do Cliente"
+            icon={<Pencil className="w-3.5 h-3.5" />}
+            tooltip="Editar cadastro"
             hoverColor="purple"
             href={`/clients/${c.id}`}
           />

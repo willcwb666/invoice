@@ -482,7 +482,7 @@ export default function ProfessionalsPage() {
         title={editingId ? "Editar Profissional & Comissões" : "Cadastrar Novo Profissional"}
         subtitle="Defina os dados do profissional e configure se cada limpeza paga Porcentagem (%) ou Valor Fixo ($)"
         backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
-        panelClassName="w-full max-w-2xl bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col"
+        panelClassName="w-full max-w-2xl sm:max-w-3xl bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col"
         iconWrapperClassName="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600"
         closeButtonClassName="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
       >

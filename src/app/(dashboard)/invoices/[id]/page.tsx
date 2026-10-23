@@ -456,7 +456,7 @@ export default function InvoiceDetailPage({
         title="Exportar Fatura"
         subtitle="Escolha se deseja gerar e baixar esta fatura em PDF ou formato de Imagem"
         backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
-        panelClassName="w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-5"
+        panelClassName="w-full max-w-lg sm:max-w-2xl bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-5"
         headerRowClassName="flex items-center justify-between"
         headerLeftClassName="flex items-center gap-3"
         iconWrapperClassName="p-2.5 rounded-2xl bg-indigo-50 border border-indigo-100"

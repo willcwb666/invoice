@@ -92,7 +92,7 @@ export function SmartNavigationButton({
           }}
         >
           <div
-            className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4 text-left"
+            className="w-full max-w-sm sm:max-w-md bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-4 text-left"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">

@@ -584,7 +584,7 @@ export default function ExpensesPage() {
               initial={{ opacity: 0, scale: 0.96, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 10 }}
-              className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl"
+              className="bg-white border border-slate-200 rounded-3xl w-full max-w-md sm:max-w-xl p-6 sm:p-7 space-y-5 shadow-2xl"
             >
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2.5">

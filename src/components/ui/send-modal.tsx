@@ -94,7 +94,7 @@ export function SendModal({ isOpen, onClose, invoice }: SendModalProps) {
       title={`Enviar Fatura #${invoice.invoiceNumber}`}
       subtitle="Selecione os canais de envio desejados"
       backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
-      panelClassName="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-5"
+      panelClassName="w-full max-w-md sm:max-w-xl bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-5"
       headerRowClassName="flex items-center justify-between"
       headerLeftClassName="flex items-center gap-2"
       iconWrapperClassName="p-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100"

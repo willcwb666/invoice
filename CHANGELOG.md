@@ -198,6 +198,24 @@ Este arquivo documenta o histórico detalhado de todas as funcionalidades implan
 
 ---
 
+### 6. Agendamento & Padronização Global de Largura dos Modais (~20% na Web)
+
+#### O que foi implantado / melhorado:
+- **Reposicionamento de Frequência / Recorrência no Agendamento:**
+  - A seção "Frequência / Recorrência do Cliente" foi movida do rodapé para ficar imediatamente abaixo do campo "Título do Atendimento na Agenda *", proporcionando fluxo visual direto para o usuário configurar repetições semanais, quinzenais, a cada 3 semanas ou mensais logo após nomear o atendimento.
+- **Ampliação de ~20% a 30% na Largura dos Modais no Desktop (Web):**
+  - Modais padrão (`ModalShell`): ampliado de `max-w-xl` (576px) para `max-w-xl sm:max-w-2xl md:max-w-3xl` (768px), impactando positivamente o cadastro e edição de Clientes (`ClientModal`) e formulários padrão.
+  - Modal de Agendamentos (`AppointmentModal`): configurado em `max-w-3xl sm:max-w-4xl` (896px) com 3 colunas para serviços contratados, exibição de extras sob demanda e visualização confortável dos horários.
+  - Wizard de Orçamentos (`EstimateModal`): ampliado para `max-w-3xl sm:max-w-4xl`.
+  - Cadastro de Serviços (`ServiceModal`): ampliado de `max-w-lg` para `max-w-lg sm:max-w-2xl`.
+  - Modais de Pagamento e Envio (`PaymentModal` e `SendModal`): ampliados de `max-w-md` para `max-w-md sm:max-w-xl`.
+  - Cadastro de Profissionais & Comissões (`professionals/page.tsx`): ampliado de `max-w-2xl` para `max-w-2xl sm:max-w-3xl`.
+  - Exportação de Fatura (`invoices/[id]/page.tsx`): ampliado de `max-w-lg` para `max-w-lg sm:max-w-2xl`.
+  - Diálogos de Despesas, Financeiro, Usuários, Configurações e Propostas (`expenses`, `financeiro`, `users`, `settings`, `estimates/[id]`): ampliados de `max-w-md` para `max-w-md sm:max-w-xl`.
+  - Diálogo de Seleção de GPS no iOS (`smart-navigation-button.tsx`): adaptado para `max-w-sm sm:max-w-md`.
+
+---
+
 ## Tabela de Arquivos Criados (Novas Entregas)
 
 | Arquivo | Descrição / Finalidade |

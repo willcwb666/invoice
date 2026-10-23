@@ -116,7 +116,7 @@ export function ServiceModal({ isOpen, onClose, onSuccess, service }: ServiceMod
       icon={<Wrench className="w-5 h-5" />}
       title={isEditing ? "Editar Serviço" : "Novo Serviço"}
       subtitle="Cadastre o preço base usado nos agendamentos"
-      panelClassName="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-200/90 my-8 space-y-6"
+      panelClassName="w-full max-w-lg sm:max-w-2xl bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200/90 my-8 space-y-6"
     >
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">

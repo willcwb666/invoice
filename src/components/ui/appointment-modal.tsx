@@ -807,6 +807,69 @@ export function AppointmentModal({
             />
           </div>
 
+          {/* Frequência / Recorrência do Cliente */}
+          <div className="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-100 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                <Repeat className="w-4 h-4 text-indigo-600" />
+                <span>Frequência / Recorrência do Cliente</span>
+              </label>
+              <span className="text-[11px] font-semibold text-indigo-700">
+                {getRecurrenceLabel(recurrenceRule)}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+              {RECURRENCE_OPTIONS.map((opt) => {
+                const isSelected = recurrenceRule === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setRecurrenceRule(opt.value)}
+                    className={`px-2.5 py-2 rounded-xl border text-center transition-all cursor-pointer font-bold text-[11px] ${
+                      isSelected
+                        ? "bg-indigo-600 border-indigo-600 text-white shadow-xs"
+                        : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {opt.value === "NONE"
+                      ? "Único"
+                      : opt.value === "WEEKLY"
+                      ? "Semanal"
+                      : opt.value === "BIWEEKLY"
+                      ? "Bi-semanal"
+                      : opt.value === "EVERY_3_WEEKS"
+                      ? "A cada 3 sem"
+                      : "Mensal"}
+                  </button>
+                );
+              })}
+            </div>
+
+            {recurrenceRule !== "NONE" && (
+              <div className="pt-2 border-t border-indigo-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <p className="text-[11px] text-indigo-900 font-medium leading-relaxed">
+                  {getRecurrenceSummary(recurrenceRule, date, startTime, recurrenceDurationMonths)}
+                </p>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Período:</span>
+                  <select
+                    value={recurrenceDurationMonths}
+                    onChange={(e) => setRecurrenceDurationMonths(Number(e.target.value))}
+                    className="px-2 py-1 rounded-lg bg-white border border-indigo-200 text-indigo-950 text-[11px] font-bold focus:outline-none cursor-pointer"
+                  >
+                    <option value={3}>3 meses</option>
+                    <option value={6}>6 meses</option>
+                    <option value={12}>1 ano (12 meses)</option>
+                    <option value={24}>2 anos (24 meses)</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* 4. Serviços / Itens Contratados (3 Colunas, Tooltip no nome, Checkbox de Extras) */}
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
@@ -1136,69 +1199,6 @@ export function AppointmentModal({
             </div>
           </div>
 
-          {/* SEÇÃO DE RECORRÊNCIA */}
-          <div className="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-100 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="font-bold text-slate-800 flex items-center gap-1.5">
-                <Repeat className="w-4 h-4 text-indigo-600" />
-                <span>Frequência / Recorrência do Cliente</span>
-              </label>
-              <span className="text-[11px] font-semibold text-indigo-700">
-                {getRecurrenceLabel(recurrenceRule)}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
-              {RECURRENCE_OPTIONS.map((opt) => {
-                const isSelected = recurrenceRule === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setRecurrenceRule(opt.value)}
-                    className={`px-2.5 py-2 rounded-xl border text-center transition-all cursor-pointer font-bold text-[11px] ${
-                      isSelected
-                        ? "bg-indigo-600 border-indigo-600 text-white shadow-xs"
-                        : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                    }`}
-                  >
-                    {opt.value === "NONE"
-                      ? "Único"
-                      : opt.value === "WEEKLY"
-                      ? "Semanal"
-                      : opt.value === "BIWEEKLY"
-                      ? "Bi-semanal"
-                      : opt.value === "EVERY_3_WEEKS"
-                      ? "A cada 3 sem"
-                      : "Mensal"}
-                  </button>
-                );
-              })}
-            </div>
-
-            {recurrenceRule !== "NONE" && (
-              <div className="pt-2 border-t border-indigo-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <p className="text-[11px] text-indigo-900 font-medium leading-relaxed">
-                  {getRecurrenceSummary(recurrenceRule, date, startTime, recurrenceDurationMonths)}
-                </p>
-
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Período:</span>
-                  <select
-                    value={recurrenceDurationMonths}
-                    onChange={(e) => setRecurrenceDurationMonths(Number(e.target.value))}
-                    className="px-2 py-1 rounded-lg bg-white border border-indigo-200 text-indigo-950 text-[11px] font-bold focus:outline-none cursor-pointer"
-                  >
-                    <option value={3}>3 meses</option>
-                    <option value={6}>6 meses</option>
-                    <option value={12}>1 ano (12 meses)</option>
-                    <option value={24}>2 anos (24 meses)</option>
-                  </select>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Status Detalhado (ao editar) */}
           {isEditing && (
             <div>
@@ -1269,7 +1269,7 @@ export function AppointmentModal({
       {/* Modal de Confirmação de Escopo para Série Recorrente */}
       {isScopeConfirmOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 flex flex-col gap-4 text-xs">
+          <div className="w-full max-w-md sm:max-w-lg bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-200 flex flex-col gap-4 text-xs">
             <div className="flex items-start gap-3">
               <div
                 className={`p-3 rounded-2xl border shrink-0 ${

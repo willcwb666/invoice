@@ -793,7 +793,7 @@ export function EstimateModal({ isOpen, onClose, onSuccess }: EstimateModalProps
       icon={<Receipt className="w-5 h-5 text-amber-600" />}
       title="Calculador & Wizard de Orçamentos"
       subtitle="Monte orçamentos sob medida com ajuste fino pela condição real do imóvel"
-      panelClassName="w-full max-w-3xl bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-200/90 my-6 space-y-5 max-h-[92vh] flex flex-col justify-between"
+      panelClassName="w-full max-w-3xl sm:max-w-4xl bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200/90 my-6 space-y-5 max-h-[92vh] flex flex-col justify-between"
       iconWrapperClassName="p-2.5 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200/80"
     >
       <div className="flex-1 overflow-y-auto pr-1 space-y-5">

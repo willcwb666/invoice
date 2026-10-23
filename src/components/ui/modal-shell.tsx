@@ -45,7 +45,7 @@ const DEFAULTS = {
   backdrop:
     "fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs overflow-y-auto",
   panel:
-    "w-full max-w-xl bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-200/90 my-8 space-y-6",
+    "w-full max-w-xl sm:max-w-2xl md:max-w-3xl bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200/90 my-8 space-y-6",
   headerRow: "flex items-center justify-between border-b border-slate-100 pb-4",
   headerLeft: "flex items-center gap-3",
   iconWrapper: "p-2.5 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100/80",

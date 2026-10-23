@@ -8,6 +8,11 @@ export interface PropertyData {
   formattedAddress?: string;
 }
 
+export interface PropertyFetchResult {
+  data: PropertyData | null;
+  error?: string;
+}
+
 interface CacheEntry {
   data: PropertyData | null;
   timestamp: number;
@@ -39,14 +44,11 @@ export class RentCastService {
   }
 
   /**
-   * Fetches property dimensions (bedrooms, bathrooms, square footage, property type)
-   * from RentCast API with caching to preserve monthly API quota.
-   * If a query with a zip code yields no results, it automatically retries without the zip
-   * code as a fallback (frequently zip codes in client notes differ from tax record zip codes).
+   * Fetches property dimensions with detailed error reporting (e.g. inactive subscriptions).
    */
-  public static async fetchProperty(rawAddress: string): Promise<PropertyData | null> {
+  public static async fetchPropertyDetailed(rawAddress: string): Promise<PropertyFetchResult> {
     if (!rawAddress || typeof rawAddress !== "string" || rawAddress.trim().length < 5) {
-      return null;
+      return { data: null };
     }
 
     const norm = AddressNormalizer.normalize(rawAddress);
@@ -54,16 +56,21 @@ export class RentCastService {
 
     const cached = propertyCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-      return cached.data;
+      return { data: cached.data };
     }
 
     const apiKey = process.env.RENTCAST_API_KEY;
     if (!apiKey) {
       console.warn("[RentCast] RENTCAST_API_KEY não configurada no ambiente.");
-      return null;
+      return {
+        data: null,
+        error: "A chave RENTCAST_API_KEY não foi detectada no ambiente.",
+      };
     }
 
-    const executeQuery = async (queryAddress: string): Promise<any[] | null> => {
+    const executeQuery = async (
+      queryAddress: string
+    ): Promise<{ data: any[] | null; error?: string }> => {
       const url = `https://api.rentcast.io/v1/properties?address=${encodeURIComponent(queryAddress)}`;
       const response = await fetch(url, {
         method: "GET",
@@ -74,31 +81,54 @@ export class RentCastService {
       });
 
       if (!response.ok) {
-        console.warn(`[RentCast] Erro ao consultar endereço (${response.status}): ${response.statusText}`);
-        return null;
+        let errorMsg = `Erro HTTP ${response.status}: ${response.statusText}`;
+        try {
+          const errJson = await response.json();
+          if (
+            errJson.error === "billing/subscription-inactive" ||
+            errJson.message?.includes("subscription")
+          ) {
+            errorMsg =
+              "A chave RentCast não possui um plano ativo no painel. Ative o plano (gratuito) em https://app.rentcast.io/app/api";
+          } else if (errJson.message) {
+            errorMsg = `RentCast: ${errJson.message}`;
+          }
+        } catch {}
+        console.warn(`[RentCast] Erro ao consultar endereço (${response.status}):`, errorMsg);
+        return { data: null, error: errorMsg };
       }
 
       const json = await response.json();
-      return Array.isArray(json) ? json : null;
+      return { data: Array.isArray(json) ? json : null };
     };
 
     try {
       // 1. Tenta a consulta com o endereço completo normalizado
-      let data = await executeQuery(norm.fullAddress);
+      let queryRes = await executeQuery(norm.fullAddress);
 
-      // 2. Fallback inteligente: se não encontrou e possui fallback sem CEP diferente
-      // (ex: "3068 Aries Drive, Loveland, CO"), busca sem o CEP para cobrir divergências cadastrais.
-      if ((!data || data.length === 0) && norm.fallbackAddress && norm.fallbackAddress !== norm.fullAddress) {
-        const fallbackData = await executeQuery(norm.fallbackAddress);
-        if (fallbackData && fallbackData.length > 0) {
-          data = fallbackData;
+      // Se deu erro de assinatura/auth, repassa o erro diretamente
+      if (queryRes.error && !queryRes.data) {
+        return { data: null, error: queryRes.error };
+      }
+
+      let data = queryRes.data;
+
+      // 2. Fallback inteligente sem CEP
+      if (
+        (!data || data.length === 0) &&
+        norm.fallbackAddress &&
+        norm.fallbackAddress !== norm.fullAddress
+      ) {
+        const fallbackRes = await executeQuery(norm.fallbackAddress);
+        if (fallbackRes.data && fallbackRes.data.length > 0) {
+          data = fallbackRes.data;
         }
       }
 
       if (!data || data.length === 0) {
         // Cache negative lookup to prevent re-querying unknown address immediately
         propertyCache.set(cacheKey, { data: null, timestamp: Date.now() });
-        return null;
+        return { data: null };
       }
 
       const firstMatch = data[0];
@@ -111,10 +141,19 @@ export class RentCastService {
       };
 
       propertyCache.set(cacheKey, { data: propertyData, timestamp: Date.now() });
-      return propertyData;
+      return { data: propertyData };
     } catch (error) {
       console.error("[RentCast] Exceção inesperada ao consultar API:", error);
-      return null;
+      return { data: null, error: "Erro interno de comunicação com a RentCast." };
     }
+  }
+
+  /**
+   * Fetches property dimensions (bedrooms, bathrooms, square footage, property type)
+   * from RentCast API with caching to preserve monthly API quota.
+   */
+  public static async fetchProperty(rawAddress: string): Promise<PropertyData | null> {
+    const res = await this.fetchPropertyDetailed(rawAddress);
+    return res.data;
   }
 }

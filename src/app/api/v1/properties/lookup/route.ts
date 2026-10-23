@@ -39,13 +39,24 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const propertyData = await RentCastService.fetchProperty(address);
+    const result = await RentCastService.fetchPropertyDetailed(address);
+
+    if (result.error) {
+      return NextResponse.json(
+        {
+          success: false,
+          found: false,
+          error: result.error,
+        },
+        { status: 200 }
+      );
+    }
 
     return NextResponse.json(
       {
         success: true,
-        found: !!propertyData,
-        data: propertyData,
+        found: !!result.data,
+        data: result.data,
       },
       {
         headers: {

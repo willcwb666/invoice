@@ -59,7 +59,7 @@ async function handleDispatch(req: NextRequest) {
     const now = new Date();
 
     // 1. Despacha todos os ScheduledPushes pendentes que já atingiram horário de envio
-    let scheduledDispatched = { dispatched: 0, errors: 0 };
+    let scheduledDispatched = 0;
     try {
       scheduledDispatched = await DepartureReminderService.dispatchPendingReminders();
     } catch (err) {

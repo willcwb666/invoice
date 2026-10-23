@@ -73,6 +73,7 @@ export async function PATCH(req: NextRequest) {
         ...(data.terms !== undefined && { terms: data.terms }),
         ...(data.signatureUrl !== undefined && { signatureUrl: data.signatureUrl }),
         ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
+        ...(data.googleReviewUrl !== undefined && { googleReviewUrl: data.googleReviewUrl }),
         ...(data.icloudCalendarUrl !== undefined && {
           icloudCalendarUrl: data.icloudCalendarUrl,
         }),

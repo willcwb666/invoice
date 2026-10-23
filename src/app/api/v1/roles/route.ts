@@ -109,6 +109,7 @@ export async function PUT(req: NextRequest) {
       ...parsed.data,
       // Keep ADMIN fully enabled for security
       ADMIN: DEFAULT_ROLE_PERMISSIONS.ADMIN,
+      CLEANER: parsed.data.CLEANER || DEFAULT_ROLE_PERMISSIONS.CLEANER,
     };
 
     // No findFirst() fallback: without a companyId there is no company this

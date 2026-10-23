@@ -202,6 +202,7 @@ export async function authenticateCredentials(
     name: string;
     role: string;
     companyId?: string | null;
+    professionalId?: string | null;
     status: string;
   };
 }> {

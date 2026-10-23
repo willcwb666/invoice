@@ -16,7 +16,7 @@ export interface SanitizedCleanerAppointment {
     address: string;
     city: string | null;
     state: string | null;
-    zip: string | null;
+    zipCode: string | null;
   };
   access: {
     entryCode: string | null;
@@ -27,6 +27,7 @@ export interface SanitizedCleanerAppointment {
   checklists: Array<{
     id: string;
     room: string;
+    task: string;
     title: string;
     completed: boolean;
     completedAt: Date | null;
@@ -34,7 +35,7 @@ export interface SanitizedCleanerAppointment {
   }>;
   photos: Array<{
     id: string;
-    photoType: "BEFORE" | "AFTER";
+    photoType: string;
     photoUrl: string;
     room: string | null;
     caption: string | null;
@@ -54,11 +55,39 @@ export class CleanerService {
    */
   static sanitizeAppointment(appt: any): SanitizedCleanerAppointment {
     const client = appt.client || {};
+
+    const timeStart =
+      appt.timeStart ||
+      (appt.startTime instanceof Date
+        ? appt.startTime.toLocaleTimeString("pt-BR", {
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZone: "America/Denver",
+          })
+        : typeof appt.startTime === "string"
+        ? appt.startTime
+        : "");
+
+    const timeEnd =
+      appt.timeEnd ||
+      (appt.endTime instanceof Date
+        ? appt.endTime.toLocaleTimeString("pt-BR", {
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZone: "America/Denver",
+          })
+        : typeof appt.endTime === "string"
+        ? appt.endTime
+        : "");
+
     return {
       id: appt.id,
-      date: appt.date instanceof Date ? appt.date.toISOString().split("T")[0] : String(appt.date).split("T")[0],
-      timeStart: appt.timeStart,
-      timeEnd: appt.timeEnd,
+      date:
+        appt.date instanceof Date
+          ? appt.date.toISOString().split("T")[0]
+          : String(appt.date).split("T")[0],
+      timeStart,
+      timeEnd,
       status: appt.status,
       notes: appt.notes || null,
       services: Array.isArray(appt.services) ? appt.services : [],
@@ -69,7 +98,7 @@ export class CleanerService {
         address: client.address || "",
         city: client.city || null,
         state: client.state || null,
-        zip: client.zip || null,
+        zipCode: client.zipCode || client.zip || null,
       },
       access: {
         entryCode: appt.entryCode || client.entryCode || null,
@@ -80,7 +109,8 @@ export class CleanerService {
       checklists: (appt.checklists || []).map((c: any) => ({
         id: c.id,
         room: c.room,
-        title: c.title,
+        task: c.task || c.title || "",
+        title: c.task || c.title || "",
         completed: Boolean(c.completed),
         completedAt: c.completedAt || null,
         completedBy: c.completedBy || null,
@@ -88,10 +118,10 @@ export class CleanerService {
       photos: (appt.photos || []).map((p: any) => ({
         id: p.id,
         photoType: p.photoType,
-        photoUrl: p.photoUrl,
+        photoUrl: p.imageUrl || p.photoUrl || "",
         room: p.room || null,
         caption: p.caption || null,
-        createdAt: p.createdAt,
+        createdAt: p.uploadedAt || p.createdAt || new Date(),
       })),
       team: (appt.professionals || []).map((ap: any) => ({
         id: ap.professional?.id || ap.professionalId,
@@ -114,19 +144,19 @@ export class CleanerService {
     professionalId?: string | null;
     date: string;
   }): Promise<SanitizedCleanerAppointment[]> {
-    // If no professionalId is associated, return empty array safely
     if (!professionalId) {
       return [];
     }
 
-    // Build start and end of target day
     const startOfDay = new Date(`${date}T00:00:00.000Z`);
     const endOfDay = new Date(`${date}T23:59:59.999Z`);
 
     const appts = await prisma.appointment.findMany({
       where: {
         companyId,
-        cancelledAt: null,
+        status: {
+          not: "CANCELLED",
+        },
         date: {
           gte: startOfDay,
           lte: endOfDay,
@@ -138,7 +168,7 @@ export class CleanerService {
         },
       },
       orderBy: {
-        timeStart: "asc",
+        startTime: "asc",
       },
       include: {
         client: {
@@ -149,7 +179,7 @@ export class CleanerService {
             address: true,
             city: true,
             state: true,
-            zip: true,
+            zipCode: true,
             entryCode: true,
             alarmCode: true,
             pets: true,
@@ -157,10 +187,10 @@ export class CleanerService {
           },
         },
         checklists: {
-          orderBy: { sortOrder: "asc" },
+          orderBy: { createdAt: "asc" },
         },
         photos: {
-          orderBy: { createdAt: "desc" },
+          orderBy: { uploadedAt: "desc" },
         },
         professionals: {
           include: {
@@ -224,7 +254,6 @@ export class CleanerService {
       where: { id: appointmentId },
       data: {
         status,
-        completedAt: status === "COMPLETED" ? new Date() : appt.completedAt,
         notes: appt.notes,
       },
       include: {
@@ -256,15 +285,10 @@ export class CleanerService {
               companyId,
               title: "Avaliação do Atendimento",
               body: reviewMsg,
-              category: "CUSTOM",
-              runAt,
+              type: "GENERAL",
+              scheduledFor: runAt,
               appointmentId: appt.id,
-              metadata: {
-                type: "GOOGLE_REVIEW_REQUEST",
-                clientPhone: appt.client.phone,
-                clientName: appt.client.name,
-                googleReviewUrl: company.googleReviewUrl,
-              },
+              url: company.googleReviewUrl,
             },
           });
         }

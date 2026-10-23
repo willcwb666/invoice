@@ -15,10 +15,7 @@ describe("Unified Background Dispatcher Engine", () => {
       appointmentsProcessed: 2,
     });
 
-    const dispatchSpy = vi.spyOn(DepartureReminderService, "dispatchPendingReminders").mockResolvedValueOnce({
-      dispatched: 1,
-      errors: 0,
-    });
+    const dispatchSpy = vi.spyOn(DepartureReminderService, "dispatchPendingReminders").mockResolvedValueOnce(1);
 
     const syncRes = await DepartureReminderService.syncDailyReminders();
     const dispatchRes = await DepartureReminderService.dispatchPendingReminders();
@@ -26,7 +23,7 @@ describe("Unified Background Dispatcher Engine", () => {
     expect(syncSpy).toHaveBeenCalledTimes(1);
     expect(dispatchSpy).toHaveBeenCalledTimes(1);
     expect(syncRes.remindersCreated).toBe(2);
-    expect(dispatchRes.dispatched).toBe(1);
+    expect(dispatchRes).toBe(1);
   });
 
   it("calls abandoned estimate recovery with companyId", async () => {

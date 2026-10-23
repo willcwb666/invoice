@@ -19,6 +19,7 @@ export const updateCompanySchema = z.object({
   terms: z.string().trim().max(5000, "Texto muito longo").optional(),
   signatureUrl: z.string().trim().max(500).optional(),
   logoUrl: z.string().trim().max(500).optional(),
+  googleReviewUrl: z.string().trim().max(1000).optional().nullable(),
   icloudCalendarUrl: z.string().trim().max(1000).optional(),
   // Capped at 730 to match RECURRENCE_HORIZON_DAYS in lib/calendar/icloud.ts
   // - no point letting the window ask for more than the recurrence expander

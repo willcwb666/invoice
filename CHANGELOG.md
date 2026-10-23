@@ -4,6 +4,80 @@ Este arquivo documenta o histórico detalhado de todas as funcionalidades implan
 
 ---
 
+## [23 de Outubro de 2026]
+
+### 1. Despacho de Lembretes de Saída (GPS) — Infraestrutura Unificada e Resiliente
+- **Despachante Cron Centralizado (`/api/v1/cron/dispatcher`):**
+  - Unificação de todos os despachos periódicos da empresa em um único endpoint robusto protegido por Bearer Token / CRON_SECRET:
+    1. Despacho pontual de pushes acumulados (`DepartureReminderService.dispatchPendingReminders`).
+    2. Sincronização diária de lembretes de saída de 30 min e 10 min com base no horário de Colorado (`DepartureReminderService.syncDailyReminders`).
+    3. Recuperação de orçamentos abandonados com cupom e templates customizados (`processAbandonedEstimates`).
+    4. Briefing matinal das 07:00 com a rota do dia para as colaboradoras.
+- **Heartbeat Listener (`useDispatcherHeartbeat`):**
+  - Monitor em background que dispara requisições de heartbeat transparentemente a cada 5 minutos quando a aba administrativa estiver aberta, garantindo que mesmo sem agendador externo configurado no Vercel (ou em ambientes de desenvolvimento local) nenhuma notificação deixe de ser despachada.
+  - Gravação de telemetria `lastCronDispatchAt` no perfil da empresa.
+
+---
+
+### 2. Recuperação de Orçamentos Abandonados
+- **Automação Integrada ao Cron:**
+  - Varredura de propostas comerciais pendentes e emissão de e-mails de recuperação respeitando a tolerância de minutos configurada pelo administrador.
+  - Suporte a cupons de desconto (`PERCENTAGE` ou `FIXED`), com assunto e corpo totalmente customizáveis na aba de Configurações da empresa.
+
+---
+
+### 3. Blindagem contra Conflitos de Horários (Double-Booking de Profissionais)
+- **Motor Multi-Profissional (`findMultiCleanerConflict` em `src/lib/scheduling/conflict.ts`):**
+  - Análise de colisões de agenda por profissional escalado, verificando sobreposição exata ou buffer de deslocamento entre atendimentos no mesmo dia.
+  - Endpoint dedicado `POST /api/v1/appointments/check-conflict` consumido com debounce em tempo real no `AppointmentModal`.
+  - Banner de aviso dinâmico alertando sobre qual colaboradora já possui atendimento no horário especificado, acompanhado de checkbox de override explícito ("Ignorar conflito e salvar mesmo assim").
+
+---
+
+### 4. Visão da Diarista (Cleaner Portal — Role: CLEANER)
+- **Acesso Móvel Restrito (`/cleaner`):**
+  - Tela mobile-first limpa e de alta performance onde a colaboradora visualiza única e exclusivamente suas casas atribuídas no dia selecionado (Hoje, Amanhã ou seletor de datas).
+  - **Blindagem Total contra Vazamento Financeiro:**
+    - Exclusão absoluta de valores, faturamentos, comissões, relatórios, despesas e faturas tanto na interface gráfica quanto nos payloads sanitizados pelo backend (`CleanerService.sanitizeAppointment`).
+    - Matriz RBAC para o perfil `CLEANER` com permissões zeradas para telas financeiras e de gestão.
+    - Redirecionamento automático da rota raiz `/` para `/cleaner` quando o usuário logado for uma diarista.
+    - Menus laterais e barra inferior adaptativos que exibem apenas o painel de atendimento e botão de logout para o papel `CLEANER`.
+
+---
+
+### 5. Campos Estruturados de Acesso ao Imóvel
+- **Dados Padronizados de Entrada na Residência:**
+  - `entryCode`: Código do portão, porta ou lockbox com botão de 1 clique para copiar.
+  - `alarmCode`: Instruções para armar e desarmar o alarme.
+  - `pets`: Alerta visual destacado sobre cães, gatos e animais presentes na residência.
+  - `parkingInstructions`: Onde estacionar o veículo (garagem, rua, driveway).
+- **Herança e Sobrescrita Flexível:**
+  - Os dados cadastrados na ficha do cliente são herdados automaticamente para qualquer novo agendamento, permitindo edição pontual na ordem de serviço caso o cliente forneça uma senha temporária.
+  - Edição completa integrada ao `ClientModal`, `AppointmentModal` e página de detalhes `/clients/[id]`.
+
+---
+
+### 6. Checklist por Cômodo com Fotos Antes & Depois
+- **Checklist Interativo por Cômodo (`AppointmentChecklist`):**
+  - Modelo no banco com itens categorizados por áreas da casa (Cozinha, Banheiros, Quartos, Sala / Geral).
+  - Seed automático de itens padrão de limpeza caso o atendimento ainda não possua checklist cadastrado.
+  - Barra de progresso visual com percentual de conclusão e conferência em tempo real.
+- **Blindagem Fotográfica (`AppointmentPhoto`):**
+  - Captura direta via câmera do celular ou galeria de imagens para registros de **Antes** e **Depois**.
+  - Marcação de cômodo e legenda para documentar imperfeições ou manchas pré-existentes e comprovar a qualidade do serviço executado contra contestações de clientes.
+
+---
+
+### 7. Mensagens Automáticas de "A Caminho" (ETA) e Avaliação 5 Estrelas no Google
+- **Aviso de Saída e Previsão de Chegada (ETA):**
+  - Botão "A Caminho" em cada casa com cálculo automatizado de tempo de deslocamento por carro (`getTravelTimeMinutes`).
+  - Geração de mensagem pré-formatada pronta para envio via SMS / iMessage (`sms:...`) ou WhatsApp (`wa.me`) com apenas 1 clique.
+- **Booster de Avaliações no Google Meu Negócio:**
+  - Configuração do campo `googleReviewUrl` na tela de Configurações da empresa.
+  - Ao finalizar a limpeza (transição para `COMPLETED`), o sistema agenda automaticamente uma notificação pós-atendimento para ser enviada 60 minutos após o término, convidando o cliente a deixar uma avaliação 5 estrelas no Google.
+
+---
+
 ## [22 de Outubro de 2026]
 
 ### 1. Módulo de Pagamentos — Linha Única, Botões de Ação e Filtro de Datas

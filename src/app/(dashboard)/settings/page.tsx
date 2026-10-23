@@ -47,6 +47,7 @@ const BLANK_COMPANY_FALLBACK = {
   paymentMethods: "",
   signatureUrl: "",
   logoUrl: "",
+  googleReviewUrl: "",
   icloudCalendarUrl: "",
 };
 
@@ -158,6 +159,7 @@ export default function SettingsPage() {
             terms: comp.terms || D.terms,
             signatureUrl: comp.signatureUrl || B.signatureUrl,
             logoUrl: comp.logoUrl || B.logoUrl,
+            googleReviewUrl: comp.googleReviewUrl || "",
             icloudCalendarUrl: comp.icloudCalendarUrl || B.icloudCalendarUrl,
             icloudSyncWindowDays: Number(comp.icloudSyncWindowDays) || D.icloudSyncWindowDays,
             abandonedRecoveryEnabled: comp.abandonedRecoveryEnabled ?? D.abandonedRecoveryEnabled,
@@ -233,6 +235,7 @@ export default function SettingsPage() {
       formData.terms !== initialData.terms ||
       formData.signatureUrl !== initialData.signatureUrl ||
       formData.logoUrl !== initialData.logoUrl ||
+      formData.googleReviewUrl !== initialData.googleReviewUrl ||
       formData.icloudCalendarUrl !== initialData.icloudCalendarUrl ||
       Number(formData.icloudSyncWindowDays) !== Number(initialData.icloudSyncWindowDays) ||
       formData.abandonedRecoveryEnabled !== initialData.abandonedRecoveryEnabled ||
@@ -558,6 +561,23 @@ export default function SettingsPage() {
                     }
                     className="w-full px-3.5 py-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-emerald-800 font-mono font-bold focus:outline-none focus:border-emerald-500 shadow-2xs"
                   />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-slate-700 font-semibold mb-1.5 flex items-center justify-between">
+                    <span>Link de Avaliação 5 Estrelas no Google (Google Review URL)</span>
+                    <span className="text-[10px] text-amber-600 font-bold uppercase">Automação de Reviews ⭐</span>
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://g.page/r/.../review ou link do Google Meu Negócio"
+                    value={formData.googleReviewUrl || ""}
+                    onChange={(e) => setFormData({ ...formData, googleReviewUrl: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-900 font-medium focus:outline-none focus:border-indigo-500 shadow-2xs text-xs"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Enviado automaticamente por SMS ao cliente 1 hora após a conclusão do atendimento para alavancar a reputação 5 estrelas da empresa.
+                  </p>
                 </div>
               </div>
 

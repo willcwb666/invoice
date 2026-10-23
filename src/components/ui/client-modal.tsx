@@ -104,6 +104,10 @@ export function ClientModal({
           squareFeet: "",
           propertyType: "",
           billingType: "PER_JOB",
+          entryCode: "",
+          alarmCode: "",
+          pets: "",
+          parkingInstructions: "",
           notes: "",
         });
 

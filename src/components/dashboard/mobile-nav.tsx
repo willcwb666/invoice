@@ -25,6 +25,7 @@ import {
   Landmark,
   FileSpreadsheet,
   Award,
+  Sparkles,
 } from "lucide-react";
 
 const primaryNavItems = [
@@ -35,6 +36,7 @@ const primaryNavItems = [
 ];
 
 const secondaryNavItems = [
+  { name: "Portal Diarista", href: "/cleaner", icon: Sparkles },
   { name: "Relatórios", href: "/reports", icon: FileSpreadsheet },
   { name: "Financeiro", href: "/financeiro", icon: Landmark },
   { name: "Pagamentos", href: "/payments", icon: Wallet },
@@ -49,7 +51,7 @@ const secondaryNavItems = [
 export function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = useCurrentUser();
+  const { user, isCleaner } = useCurrentUser();
   const [isOpen, setIsOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [pendingPaymentsCount, setPendingPaymentsCount] = useState(0);
@@ -190,45 +192,71 @@ export function MobileNav() {
         aria-label="Navegação principal"
         className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 border-t border-slate-200 backdrop-blur-xl md:hidden print:hidden px-3 py-2 shadow-lg"
       >
-        <div className="flex items-center justify-around">
-          {primaryNavItems.map((item) => {
-            const isActive =
-              item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-            const Icon = item.icon;
+        {isCleaner ? (
+          <div className="flex items-center justify-around">
+            <Link
+              href="/cleaner"
+              aria-current={pathname === "/cleaner" ? "page" : undefined}
+              className={`flex flex-col items-center justify-center py-1 px-4 rounded-xl transition-all ${
+                pathname === "/cleaner"
+                  ? "text-teal-600 font-bold"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <Sparkles className={`w-5 h-5 ${pathname === "/cleaner" ? "text-teal-600" : "text-slate-400"}`} />
+              <span className="text-[10px] mt-1">Minhas Casas</span>
+            </Link>
 
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                aria-current={isActive ? "page" : undefined}
-                className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
-                  isActive
-                    ? "text-indigo-600 font-bold"
-                    : "text-slate-500 hover:text-slate-900"
-                }`}
-              >
-                <Icon className={`w-5 h-5 ${isActive ? "text-indigo-600" : "text-slate-400"}`} />
-                <span className="text-[10px] mt-1">{item.name}</span>
-              </Link>
-            );
-          })}
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="flex flex-col items-center justify-center py-1 px-4 rounded-xl text-rose-600 font-semibold transition-all cursor-pointer"
+            >
+              {loggingOut ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5" />}
+              <span className="text-[10px] mt-1">Sair</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-around">
+            {primaryNavItems.map((item) => {
+              const isActive =
+                item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              const Icon = item.icon;
 
-          {/* Botão Mais */}
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            aria-expanded={isOpen}
-            aria-haspopup="dialog"
-            aria-label="Mais opções de navegação"
-            className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
-              isOpen || isMoreActive
-                ? "text-indigo-600 font-bold"
-                : "text-slate-500 hover:text-slate-900"
-            }`}
-          >
-            <Menu className="w-5 h-5" />
-            <span className="text-[10px] mt-1">Mais</span>
-          </button>
-        </div>
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  aria-current={isActive ? "page" : undefined}
+                  className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
+                    isActive
+                      ? "text-indigo-600 font-bold"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  <Icon className={`w-5 h-5 ${isActive ? "text-indigo-600" : "text-slate-400"}`} />
+                  <span className="text-[10px] mt-1">{item.name}</span>
+                </Link>
+              );
+            })}
+
+            {/* Botão Mais */}
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              aria-expanded={isOpen}
+              aria-haspopup="dialog"
+              aria-label="Mais opções de navegação"
+              className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
+                isOpen || isMoreActive
+                  ? "text-indigo-600 font-bold"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <Menu className="w-5 h-5" />
+              <span className="text-[10px] mt-1">Mais</span>
+            </button>
+          </div>
+        )}
       </nav>
     </>
   );

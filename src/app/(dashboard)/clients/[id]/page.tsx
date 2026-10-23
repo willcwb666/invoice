@@ -66,6 +66,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     bathrooms: "" as number | "",
     squareFeet: "" as number | "",
     propertyType: "",
+    entryCode: "",
+    alarmCode: "",
+    pets: "",
+    parkingInstructions: "",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);

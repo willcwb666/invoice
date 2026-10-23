@@ -20,6 +20,7 @@ import { DynamicRevenueChart } from "@/components/dashboard/dynamic-revenue-char
 import { RevenueGoalChart } from "@/components/dashboard/revenue-goal-chart";
 import { WelcomeBanner } from "@/components/dashboard/welcome-banner";
 import { PeriodMode } from "@/components/dashboard/period-toggle";
+import { useCurrentUser } from "@/lib/hooks/use-current-user";
 
 function formatUpcomingDateTime(startTimeVal?: string | Date, dateVal?: string | Date): string {
   const d = new Date(startTimeVal || dateVal || Date.now());
@@ -61,6 +62,7 @@ function formatUpcomingDateTime(startTimeVal?: string | Date, dateVal?: string |
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { isCleaner } = useCurrentUser();
   const { showToast } = useToast();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -68,7 +70,14 @@ export default function DashboardPage() {
   const hasShownPendingToast = useRef(false);
   const isInitialDashboardLoad = useRef(true);
 
+  useEffect(() => {
+    if (isCleaner) {
+      router.replace("/cleaner");
+    }
+  }, [isCleaner, router]);
+
   const fetchMetrics = async () => {
+    if (isCleaner) return;
     setLoading(true);
     try {
       const timestamp = Date.now();

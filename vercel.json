@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/v1/cron/push-dispatcher",
+      "path": "/api/v1/cron/dispatcher",
       "schedule": "0 12 * * *"
     }
   ]

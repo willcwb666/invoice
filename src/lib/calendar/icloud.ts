@@ -1,4 +1,5 @@
 import { RentCastService } from '@/services/rentcast-service';
+import { AddressNormalizer } from "@/lib/address-normalizer";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { BUSINESS_TIMEZONE, zonedTimeToUtc, zonedPartsFromUtc } from "@/lib/calendar/timezone";
@@ -1287,28 +1288,16 @@ async function syncICloudCalendarForCompanyUnlocked(
       }
 
       if (!autoClient) {
-        let city = "Greeley";
-        const state = "CO";
-        let zipCode = "80631";
-
-        if (event.location) {
-          const locLower = event.location.toLowerCase();
-          if (locLower.includes("loveland")) { city = "Loveland"; zipCode = "80538"; }
-          else if (locLower.includes("windsor")) { city = "Windsor"; zipCode = "80550"; }
-          else if (locLower.includes("evans")) { city = "Evans"; zipCode = "80620"; }
-          else if (locLower.includes("fort collins")) { city = "Fort Collins"; zipCode = "80525"; }
-          const zipMatch = event.location.match(/\b(80\d{3})\b/);
-          if (zipMatch) zipCode = zipMatch[1];
-        }
+        const norm = AddressNormalizer.normalize(event.location || "");
 
         autoClient = await prisma.client.create({
           data: {
             companyId,
             name: derivedName,
-            address: event.location || "Endereço via Calendário iPhone",
-            city,
-            state,
-            zipCode,
+            address: norm.street || event.location || "Endereço via Calendário iPhone",
+            city: norm.city,
+            state: norm.state,
+            zipCode: norm.zipCode,
             notes: "Importado automaticamente do Calendário iPhone (iCloud)",
           },
         });
@@ -1317,7 +1306,7 @@ async function syncICloudCalendarForCompanyUnlocked(
 
         if (event.location && event.location.trim().length >= 6) {
           const clientIdToEnrich = autoClient.id;
-          RentCastService.fetchProperty(event.location)
+          RentCastService.fetchProperty(norm.fullAddress)
             .then(async (prop) => {
               if (prop && (prop.bedrooms !== null || prop.bathrooms !== null || prop.squareFeet !== null)) {
                 await prisma.client.update({

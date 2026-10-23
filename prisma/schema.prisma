@@ -11,6 +11,7 @@ enum Role {
   OPERATOR
   FINANCIAL
   VIEWER
+  CLEANER
 }
 
 enum UserStatus {
@@ -130,6 +131,8 @@ model CompanyProfile {
   defaultStandardDurationMinutes Int             @default(120)
   defaultDeepDurationMinutes    Int              @default(300)
   recurrenceHorizonMonths       Int              @default(2)
+  googleReviewUrl               String?
+  lastCronDispatchAt            DateTime?
 
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
@@ -183,6 +186,8 @@ model User {
   verificationExpires DateTime?
   companyId           String?
   company             CompanyProfile? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  professionalId      String?
+  professional        Professional?   @relation(fields: [professionalId], references: [id], onDelete: SetNull)
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
@@ -260,6 +265,10 @@ model Client {
   squareFeet  Int?
   propertyType String?
   billingType BillingType    @default(PER_JOB)
+  entryCode   String?        // Código do portão, porta ou lockbox
+  alarmCode   String?        // Instruções de armar/desarmar alarme
+  pets        String?        // Informações sobre cães, gatos ou animais
+  parkingInstructions String? // Onde estacionar (garagem, rua, etc.)
   notes       String?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
@@ -335,12 +344,20 @@ model Appointment {
   seriesId        String?              // UUID para agrupar agendamentos da mesma série recorrente
   recurrenceIndex Int?                 // 0, 1, 2... índice da ocorrência na série
 
+  // Acesso Estruturado ao Imóvel
+  entryCode           String?
+  alarmCode           String?
+  pets                String?
+  parkingInstructions String?
+
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
   services        AppointmentService[]
   professionals   AppointmentProfessional[]
   scheduledPushes ScheduledPush[]
+  checklists      AppointmentChecklist[]
+  photos          AppointmentPhoto[]
 
   // Prevents two concurrent iCloud syncs (manual + auto, or two tabs) from
   // both creating an appointment for the same calendar occurrence before
@@ -538,6 +555,7 @@ model Professional {
 
   history         ProfessionalCommissionHistory[]
   appointments    AppointmentProfessional[]
+  users           User[]
   pushSubscriptions PushSubscription[]
   scheduledPushes ScheduledPush[]
 
@@ -655,4 +673,34 @@ model ScheduledPush {
   @@index([scheduledFor, sent])
   @@index([appointmentId])
   @@map("scheduled_pushes")
+}
+
+model AppointmentChecklist {
+  id            String      @id @default(uuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  room          String      // "KITCHEN", "BATHROOMS", "BEDROOMS", "LIVING_ROOM", "GENERAL", "CUSTOM"
+  task          String      // Ex: "Limpar fogão e bancadas"
+  completed     Boolean     @default(false)
+  completedAt   DateTime?
+  completedBy   String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([appointmentId])
+  @@map("appointment_checklists")
+}
+
+model AppointmentPhoto {
+  id            String      @id @default(uuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  photoType     String      // "BEFORE" | "AFTER"
+  room          String?     // "KITCHEN", "BATHROOMS", etc.
+  imageUrl      String      // URL da imagem ou base64
+  caption       String?
+  uploadedAt    DateTime    @default(now())
+
+  @@index([appointmentId])
+  @@map("appointment_photos")
 }

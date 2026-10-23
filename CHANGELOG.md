@@ -58,6 +58,10 @@ Este arquivo documenta o histórico detalhado de todas as funcionalidades implan
   - Quando novos clientes são importados do calendário do iCloud com endereço, o backend busca os dados imobiliários no RentCast em background e salva no cadastro.
 - **Métricas Visuais no Cadastro e Perfil do Cliente:**
   - Exibição de chips visuais com ícones para quartos, banheiros e `sqft` na tabela de clientes e no cabeçalho do perfil do cliente (`/clients/[id]`).
+- **Sanitização de Endereço e Fallback Inteligente de CEP:**
+  - Limpeza automática de cidades duplicadas (ex: `Loveland, Loveland`) e hífens de estado (`- CO` -> `, CO`).
+  - Fallback automático: caso a consulta com CEP retorne vazia devido a discrepâncias de cadastro (como no caso de 3068 Aries Dr, cujo CEP real é 80537 e não 80538), o serviço retenta automaticamente a busca sem o CEP (`Street, City, State`) para localizar o imóvel com sucesso.
+  - Alerta amigável no toast caso a chave `RENTCAST_API_KEY` não esteja ativa no ambiente de execução.
 
 ---
 

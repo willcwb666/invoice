@@ -3,6 +3,7 @@
 import React, { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { Header } from "@/components/dashboard/header";
+import { AddressNormalizer } from "@/lib/address-normalizer";
 import {
   Users,
   ArrowLeft,
@@ -121,14 +122,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     showToast("Consultando dados atualizados na RentCast...", "info", 4000);
 
     try {
-      const city = client.city || "Loveland";
-      const cleanStreet = (client.address || "")
-        .replace(new RegExp(`,?\\s*${city}\\b`, "i"), "")
-        .trim();
-      const fullAddr = `${cleanStreet || client.address}, ${city}, ${
-        client.state || "CO"
-      } ${client.zipCode || ""}`.trim();
-      const res = await fetch(`/api/v1/properties/lookup?address=${encodeURIComponent(fullAddr)}`);
+      const norm = AddressNormalizer.normalize(
+        client.address,
+        client.city,
+        client.state,
+        client.zipCode
+      );
+      const res = await fetch(`/api/v1/properties/lookup?address=${encodeURIComponent(norm.fullAddress)}`);
       const json = await res.json();
 
       if (json.error) {
@@ -272,12 +272,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 </div>
               )}
               <div className="flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                <span className="font-mono text-slate-700">
-                  {client.address}
-                  {client.city ? `, ${client.city}` : ""}
-                  {client.state ? ` - ${client.state}` : ""}
-                  {client.zipCode ? ` ${client.zipCode}` : ""}
+                <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                <span className="font-mono text-slate-700 text-xs">
+                  {AddressNormalizer.normalize(client.address, client.city, client.state, client.zipCode).fullAddress}
                 </span>
               </div>
             </div>
@@ -294,7 +291,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0">
             <a
               href={`https://maps.apple.com/?daddr=${encodeURIComponent(
-                `${client.address}, ${client.city || "Greeley"}, ${client.state || "CO"}`
+                AddressNormalizer.normalize(client.address, client.city, client.state, client.zipCode).fullAddress
               )}`}
               target="_blank"
               rel="noopener noreferrer"
@@ -305,7 +302,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             </a>
             <a
               href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-                `${client.address}, ${client.city || "Greeley"}, ${client.state || "CO"}`
+                AddressNormalizer.normalize(client.address, client.city, client.state, client.zipCode).fullAddress
               )}`}
               target="_blank"
               rel="noopener noreferrer"

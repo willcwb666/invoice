@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useToast } from "@/components/ui/toast";
+import { AddressNormalizer } from "@/lib/address-normalizer";
 
 interface ClientModalProps {
   isOpen: boolean;
@@ -161,16 +162,15 @@ export function ClientModal({
       showToast("Consultando dados do imóvel na RentCast...", "info", 4000);
 
       try {
-        const city = explicitCity || formData.city || "Loveland";
-        const cleanStreet = addressToQuery
-          .replace(new RegExp(`,?\\s*${city}\\b`, "i"), "")
-          .trim();
-        const fullQueryAddress = `${cleanStreet || addressToQuery}, ${city}, ${
-          explicitState || formData.state || "CO"
-        } ${explicitZip || formData.zipCode || ""}`.trim();
+        const norm = AddressNormalizer.normalize(
+          addressToQuery,
+          explicitCity || formData.city,
+          explicitState || formData.state,
+          explicitZip || formData.zipCode
+        );
 
         const res = await fetch(
-          `/api/v1/properties/lookup?address=${encodeURIComponent(fullQueryAddress)}`
+          `/api/v1/properties/lookup?address=${encodeURIComponent(norm.fullAddress)}`
         );
 
         if (!res.ok) {
@@ -208,7 +208,7 @@ export function ClientModal({
         setIsFetchingProperty(false);
       }
     },
-    [showToast]
+    [showToast, formData.city, formData.state, formData.zipCode]
   );
 
   /**
@@ -218,7 +218,22 @@ export function ClientModal({
     // Delay slightly to allow suggestion click to fire first if user clicked a suggestion
     setTimeout(() => {
       if (formData.address && formData.address.trim().length >= 6) {
-        lookupProperty(formData.address, formData.city, formData.state, formData.zipCode);
+        const norm = AddressNormalizer.normalize(
+          formData.address,
+          formData.city,
+          formData.state,
+          formData.zipCode
+        );
+        if (norm.street && norm.street !== formData.address) {
+          setFormData((prev) => ({
+            ...prev,
+            address: norm.street,
+            city: norm.city || prev.city,
+            state: norm.state || prev.state,
+            zipCode: norm.zipCode || prev.zipCode,
+          }));
+        }
+        lookupProperty(norm.fullAddress, norm.city, norm.state, norm.zipCode || undefined);
       }
     }, 200);
   };

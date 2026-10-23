@@ -216,6 +216,57 @@ Este arquivo documenta o histórico detalhado de todas as funcionalidades implan
 
 ---
 
+---
+
+### 7. Auditoria Técnica Profunda de Rotinas, Benchmark de Mercado e Roadmap Planejado
+
+#### A. Diagnóstico Detalhado das Rotinas do Sistema (Status Operacional Real):
+
+1. **Sincronização com iCloud Calendar (`src/lib/calendar/icloud.ts`):**
+   - **Status:** Operacional e robusto. Possui travas atômicas de banco (`icloudSyncLockedAt`), debounce inteligente de 60s e normalização com fallback para endereços do Colorado.
+   - **Ponto de Atenção:** A sincronização é unidirecional (importação do iCloud para o sistema). Se um evento for deletado diretamente no calendário do iPhone, a deleção não é espelhada retroativamente se o atendimento já tiver sido marcado como editado manualmente (`manuallyEdited: true`).
+
+2. **Despachante de Notificações Push & Alertas de Saída (`DepartureReminderService`):**
+   - **Status:** Lógica de rotas entre cidades (Evans, Greeley, Windsor, etc.) e agendamento de pushes (30 e 10 min antes) 100% implementada.
+   - **Ponto Crítico:** No arquivo `vercel.json`, o cron está agendado apenas para 1x ao dia (`0 12 * * *` - 6:00 AM MT). Como os alertas de saída precisam ser enviados ao longo de todo o dia para cada atendimento subsequente (Casa 1 -> Casa 2 -> Casa 3), se o despachante não for executado continuamente (ex: a cada 10-15 minutos ou via heartbeat do app aberto), os pushes intermediários do dia ficam represados na tabela `ScheduledPush`.
+
+3. **Recuperação de Orçamentos Abandonados (`abandoned-recovery-service.ts`):**
+   - **Status:** Lógica de cálculo de desconto e disparo de e-mail pronta via Resend.
+   - **Pendente:** A rota `/api/v1/estimates/recovery` não está vinculada a nenhuma tarefa cron em `vercel.json`. Precisa ser incorporada ao despachante periódico ou cron dedicado.
+
+4. **Detecção de Conflitos e Prevenção de Duplo Agendamento (Double-Booking):**
+   - **Status:** Implementado na rota pública de auto-agendamento (`/api/v1/public/estimates/[token]/book`), retornando HTTP 409 em caso de choque.
+   - **Gaps Identificados:** 
+     - No formulário interno do painel administrativo (`AppointmentModal` e `POST /api/v1/appointments`), não há alerta ou bloqueio caso o administrador agende acidentalmente dois atendimentos no mesmo horário para o mesmo profissional.
+     - A verificação de conflito atual na rota pública avalia a empresa inteira como um todo, em vez de avaliar a disponibilidade por profissional/equipe individual.
+
+5. **Extensão Automática do Horizonte de Recorrência (`ensureRecurrenceHorizon`):**
+   - **Status:** Operacional. Acionado no carregamento da agenda (`GET /api/v1/appointments`) e na sincronização, garantindo que os agendamentos futuros (2 meses) sejam provisionados no banco de dados sem sobrecarregar a memória.
+
+6. **Envio de Faturas e Propostas (WhatsApp e SMS):**
+   - **Status:** Atualmente opera como disparo manual via link deep-link (`wa.me` e `sms:`). Não há provedor de mensageria automática em background (como Twilio) para disparos sem interação humana direta.
+
+---
+
+#### B. Benchmark de Mercado (ZenMaid, Jobber, Housecall Pro, BookingKoala):
+
+A partir de levantamento em comunidades e fóruns de proprietários de empresas de limpeza residencial (Reddit `r/cleaningbusiness`, `r/sweatystartup`, ZenMaid & Jobber reviews), mapeamos as funcionalidades que geram maior retenção, produtividade e lucro:
+
+1. **Portal Restrito da Profissional / Diarista (Cleaner View):**
+   - *O que é:* Visão mobile limpa onde a colaboradora logada só enxerga os trabalhos atribuídos a ela no dia, endereço com GPS direto, código de acesso e serviços a fazer — sem expor faturamento total, faturas ou dados financeiros da empresa.
+2. **Checklist Digital de Cômodos & Prova Fotográfica (Before/After):**
+   - *O que é:* Lista de conferência por ambiente (Cozinha: micro-ondas limpo, lixo retirado; Banheiro: box desincrustado, toalhas dobradas) e upload de fotos antes/depois para blindagem contra reclamações de clientes.
+3. **SMS Automático "A Caminho" (En Route / On-My-Way) & Previsão (ETA):**
+   - *O que é:* Notificação com um clique (ou automática) avisando o cliente residencial: *"Olá [Cliente]! A equipe da Renata está a caminho da sua residência. Previsão de chegada: 8:45 AM."*
+4. **Campos Estruturados de Acesso ao Imóvel:**
+   - *O que é:* Separação dos dados operacionais da casa em campos de primeiro nível no cadastro do cliente: `Código da Porta / Lockbox`, `Código do Alarme`, `Animais na Casa (Pets)` e `Onde Estacionar`.
+5. **Automação Pós-Atendimento para Avaliações no Google (Review Booster):**
+   - *O que é:* 1 hora após a conclusão do atendimento (`COMPLETED`), envio de mensagem cordial agradecendo e solicitando avaliação 5 estrelas no link do Google Meu Negócio.
+6. **Widget de Agendamento Direto no Site (Instant Direct Booking):**
+   - *O que é:* Calculadora pública onde novos clientes selecionam número de quartos/banheiros e frequência, veem o preço em tempo real e agendam imediatamente sem necessidade de aguardar um orçamento manual.
+
+---
+
 ## Tabela de Arquivos Criados (Novas Entregas)
 
 | Arquivo | Descrição / Finalidade |

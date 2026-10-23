@@ -58,8 +58,10 @@ Este arquivo documenta o histórico detalhado de todas as funcionalidades implan
   - Quando novos clientes são importados do calendário do iCloud com endereço, o backend busca os dados imobiliários no RentCast em background e salva no cadastro.
 - **Métricas Visuais no Cadastro e Perfil do Cliente:**
   - Exibição de chips visuais com ícones para quartos, banheiros e `sqft` na tabela de clientes e no cabeçalho do perfil do cliente (`/clients/[id]`).
-- **Sanitização de Endereço e Fallback Inteligente de CEP:**
-  - Limpeza automática de cidades duplicadas (ex: `Loveland, Loveland`) e hífens de estado (`- CO` -> `, CO`).
+- **Motor Central AddressNormalizer & Higienização do Banco de Dados:**
+  - Implementado o engine [`AddressNormalizer`](file:///c:/projetos/invoice/src/lib/address-normalizer.ts) para remover quebras de linha (`\n`), sufixos de país (`United States`, `USA`), repetições de cidade e hífens.
+  - Executada rotina de migração e higienização em lote que limpou e normalizou os endereços dos **88 clientes** que possuíam ruído vindo do Apple Calendar (incluindo Amber, Alissa, Dawn, Julie Saiki, etc.).
+  - Integração da normalização na sincronização do iCloud (`icloud.ts`) para que novos clientes já sejam cadastrados com rua, cidade, estado e CEP separados e limpos desde o primeiro segundo.
   - Fallback automático: caso a consulta com CEP retorne vazia devido a discrepâncias de cadastro (como no caso de 3068 Aries Dr, cujo CEP real é 80537 e não 80538), o serviço retenta automaticamente a busca sem o CEP (`Street, City, State`) para localizar o imóvel com sucesso.
   - Alerta amigável no toast caso a chave `RENTCAST_API_KEY` não esteja ativa no ambiente de execução.
 

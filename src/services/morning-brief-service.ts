@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { extractCityFromAddress } from "@/lib/routing/travel-time";
 import { PushService } from "./push-service";
 import { DepartureReminderService } from "./departure-reminder-service";
+import { WeatherService } from "./weather-service";
 
 export interface MorningBriefResult {
   sentCount: number;
@@ -89,6 +90,9 @@ export class MorningBriefService {
       }
 
       // 3. Envia para cada profissional
+      const weather = await WeatherService.getDailyWeather().catch(() => null);
+      const weatherSnippet = weather ? ` (${weather.tempCurrent}°F, ${weather.condition})` : "";
+
       for (const [profId, profAppointments] of professionalMap.entries()) {
         const count = profAppointments.length;
         const first = profAppointments[0];
@@ -104,7 +108,7 @@ export class MorningBriefService {
         }).format(new Date(first.startTime));
 
         const title = `Agenda de Hoje: ${count} atendimento${count > 1 ? "s" : ""}`;
-        const body = `Bom dia! Seu primeiro trabalho é às ${timeStr} com ${clientName} em ${city}.`;
+        const body = `Bom dia! Seu 1º trabalho é às ${timeStr} com ${clientName} em ${city}${weatherSnippet}. Toque para abrir suas casas e rota.`;
 
         const todayTag = `morning-brief-${comp.id}-${profId}-${now.toISOString().slice(0, 10)}`;
         const alreadySent = await prisma.scheduledPush.findFirst({
@@ -122,7 +126,7 @@ export class MorningBriefService {
             body,
             tag: todayTag,
             data: {
-              url: "/agenda",
+              url: "/cleaner",
               type: "MORNING_BRIEF",
             },
           });
@@ -134,7 +138,7 @@ export class MorningBriefService {
               type: "MORNING_BRIEF",
               title,
               body,
-              url: "/agenda",
+              url: "/cleaner",
               scheduledFor: now,
               sent: true,
               sentAt: new Date(),

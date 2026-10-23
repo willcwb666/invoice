@@ -29,6 +29,13 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  Sun,
+  Cloud,
+  CloudRain,
+  Snowflake,
+  Zap,
+  Route,
+  ArrowRight,
 } from "lucide-react";
 
 interface CleanerAppointment {
@@ -72,6 +79,17 @@ interface CleanerAppointment {
   }>;
 }
 
+interface WeatherInfo {
+  city: string;
+  tempCurrent: number;
+  tempMax: number;
+  tempMin: number;
+  precipitationProbability: number;
+  condition: string;
+  icon: "sun" | "cloud" | "rain" | "snow" | "thunder";
+  warning?: string | null;
+}
+
 export default function CleanerPortalPage() {
   const { user, isCleaner, isAdmin, isOperator } = useCurrentUser();
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -81,6 +99,16 @@ export default function CleanerPortalPage() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [weather, setWeather] = useState<WeatherInfo | null>(null);
+
+  useEffect(() => {
+    fetch("/api/v1/weather")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j?.data) setWeather(j.data);
+      })
+      .catch(() => {});
+  }, []);
 
   // Active Modals
   const [activeChecklistAppt, setActiveChecklistAppt] = useState<CleanerAppointment | null>(null);
@@ -243,6 +271,81 @@ export default function CleanerPortalPage() {
             />
           </div>
         </div>
+
+        {/* Weather Forecast Card (Evans / Greeley, CO) */}
+        {weather && (
+          <div className="bg-gradient-to-r from-sky-50 via-teal-50/60 to-emerald-50 rounded-2xl border border-sky-200/80 p-3.5 shadow-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-white text-sky-600 flex items-center justify-center shadow-xs border border-sky-100">
+                  {weather.icon === "sun" ? (
+                    <Sun className="w-5 h-5 text-amber-500" />
+                  ) : weather.icon === "snow" ? (
+                    <Snowflake className="w-5 h-5 text-sky-500 animate-pulse" />
+                  ) : weather.icon === "rain" ? (
+                    <CloudRain className="w-5 h-5 text-blue-500" />
+                  ) : weather.icon === "thunder" ? (
+                    <Zap className="w-5 h-5 text-amber-500" />
+                  ) : (
+                    <Cloud className="w-5 h-5 text-slate-500" />
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-xs text-slate-900">{weather.city}</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-sky-100 text-sky-800 font-bold">
+                      {weather.condition}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Máx: <strong>{weather.tempMax}°F</strong> • Mín: <strong>{weather.tempMin}°F</strong>
+                    {weather.precipitationProbability > 0 && ` • 🌧️ ${weather.precipitationProbability}% chuva`}
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-right">
+                <span className="text-xl font-black text-slate-900 tracking-tight">
+                  {weather.tempCurrent}°F
+                </span>
+                <span className="block text-[10px] font-semibold text-slate-500 uppercase">Agora</span>
+              </div>
+            </div>
+
+            {weather.warning && (
+              <div className="p-2 rounded-xl bg-amber-100/80 border border-amber-300 text-amber-900 text-[11px] font-semibold flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                <span>{weather.warning}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Route Flow (Ordem das Casas do Dia) */}
+        {appointments.length > 1 && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs space-y-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Route className="w-3.5 h-3.5 text-teal-600" />
+              Trajeto & Ordem de Atendimento
+            </span>
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+              {appointments.map((a, i) => (
+                <React.Fragment key={a.id}>
+                  <div className="flex items-center gap-1.5 shrink-0 px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                    <span className="w-4 h-4 rounded-full bg-teal-600 text-white font-bold text-[9px] flex items-center justify-center">
+                      {i + 1}
+                    </span>
+                    <span className="font-bold text-slate-800 truncate max-w-[90px]">{a.client.name}</span>
+                    <span className="text-[10px] text-slate-500 font-mono">({a.timeStart})</span>
+                  </div>
+                  {i < appointments.length - 1 && (
+                    <ArrowRight className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Day Stats Pill */}
         <div className="grid grid-cols-3 gap-2 text-center text-xs">

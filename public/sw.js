@@ -2,6 +2,7 @@
 const CACHE_NAME = "rm-cleaning-cache-v1";
 const OFFLINE_URLS = [
   "/",
+  "/cleaner",
   "/agenda",
   "/reports",
   "/invoices",
